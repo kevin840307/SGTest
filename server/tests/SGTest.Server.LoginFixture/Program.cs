@@ -425,16 +425,17 @@ internal static class Program
         Directory.CreateDirectory(root);
         try
         {
-            var grid = BlockingGrid.Load(CreateMap(root, 15), 15);
+            var grid = BlockingGrid.Load(CreateMap(root, 15, width: 40, height: 3), 15);
             string populationPath = Path.Combine(root, "target-combat-population.json");
             File.WriteAllText(populationPath, JsonSerializer.Serialize(new
             {
-                version = 6,
-                kind = "verified_monster_retaliation_runtime",
+                version = 7,
+                kind = "verified_monster_retaliation_chase_runtime",
                 map_id = 15,
                 stats_verified = true,
                 target_combat_ready = true,
                 retaliation_ready = true,
+                retaliation_chase_ready = true,
                 ai_ready = false,
                 definitions = new[]
                 {
@@ -452,6 +453,7 @@ internal static class Program
                             defense_power = 20,
                             magic_defense_power = 15,
                             dodge_rate = 5,
+                            move_step = 385,
                             attack_range = 150,
                             lose_target_radius = 400,
                             attack_cooldown_ticks = 50,
@@ -485,7 +487,7 @@ internal static class Program
             await store.SetCharacterCombatProfileAsync(characterId,
                 new CharacterCombatProfileData(
                     CombatProfileTrust.SyntheticTest,
-                    "ci:v6-retaliation-combat-aes",
+                    "ci:v7-retaliation-chase-combat-aes",
                     Race: 0, Career: 0, Strength: 5, Dexterity: 5,
                     Constitution: 5, Wisdom: 5, Level: 3,
                     CurrentHp: 100, MaxHp: 100,
@@ -559,7 +561,7 @@ internal static class Program
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} damage=40 " +
                     $"player_hp={player.Data.CurrentHp}/{player.Data.MaxHp} " +
                     $"retaliation={(forceMonsterMiss?"MISS":"8")} " +
-                    "v6_retaliation=true experience_manifest=false ai=false chase=false " +
+                    $"v7_retaliation_chase=true experience_manifest=false ai=false chase=true monster_x={monster.X:F1} " +
                     $"commands={ended.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
@@ -1900,11 +1902,16 @@ internal static class Program
         return file;
     }
 
-    internal static string CreateMap(string root, int mapId)
+    internal static string CreateMap(
+        string root, int mapId, int width = 3, int height = 3)
     {
         string directory = Path.Combine(root, "map_" + mapId);
         Directory.CreateDirectory(directory);
-        const int width = 3, height = 3, cell = 16;
+        const int cell = 16;
+        if (width is < 1 or > 4096)
+            throw new ArgumentOutOfRangeException(nameof(width));
+        if (height is < 1 or > 4096)
+            throw new ArgumentOutOfRangeException(nameof(height));
         var raw = new byte[8 + width * height];
         BinaryPrimitives.WriteInt32LittleEndian(raw.AsSpan(0, 4), width);
         BinaryPrimitives.WriteInt32LittleEndian(raw.AsSpan(4, 4), height);

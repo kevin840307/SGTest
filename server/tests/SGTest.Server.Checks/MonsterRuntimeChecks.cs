@@ -15,6 +15,8 @@ internal static class MonsterRuntimeChecks
             () => TargetOnlyRuntime(root));
         Checks.Run("source-backed retaliation attacks only the hitter in range without invented chase",
             () => RetaliationOnlyRuntime(root));
+        Checks.Run("source-backed retaliation chase follows only the trusted hitter then attacks",
+            () => RetaliationChaseRuntime(root));
         Checks.Run("monster single-map authority chases around Blocking and attacks on bounded cadence",
             () => ChaseAndAttack(root));
         Checks.Run("monster loses live target when actor transfers to another map",
@@ -187,6 +189,75 @@ internal static class MonsterRuntimeChecks
                        final.TargetActorId==0&&final.X==24&&final.Y==24&&
                        final.State==MonsterAiState.Idle,
             "retaliation target did not clear at source-backed VisArea without chase");
+    }
+
+    private static void RetaliationChaseRuntime(string root)
+    {
+        string dir=Checks.Fixture(root,224,80,12,(_,_)=>0);
+        var grid=BlockingGrid.Load(dir,224);
+        string path=Path.Combine(dir,"population-retaliation-chase.json");
+        File.WriteAllText(path,JsonSerializer.Serialize(new
+        {
+            version=7,kind="verified_monster_retaliation_chase_runtime",map_id=224,
+            stats_verified=true,target_combat_ready=true,retaliation_ready=true,
+            retaliation_chase_ready=true,ai_ready=false,
+            definitions=new[]
+            {
+                new
+                {
+                    id=8,sprite="EN008A",atlas="Enemy/EN008A/atlas.json",
+                    stats=new
+                    {
+                        level=3,max_hp=120,attack_damage=17,hit_rate=30,
+                        defense_power=20,magic_defense_power=15,dodge_rate=5,
+                        move_step=385,attack_range=150,lose_target_radius=400,
+                        attack_cooldown_ticks=50,respawn_ticks=450
+                    }
+                }
+            },
+            spawns=new[]{Spawn(0,8,24,24)}
+        }));
+        var population=MonsterPopulationCatalog.LoadVerified(path,224,grid);
+        var stats=population.Definitions[8].Stats;
+        Checks.Require(!stats.AiEnabled&&stats.RetaliationEnabled&&
+                       stats.RetaliationChaseEnabled&&stats.TargetCombatVerified&&
+                       stats.MoveStep==385&&stats.AggroRadius==0&&
+                       stats.LeashRadius==0&&stats.WanderRadius==0,
+            "retaliation-chase source stats were not gated exactly");
+
+        var runtime=new MonsterRuntime(grid,population,
+            new(AiIntervalTicks:1,MaxAiPerStep:8,MaxPathQueriesPerStep:2));
+        var entity=runtime.SnapshotAll().Single();
+        var target=new MonsterCombatTarget(9,224,419,24,100);
+        Checks.Require(runtime.Tick(1,[target]).Count==0&&
+                       runtime.SnapshotAll().Single().TargetActorId==0,
+            "retaliation-chase monster proactively acquired an untouched player");
+
+        var hit=runtime.ApplyTrustedDamage(entity.EntityId,9,10,1);
+        Checks.Require(hit.Applied&&!hit.Killed&&hit.Monster.TargetActorId==9,
+            "trusted hitter did not arm retaliation-chase target");
+
+        var chase=runtime.Tick(2,[target]);
+        var chased=runtime.SnapshotAll().Single();
+        Checks.Require(chase.Any(e=>e.Kind==MonsterWorldEventKind.Move)&&
+                       chase.Any(e=>e.Kind==MonsterWorldEventKind.State&&
+                                    e.Monster.State==MonsterAiState.Chase)&&
+                       chase.All(e=>e.Kind!=MonsterWorldEventKind.Attack)&&
+                       Math.Abs(chased.X-409)<1e-6&&Math.Abs(chased.Y-24)<1e-6,
+            "retaliation chase did not apply the source-backed 385-unit MoveToTarget cap");
+
+        var attack=runtime.Tick(3,[target]);
+        Checks.Require(attack.Any(e=>e.Kind==MonsterWorldEventKind.Attack&&
+                                    e.TargetActorId==9&&e.Damage==17&&
+                                    e.AttackerLevel==3&&e.AttackerHit==30),
+            "retaliation chase did not transition into source-backed attack range");
+
+        var lost=runtime.Tick(4,[target with { X=900 }]);
+        var final=runtime.SnapshotAll().Single();
+        Checks.Require(lost.Any(e=>e.Kind==MonsterWorldEventKind.TargetLost)&&
+                       final.TargetActorId==0&&Math.Abs(final.X-409)<1e-6&&
+                       final.State==MonsterAiState.Idle,
+            "retaliation chase did not fail closed at source-backed VisArea");
     }
 
     private static void ChaseAndAttack(string root)

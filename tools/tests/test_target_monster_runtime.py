@@ -44,15 +44,16 @@ class TargetMonsterRuntimeTests(unittest.TestCase):
             "3,222,17,0,15,0,30,18,41\n", encoding="ascii")
         return visual, enemy / "Enemy_Data.csv"
 
-    def test_publishes_source_backed_close_retaliation_without_chase(self):
+    def test_publishes_source_backed_retaliation_chase_without_proactive_aggro(self):
         with tempfile.TemporaryDirectory() as directory:
             visual, enemy_data = self.fixture(Path(directory))
             result = compile_target_runtime(visual, enemy_data)
-            self.assertEqual(result["version"], 6)
-            self.assertEqual(result["kind"], "verified_monster_retaliation_runtime")
+            self.assertEqual(result["version"], 7)
+            self.assertEqual(result["kind"], "verified_monster_retaliation_chase_runtime")
             self.assertTrue(result["stats_verified"])
             self.assertTrue(result["target_combat_ready"])
             self.assertTrue(result["retaliation_ready"])
+            self.assertTrue(result["retaliation_chase_ready"])
             self.assertFalse(result["ai_ready"])
             definition = result["definitions"][0]
             self.assertEqual(definition["id"], 1)
@@ -65,13 +66,14 @@ class TargetMonsterRuntimeTests(unittest.TestCase):
                 "defense_power": 0,
                 "magic_defense_power": 0,
                 "dodge_rate": 18,
+                "move_step": 385,
                 "attack_range": 150,
                 "lose_target_radius": 400,
                 "attack_cooldown_ticks": 50,
                 "respawn_ticks": 450,
             })
-            self.assertNotIn("move_step", definition["stats"])
             self.assertNotIn("aggro_radius", definition["stats"])
+            self.assertEqual(definition["source_evidence"]["ai_type_code"], "B")
             self.assertEqual(definition["source_evidence"]["attack_length"], 150)
             self.assertEqual(definition["source_evidence"]["visibility_area"], 400)
             self.assertEqual(definition["source_evidence"]["attack_idle_frames"], 50)

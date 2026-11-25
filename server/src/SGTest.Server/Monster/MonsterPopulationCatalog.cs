@@ -23,7 +23,8 @@ public sealed record MonsterCombatStats(
     int DodgeRate = 0,
     bool TargetCombatVerified = false,
     bool RetaliationEnabled = false,
-    int HitRate = 0);
+    int HitRate = 0,
+    bool RetaliationChaseEnabled = false);
 
 public sealed record MonsterDefinition(
     int Id,
@@ -57,8 +58,8 @@ public sealed class MonsterPopulation
 
 /// <summary>
 /// Runtime monster content gate. Converter v3 visual data can share the map
-/// directory, but only explicitly verified v4 AI data or fail-closed v5
-/// source-backed target-combat data can create monster actors.
+/// directory, but only explicitly verified v4 AI data or fail-closed v5-v7
+/// source-backed target/retaliation behavior can create monster actors.
 /// </summary>
 public static class MonsterPopulationCatalog
 {
@@ -138,6 +139,18 @@ public static class MonsterPopulationCatalog
                 JsonValueKind.False &&
             string.Equals(ReadString(root, "kind"),
                 "verified_monster_retaliation_runtime", StringComparison.Ordinal);
+        bool retaliationChase =
+            root.ValueKind == JsonValueKind.Object &&
+            ReadInt(root, "version") == 7 &&
+            ReadInt(root, "map_id") == expectedMapId &&
+            ReadBool(root, "stats_verified") &&
+            ReadBool(root, "target_combat_ready") &&
+            ReadBool(root, "retaliation_ready") &&
+            ReadBool(root, "retaliation_chase_ready") &&
+            Require(root, "ai_ready", JsonValueKind.False).ValueKind ==
+                JsonValueKind.False &&
+            string.Equals(ReadString(root, "kind"),
+                "verified_monster_retaliation_chase_runtime", StringComparison.Ordinal);
         bool fullRuntime =
             root.ValueKind == JsonValueKind.Object &&
             ReadInt(root, "version") == 4 &&
@@ -146,9 +159,9 @@ public static class MonsterPopulationCatalog
             ReadBool(root, "gameplay_ready") &&
             string.Equals(ReadString(root, "kind"), "verified_monster_runtime",
                 StringComparison.Ordinal);
-        if (!targetOnly && !retaliationOnly && !fullRuntime)
+        if (!targetOnly && !retaliationOnly && !retaliationChase && !fullRuntime)
             throw new InvalidDataException(
-                "Monster population is neither verified full AI, retaliation, nor target-combat content");
+                "Monster population is neither verified full AI, retaliation-chase, retaliation, nor target-combat content");
 
         var definitionsElement = Require(root, "definitions", JsonValueKind.Array);
         if (definitionsElement.GetArrayLength() is < 1 or > 4096)
@@ -161,7 +174,7 @@ public static class MonsterPopulationCatalog
                 throw new InvalidDataException("Monster definition must be an object");
             int id = ReadInt(item, "id");
             string sprite = ReadString(item, "sprite").Trim().ToUpperInvariant();
-            string name = targetOnly || retaliationOnly
+            string name = targetOnly || retaliationOnly || retaliationChase
                 ? sprite
                 : ReadString(item, "name").Trim();
             string atlas = ReadString(item, "atlas").Trim().Replace('\\', '/');
@@ -181,12 +194,13 @@ public static class MonsterPopulationCatalog
                     MagicDefensePower: ReadInt(statsElement, "magic_defense_power"),
                     DodgeRate: ReadInt(statsElement, "dodge_rate"),
                     TargetCombatVerified: true)
-                : retaliationOnly
+                : retaliationOnly || retaliationChase
                     ? new MonsterCombatStats(
                         ReadInt(statsElement, "level"),
                         ReadInt(statsElement, "max_hp"),
                         ReadInt(statsElement, "attack_damage"),
-                        0, 0,
+                        retaliationChase ? ReadDouble(statsElement, "move_step") : 0,
+                        0,
                         ReadDouble(statsElement, "lose_target_radius"),
                         0,
                         ReadDouble(statsElement, "attack_range"),
@@ -198,7 +212,8 @@ public static class MonsterPopulationCatalog
                         DodgeRate: ReadInt(statsElement, "dodge_rate"),
                         TargetCombatVerified: true,
                         RetaliationEnabled: true,
-                        HitRate: ReadInt(statsElement, "hit_rate"))
+                        HitRate: ReadInt(statsElement, "hit_rate"),
+                        RetaliationChaseEnabled: retaliationChase)
                     : new MonsterCombatStats(
                         ReadInt(statsElement, "level"),
                         ReadInt(statsElement, "max_hp"),
@@ -268,9 +283,11 @@ public static class MonsterPopulationCatalog
                     !FiniteRange(stats.AttackRange, 1, 500) ||
                     stats.AttackRange > stats.LoseTargetRadius ||
                     stats.AttackCooldownTicks is < 1 or > 3600 ||
-                    stats.MoveStep != 0 || stats.AggroRadius != 0 ||
-                    stats.LeashRadius != 0 || stats.WanderRadius != 0 ||
-                    stats.WanderIntervalTicks != 0)
+                    (stats.RetaliationChaseEnabled
+                        ? stats.MoveStep != 385
+                        : stats.MoveStep != 0) ||
+                    stats.AggroRadius != 0 || stats.LeashRadius != 0 ||
+                    stats.WanderRadius != 0 || stats.WanderIntervalTicks != 0)
                     throw new InvalidDataException(
                         $"Unsafe source-backed retaliation stats for definition {id}");
                 return;

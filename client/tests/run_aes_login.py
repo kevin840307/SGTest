@@ -1501,16 +1501,18 @@ def run_target_combat(args, repo: Path, fixture: Path, env: dict[str, str],
                 print(line)
         if force_miss:
             print("GODOT_CSHARP_AES_TARGET_COMBAT_MISS_E2E_PASS "
-                  "aes_cbc=true v6_retaliation=true trusted_input=true "
+                  "aes_cbc=true v7_retaliation_chase=true trusted_input=true "
                   "authoritative_damage=40 authoritative_monster_hp=60 "
                   "retaliation=MISS authoritative_player_hp=100 durable_hp_unchanged=true "
-                  "player_damage_visual=true world_view_miss=true original_miss_overlay=true")
+                  "player_damage_visual=true world_view_miss=true original_miss_overlay=true "
+                  "chase=true proactive_aggro=false")
         else:
             print("GODOT_CSHARP_AES_TARGET_COMBAT_E2E_PASS "
-                  "aes_cbc=true v6_retaliation=true experience_manifest=false "
+                  "aes_cbc=true v7_retaliation_chase=true experience_manifest=false "
                   "trusted_input=true authoritative_damage=40 authoritative_monster_hp=60 "
                   "retaliation_damage=8 authoritative_player_hp=92 player_damage_visual=true "
-                  "monster_delta=true own_attack_visual=true ai=false chase=false")
+                  "monster_delta=true own_attack_visual=true ai=false chase=true "
+                  "proactive_aggro=false")
         return 0
     except Exception as error:
         print("AES_TARGET_COMBAT_RUNNER_FAIL", error, file=sys.stderr)

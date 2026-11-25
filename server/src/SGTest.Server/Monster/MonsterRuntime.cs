@@ -403,7 +403,8 @@ public sealed class MonsterRuntime
         var stats = monster.Definition.Stats;
         if (!stats.AiEnabled && !stats.RetaliationEnabled)
             return;
-        bool retaliationOnly = stats.RetaliationEnabled && !stats.AiEnabled;
+        bool retaliationOnly = stats.RetaliationEnabled && !stats.AiEnabled &&
+            !stats.RetaliationChaseEnabled;
 
         MonsterCombatTarget target = default;
         bool hasTarget = monster.TargetActorId > 0 &&

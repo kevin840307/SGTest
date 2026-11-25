@@ -89,6 +89,20 @@ func _initialize() -> void:
 	if settled.is_empty():
 		_fail("authoritative target combat settlement "+str(session.snapshot()),session)
 		return
+	var monster_x_before := float(settled.monsters[target].x)
+	if not session.move_target(300,24):
+		_fail("retreat intent refused",session)
+		return
+	var chased := _wait(session,func(v):
+		return (
+			int(v.last_receipt_sequence)>=1
+			and int(v.last_receipt_status)==0
+			and v.monsters.has(target)
+			and float(v.monsters[target].x)>monster_x_before+1.0
+		),7000)
+	if chased.is_empty():
+		_fail("source-backed retaliation chase did not reach client "+str(session.snapshot()),session)
+		return
 	if force_miss:
 		var view := WorldView.new()
 		root.add_child(view)
