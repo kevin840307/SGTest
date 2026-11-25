@@ -46,6 +46,7 @@ var _loaded: Dictionary = {}
 var _focus_inside := true
 var _using_recovered_cursor := false
 var _popup_depth := 0
+var _item_hover_active := false
 
 func _init() -> void:
 	name = "SharedGameCursor"
@@ -204,8 +205,22 @@ func set_mode(value: String) -> void:
 	_mode = value
 	_apply_mode()
 
+func _is_item_row_control(control: Control) -> bool:
+	# Inventory/equipment rows are real item buttons with server-backed tooltips.
+	# Do not turn empty placeholders or neighboring UI buttons into item cursors.
+	var node: Node = control
+	while node is Control:
+		var parent: Node = node.get_parent()
+		if parent != null and parent.name in [&"InventoryRows", &"EquippedRows"]:
+			return node is Button and not (node as Button).tooltip_text.strip_edges().is_empty()
+		node = parent
+	return false
+
+func _effective_mode() -> String:
+	return "item" if _mode == "normal" and _item_hover_active else _mode
+
 func _animation_for_mode() -> String:
-	match _mode:
+	match _effective_mode():
 		"attack":
 			return "attack"
 		"inspect":
@@ -226,7 +241,7 @@ func _animation_for_mode() -> String:
 func _native_shape_for_mode() -> int:
 	# One tested mapping serves the portable nine-icon fallback on systems
 	# without the private Recovered animated sprite assets.
-	match _mode:
+	match _effective_mode():
 		"attack": return Input.CURSOR_CROSS
 		"inspect": return Input.CURSOR_HELP
 		"pickup", "item": return Input.CURSOR_POINTING_HAND
@@ -260,6 +275,14 @@ func restore_pointer() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _process(_delta: float) -> void:
+	# Main refreshes the world cursor every 60 ms; discover actual HK item row
+	# hover here so its next normal update cannot overwrite C_ITEM. This works
+	# with the existing world shell without modifying other sessions' UI WIP.
+	var hovered := get_viewport().gui_get_hovered_control()
+	var item_hover := hovered != null and _is_item_row_control(hovered)
+	if item_hover != _item_hover_active:
+		_item_hover_active = item_hover
+		_apply_mode()
 	if _using_recovered_cursor and _cursor_visual.visible:
 		_cursor_visual.position = get_viewport().get_mouse_position()
 

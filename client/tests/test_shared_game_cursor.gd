@@ -14,6 +14,53 @@ func _run() -> void:
 	var cursor = SharedGameCursor.new()
 	root.add_child(cursor)
 	await process_frame
+	# The HK item cursor follows real bag/equipment row hover, not the
+	# adjacent empty row or an unrelated button with a similar tooltip.
+	var inventory_rows := VBoxContainer.new()
+	inventory_rows.name = "InventoryRows"
+	inventory_rows.visible = false
+	root.add_child(inventory_rows)
+	var item_row := Button.new()
+	item_row.tooltip_text = "Server item UID 42"
+	inventory_rows.add_child(item_row)
+	var child_photo := TextureRect.new()
+	item_row.add_child(child_photo)
+	if not cursor._is_item_row_control(item_row) or not cursor._is_item_row_control(child_photo):
+		_fail(cursor,"actual inventory row/photo failed item cursor selection")
+		return
+	var equipped_rows := VBoxContainer.new()
+	equipped_rows.name = "EquippedRows"
+	equipped_rows.visible = false
+	root.add_child(equipped_rows)
+	var equipped_item := Button.new()
+	equipped_item.tooltip_text = "Equipped item UID 41"
+	equipped_rows.add_child(equipped_item)
+	if not cursor._is_item_row_control(equipped_item):
+		_fail(cursor,"equipped item failed HK item hover")
+		return
+	var empty_row := Button.new()
+	inventory_rows.add_child(empty_row)
+	var unrelated := Button.new()
+	unrelated.tooltip_text = "Server item UID 42"
+	root.add_child(unrelated)
+	if cursor._is_item_row_control(empty_row) or cursor._is_item_row_control(unrelated):
+		_fail(cursor,"empty or unrelated UI incorrectly selected item cursor")
+		return
+	cursor._item_hover_active = true
+	cursor.set_mode("normal")
+	if cursor._effective_mode() != "item" or cursor._native_shape_for_mode() != Input.CURSOR_POINTING_HAND:
+		_fail(cursor,"normal world update overwrote bag item hover")
+		return
+	cursor.set_mode("attack")
+	if cursor._effective_mode() != "attack":
+		_fail(cursor,"bag hover overrode higher priority combat cursor")
+		return
+	cursor._item_hover_active = false
+	cursor.set_mode("normal")
+	inventory_rows.queue_free()
+	equipped_rows.queue_free()
+	unrelated.queue_free()
+	await process_frame
 	if not cursor.using_recovered_cursor():
 		# Public CI cannot include the private Recovered sprite frames. The
 		# production path must still load all nine published fallback icons,
