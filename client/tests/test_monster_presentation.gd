@@ -271,6 +271,22 @@ func run() -> void:
 	snapshot.monsters = {}
 	check(monsters.apply_snapshot(snapshot,2050000)==OK and monsters.count()==0,
 		"new-generation AOI despawn was rejected after tick reset")
+	# Distinct Dictionary keys may alias one authoritative entity when coerced
+	# from int/string to the presenter int ID; reject the whole AOI frame.
+	var alias_second := another.duplicate(true)
+	alias_second.x = 130.0
+	snapshot.last_aoi_tick = 3
+	snapshot.monsters = {1002:another,"1002":alias_second}
+	check(monsters.apply_snapshot(snapshot,2100000)==ERR_INVALID_DATA and
+		monsters.count()==0,
+		"canonical duplicate monster IDs were admitted and changed AOI state")
+	# Rejected input must not consume AOI high-water tick 3; an
+	# unchanged valid tick 2 remains admissible afterward.
+	snapshot.last_aoi_tick = 2
+	snapshot.monsters = {1002:another}
+	check(monsters.apply_snapshot(snapshot,2150000)==OK and
+		monsters.pick_living_at(Vector2(90,20),2150000)==1002,
+		"valid monster snapshot could not recover after aliased ID rejection")
 	var unknown := idle.duplicate(true)
 	unknown.enemy_id=2
 	snapshot.monsters={1001:unknown}

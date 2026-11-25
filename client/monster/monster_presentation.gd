@@ -99,6 +99,11 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 	# advancing animation histories. A single invalid entry must not turn an
 	# otherwise rejected authoritative frame into a partial visible update.
 	for raw_id in visible:
+		# WorldState indexes decoded entities by integer ID. Coercing a
+		# string/float key here admits aliases (1002 and "1002") that apply
+		# two conflicting states to one selected monster in a single frame.
+		if not raw_id is int:
+			return ERR_INVALID_DATA
 		var candidate = visible[raw_id]
 		if not candidate is Dictionary:
 			return ERR_INVALID_DATA
