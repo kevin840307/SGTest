@@ -146,8 +146,9 @@ var _chat_system:RichTextLabel
 var _chat_emotion:TextureButton
 var _chat_big:=false
 var _chat_small_position:=Vector2(128,510)
-var _chat_send_party:=false
+var _chat_send_channel:=0
 var _chat_bubble_type:=0
+var _chat_show_world:=true
 var _chat_show_party:=true
 var _chat_show_private:=true
 var _friend_scroll:ScrollContainer
@@ -606,8 +607,8 @@ func _build_chat_panel()->void:
 		# Source/reference default checked artwork is frame 2.
 		button.texture_normal=_tex(arts[index]+"_2")
 		button.texture_pressed=_tex(arts[index]+"_0")
-		button.tooltip_text=["私訊顯示","原版世界頻道（尚未接通）","戰團頻道（尚未接通）","隊伍顯示","系統頻道（尚未接通）"][index]
-		if index not in [0,3]:
+		button.tooltip_text=["私訊顯示","世界頻道顯示","戰團頻道（尚未接通）","隊伍顯示","系統頻道（尚未接通）"][index]
+		if index not in [0,1,3]:
 			button.disabled=true
 			button.texture_disabled=button.texture_normal
 		_chat_tabs.append(button)
@@ -706,18 +707,29 @@ func _toggle_chat_filter(index:int)->void:
 	if index==0:
 		_chat_show_private=not _chat_show_private
 		_chat_tabs[0].texture_normal=_tex("B_CHANNEL_CB_2" if _chat_show_private else "B_CHANNEL_CB_0")
+	elif index==1:
+		_chat_show_world=not _chat_show_world
+		_chat_tabs[1].texture_normal=_tex("B_CHANNEL_CA_2" if _chat_show_world else "B_CHANNEL_CA_0")
 	elif index==3:
 		_chat_show_party=not _chat_show_party
 		_chat_tabs[3].texture_normal=_tex("B_CHANNEL_CD_2" if _chat_show_party else "B_CHANNEL_CD_0")
 	_refresh_chat_history()
 
 func _toggle_chat_send_channel()->void:
-	# Only switch between channels implemented by the authoritative session.
-	_chat_send_party=not _chat_send_party
-	_chat_channel.texture_normal=_tex("ICON_CHANNEL_2" if _chat_send_party else "ICON_CHANNEL_3")
+	# Original Chat.dat exposes WORLDCHANNEL and the server chat.cfg gates it at Lv10.
+	# Keep the existing nearby/party icon frames until the per-channel frame mapping is
+	# proven from the HK draw path; do not invent a World-specific sprite frame.
+	match _chat_send_channel:
+		0: _chat_send_channel=1
+		1: _chat_send_channel=3
+		_: _chat_send_channel=0
+	_chat_channel.texture_normal=_tex("ICON_CHANNEL_2" if _chat_send_channel==3 else "ICON_CHANNEL_3")
 	_chat_channel.texture_hover=_chat_channel.texture_normal
 	_chat_channel.texture_pressed=_chat_channel.texture_normal
-	_chat_channel.tooltip_text="隊伍聊天；點擊切換附近" if _chat_send_party else "附近聊天；點擊切換隊伍"
+	match _chat_send_channel:
+		1: _chat_channel.tooltip_text="世界聊天（Lv10）；點擊切換隊伍"
+		3: _chat_channel.tooltip_text="隊伍聊天；點擊切換附近"
+		_: _chat_channel.tooltip_text="附近聊天；點擊切換世界"
 
 func _toggle_chat_bubble()->void:
 	_chat_bubble_type=(_chat_bubble_type+1)%6
@@ -1763,7 +1775,11 @@ func _send_chat()->void:
 	var message:=_chat_input.text.strip_edges()
 	if message.is_empty():
 		return
-	var queued:bool=_panel.session.send_party_chat(message,_chat_bubble_type) if _chat_send_party else _panel.session.send_nearby_chat(message,_chat_bubble_type)
+	var queued:=false
+	match _chat_send_channel:
+		1: queued=_panel.session.send_world_chat(message,_chat_bubble_type)
+		3: queued=_panel.session.send_party_chat(message,_chat_bubble_type)
+		_: queued=_panel.session.send_nearby_chat(message,_chat_bubble_type)
 	if queued:
 		_chat_input.clear()
 
@@ -1785,6 +1801,8 @@ func _refresh_chat_history()->void:
 		var sender:=str(entry.get("sender_name","玩家 %d"%int(entry.get("sender_actor_id",0))))
 		match channel:
 			0: rows.append("[附近] %s：%s"%[sender,str(entry.get("message",""))])
+			1:
+				if _chat_show_world:rows.append("[世界] %s：%s"%[sender,str(entry.get("message",""))])
 			3:
 				if _chat_show_party:rows.append("[隊伍] %s：%s"%[sender,str(entry.get("message",""))])
 			4:

@@ -22,6 +22,31 @@ public static class ChatRouting
                request.ActorId,request.ConnectionEpoch,out var identity))
             return Task.CompletedTask;
 
+        if(request.Channel==ChatChannel.World)
+        {
+            const int worldChannelMinimumLevel=10; // Old server chat.cfg: [WorldChannel] lvllimit=10
+            if(request.PlayerLevel<worldChannelMinimumLevel)
+                return Task.CompletedTask;
+
+            foreach(var recipient in router.SnapshotActiveBindings())
+            {
+                var delivery=new ChatDeliveryWire(
+                    recipient.MapEpoch,request.ActorId,request.ConnectionEpoch,
+                    request.ChatSequence,ChatChannel.World,request.BubbleType,
+                    identity.DisplayName,request.Message);
+                var queued=router.QueueChatDelivery(recipient,delivery);
+                bool self=recipient==sender;
+                if(queued!=GatewaySendStatus.Enqueued)
+                {
+                    if(self)
+                        throw new IOException(
+                            "Reliable self world-chat delivery could not be queued: "+queued);
+                    router.CloseCurrentBinding(recipient);
+                }
+            }
+            return Task.CompletedTask;
+        }
+
         if(request.Channel==ChatChannel.Nearby)
         {
             foreach(var recipient in router.SnapshotActiveBindings())

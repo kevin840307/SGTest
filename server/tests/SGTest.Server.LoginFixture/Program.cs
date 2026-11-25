@@ -1521,6 +1521,21 @@ internal static class Program
                 throw new InvalidOperationException("multi fixture first character missing");
             long bId = bRecord.Character?.CharacterId ??
                 throw new InvalidOperationException("multi fixture second character missing");
+            if (!crossmap && !portals && !reconnect)
+            {
+                var worldChatProfile = new CharacterCombatProfileData(
+                    CombatProfileTrust.SyntheticTest,
+                    "ci:world-chat-multi-fixture",
+                    Race: 0, Career: 0, Strength: 5, Dexterity: 5,
+                    Constitution: 5, Wisdom: 5, Level: 10,
+                    CurrentHp: 100, MaxHp: 100,
+                    Attack: 1, Defense: 1, Hit: 1, Dodge: 1,
+                    AttackRange: 48, AttackCooldownTicks: 15);
+                await store.SetCharacterCombatProfileAsync(aId, worldChatProfile)
+                    .ConfigureAwait(false);
+                await store.SetCharacterCombatProfileAsync(bId, worldChatProfile)
+                    .ConfigureAwait(false);
+            }
             var router = new WorldResultRouter();
             var auditedPortals = portals ? PortalCatalog.LoadNpcDocuments([
                 CreatePortalDocument(root, 15), CreatePortalDocument(root, 13)]) : null;
@@ -1633,7 +1648,7 @@ internal static class Program
                 }
                 if (results[0].Reason != AesWireEndReason.CleanEof ||
                     results[1].Reason != AesWireEndReason.CleanEof ||
-                    results[1].CommandsAccepted != (portals ? 9 : crossmap ? 11 : 3) ||
+                    results[1].CommandsAccepted != (portals ? 9 : crossmap ? 11 : 4) ||
                     parties.PartyCount != 0 ||
                     router.Statistics.ActiveSessions != 0 ||
                     router.Statistics.ReceiptsQueued < (crossmap || portals ? 2 : 1) ||

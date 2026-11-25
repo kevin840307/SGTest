@@ -353,6 +353,32 @@ func send_nearby_chat(message:String,bubble_type:int=0)->bool:
 		"map_epoch":int(current.get("map_epoch",0))
 	})
 
+
+func send_world_chat(message:String,bubble_type:int=0)->bool:
+	var clean:=message.strip_edges()
+	var bytes:=clean.to_utf8_buffer()
+	var current:=snapshot()
+	if (
+		not bool(current.get("player_profile_ready",false)) or
+		int(current.get("player_level",0))<10 or
+		clean.is_empty() or bytes.size()>WireCodec.CHAT_MAX_MESSAGE_BYTES or
+		bubble_type<0 or bubble_type>5 or
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_whisper_sequence",0))!=0
+	):
+		return false
+	return _queue_intent({
+		"type":"world_chat","message":clean,"bubble_type":bubble_type,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
+
 func send_whisper(
 		target_actor_id:int,message:String,bubble_type:int=0)->bool:
 	return _queue_whisper_intent(target_actor_id,"",message,bubble_type)
@@ -1504,7 +1530,7 @@ func _process_first_intent() -> void:
 		_process_quest_intent(intent, kind)
 
 
-	elif kind in ["nearby_chat","party_chat","whisper"]:
+	elif kind in ["nearby_chat","world_chat","party_chat","whisper"]:
 		_process_chat_intent(intent, kind)
 
 
@@ -1773,8 +1799,12 @@ func _process_chat_intent(intent: Dictionary, kind: String) -> void:
 	var bubble:=int(intent.get("bubble_type",0))
 	var sequence:=int(current.get("chat_sequence",0))+1
 	var frame:=PackedByteArray()
-	if kind in ["nearby_chat","party_chat"]:
-		var channel:=0 if kind=="nearby_chat" else 3
+	if kind in ["nearby_chat","world_chat","party_chat"]:
+		var channel:=0
+		if kind=="world_chat":
+			channel=1
+		elif kind=="party_chat":
+			channel=3
 		if channel==3 and int(current.get("party_id",0))<=0:
 			_pop_intent()
 			return

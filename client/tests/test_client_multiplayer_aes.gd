@@ -69,6 +69,13 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 			_fail("observer did not receive authenticated nearby chat %s" %
 				session.snapshot(),session)
 			return
+		var world_chat := _wait_world_chat(
+			session,remote_id,"MultiHeroTwo","世界 E2E 測試",7000)
+		if world_chat.is_empty() or int(world_chat.get("chat_sequence",0))!=2 or \
+				int(world_chat.get("channel",-1))!=1 or int(world_chat.get("bubble_type",-1))!=4:
+			_fail("observer did not receive authoritative World chat %s" %
+				session.snapshot(),session)
+			return
 	var crossmap_chat_stale_before := -1
 	if crossmap and not portal:
 		if not session.party_invite_name("MultiHeroTwo"):
@@ -215,7 +222,7 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 		quit(0)
 		return
 	session.stop()
-	print("CLIENT_MULTI_PASS role=observer world_ready=PASS spawn=PASS nearby_chat=PASS delta=PASS despawn=PASS other_actor=%d" % remote_id)
+	print("CLIENT_MULTI_PASS role=observer world_ready=PASS spawn=PASS nearby_chat=PASS world_chat=PASS delta=PASS despawn=PASS other_actor=%d" % remote_id)
 	quit(0)
 
 func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) -> void:
@@ -239,6 +246,20 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 		if echoed.is_empty() or int(echoed.get("chat_sequence",0))!=1 or \
 				int(echoed.get("channel",-1))!=0 or int(echoed.get("bubble_type",-1))!=2:
 			_fail("actor did not receive authoritative nearby chat echo %s" %
+				session.snapshot(),session)
+			return
+		if int(session.snapshot().get("player_level",0))!=10 or \
+				not bool(session.snapshot().get("player_profile_ready",false)):
+			_fail("world-chat fixture did not receive authoritative level-10 profile",session)
+			return
+		if not session.send_world_chat("世界 E2E 測試",4):
+			_fail("actor World chat intent rejected",session)
+			return
+		var world_echo := _wait_world_chat(
+			session,self_id,"MultiHeroTwo","世界 E2E 測試",7000)
+		if world_echo.is_empty() or int(world_echo.get("chat_sequence",0))!=2 or \
+				int(world_echo.get("channel",-1))!=1 or int(world_echo.get("bubble_type",-1))!=4:
+			_fail("actor did not receive authoritative World chat echo %s" %
 				session.snapshot(),session)
 			return
 	elif not portal:
@@ -468,7 +489,7 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 	# independent of the headless test's render cadence.
 	OS.delay_msec(180)
 	session.stop()
-	print("CLIENT_MULTI_PASS role=actor world_ready=PASS spawn=PASS nearby_chat=PASS move_ack=PASS")
+	print("CLIENT_MULTI_PASS role=actor world_ready=PASS spawn=PASS nearby_chat=PASS world_chat=PASS move_ack=PASS")
 	quit(0)
 
 
@@ -514,6 +535,27 @@ func _wait_nearby_chat(
 		for raw in value.get("chat_messages",[]):
 			var row:Dictionary=raw
 			if (
+				int(row.get("sender_actor_id",0))==sender_id and
+				str(row.get("sender_name",""))==sender_name and
+				str(row.get("message",""))==message
+			):
+				return row
+		OS.delay_msec(2)
+	return {}
+
+
+func _wait_world_chat(
+		session,sender_id:int,sender_name:String,message:String,
+		timeout_ms:int)->Dictionary:
+	var deadline:=Time.get_ticks_msec()+timeout_ms
+	while Time.get_ticks_msec()<deadline:
+		var value:Dictionary=session.snapshot()
+		if int(value.state)==WorldState.STATE_FAILED:
+			break
+		for raw in value.get("chat_messages",[]):
+			var row:Dictionary=raw
+			if (
+				int(row.get("channel",-1))==1 and
 				int(row.get("sender_actor_id",0))==sender_id and
 				str(row.get("sender_name",""))==sender_name and
 				str(row.get("message",""))==message

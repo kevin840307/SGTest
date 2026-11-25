@@ -12,8 +12,9 @@ internal static class ChatWireChecks
     {
         Checks.Run("nearby chat wire binds sender identity only at Gateway", Wire);
         Checks.Run("whisper wire binds sender and target in shared chat sequence", Whisper);
-        Checks.Run("nearby chat gateway rejects unsupported channel and replay", Gate);
+        Checks.Run("chat gateway admits trusted World and rejects unsupported channel/replay", Gate);
         Checks.Run("trusted chat routing isolates nearby and cross-map whisper", Routing);
+        Checks.Run("trusted world chat enforces original level gate and crosses maps", WorldRouting);
         Checks.Run("trusted party chat reaches cross-map members only", PartyRouting);
     }
 
@@ -68,6 +69,43 @@ internal static class ChatWireChecks
         Checks.Require(!sender.TryDequeueReliable(out _)&&
             !target.TryDequeueReliable(out _),
             "stale authenticated chat generation delivered a frame");
+    }
+
+    private static void WorldRouting()
+    {
+        var router=new WorldResultRouter();
+        var sender=new GatewayConnection(
+            new ActorSnapshot(11,15,5,3,0,0,8,8,1,false),
+            displayName:"WorldSender",
+            pvpState:new CharacterPvpState(11,PvpMode.ProtectedBlue,false,0,0,0));
+        var target=new GatewayConnection(
+            new ActorSnapshot(22,13,7,4,0,0,8,8,1,false),
+            displayName:"WorldTarget",
+            pvpState:new CharacterPvpState(22,PvpMode.ProtectedBlue,false,0,0,0));
+        Checks.Require(router.TryAttach(sender)&&router.TryAttach(target),
+            "world chat routing fixture attach failed");
+
+        ChatRouting.RouteAsync(
+            new(11,5,3,1,ChatChannel.World,2,"world cross map",PlayerLevel:10),
+            router,null).GetAwaiter().GetResult();
+        Checks.Require(
+            sender.TryDequeueReliable(out var selfFrame)&&
+            WireProtocol.TryDecodeChatDelivery(selfFrame,out var selfMessage)&&
+            selfMessage.Channel==ChatChannel.World&&
+            selfMessage.ReceiverMapEpoch==3&&
+            target.TryDequeueReliable(out var targetFrame)&&
+            WireProtocol.TryDecodeChatDelivery(targetFrame,out var targetMessage)&&
+            targetMessage.Channel==ChatChannel.World&&
+            targetMessage.ReceiverMapEpoch==4&&
+            targetMessage.Message=="world cross map"&&
+            !sender.TryDequeueReliable(out _)&&!target.TryDequeueReliable(out _),
+            "level-10 world chat did not broadcast exactly once across active maps");
+
+        ChatRouting.RouteAsync(
+            new(11,5,3,2,ChatChannel.World,2,"too low",PlayerLevel:9),
+            router,null).GetAwaiter().GetResult();
+        Checks.Require(!sender.TryDequeueReliable(out _)&&!target.TryDequeueReliable(out _),
+            "original WorldChannel lvllimit=10 was not enforced by authoritative routing");
     }
 
     private static void PartyRouting()
@@ -282,14 +320,26 @@ internal static class ChatWireChecks
     private static void Gate()
     {
         var actor=new ActorSnapshot(11,15,5,3,0,0,8,8,1,false);
-        var factionGateway=new GatewayConnection(actor);
-        var faction=WireProtocol.EncodeChatCommand(new(
-            3,1,ChatChannel.Faction,0,"not enabled"));
-        Checks.Require(factionGateway.FeedClientBytes(
-                faction,_=>true,out int factionAccepted,
+        var worldGateway=new GatewayConnection(
+            actor,combatProfile:new TrustedCombatProfile(1,1,1,1,48,15,10));
+        TrustedChatCommand trustedWorld=default;
+        var world=WireProtocol.EncodeChatCommand(new(
+            3,1,ChatChannel.World,0,"world"));
+        Checks.Require(worldGateway.FeedClientBytes(
+                world,_=>true,out int worldAccepted,
+                postChat:request=>{trustedWorld=request;return true;})==
+                WireFeedStatus.Accepted&&worldAccepted==1&&
+            trustedWorld.Channel==ChatChannel.World&&trustedWorld.PlayerLevel==10,
+            "World chat did not bind the authoritative player level at Gateway");
+
+        var unsupportedGateway=new GatewayConnection(actor);
+        var warband=WireProtocol.EncodeChatCommand(new(
+            3,1,ChatChannel.Warband,0,"not enabled"));
+        Checks.Require(unsupportedGateway.FeedClientBytes(
+                warband,_=>true,out int warbandAccepted,
                 postChat:_=>true)==WireFeedStatus.ProtocolViolation&&
-            factionAccepted==0,
-            "unverified Faction chat was admitted");
+            warbandAccepted==0,
+            "unverified Warband chat was admitted");
 
         var replayGateway=new GatewayConnection(actor);
         var first=WireProtocol.EncodeChatCommand(new(

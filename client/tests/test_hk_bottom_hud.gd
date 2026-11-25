@@ -62,12 +62,13 @@ func _run()->void:
 	var messages:Array=[]
 	for index in 20:
 		messages.append({"channel":0,"sender_name":"玩家","message":"附近訊息 %d"%index})
+	messages.append({"channel":1,"sender_name":"世界玩家","message":"世界測試"})
 	messages.append({"channel":3,"sender_name":"隊員","message":"隊伍測試"})
 	messages.append({"channel":4,"sender_name":"好友","message":"私訊測試"})
 	shell.apply_snapshot({"chat_messages":messages,"friends":{1:{"name":"好友一","online":true},2:{"name":"好友二","online":false}}})
 	await process_frame
 	_expect(shell._chat_history.text.contains("附近訊息 19"),"real snapshot history binding")
-	_expect(shell._chat_history.text.contains("隊伍測試") and shell._chat_history.text.contains("私訊測試"),"supported channels visible")
+	_expect(shell._chat_history.text.contains("世界測試") and shell._chat_history.text.contains("隊伍測試") and shell._chat_history.text.contains("私訊測試"),"supported channels visible")
 	_expect(shell._friend_rows.get_child_count()==2,"contact snapshot binding")
 	_expect(shell._friend_up.disabled and shell._friend_down.disabled,"two friend rows need no scroll")
 	var first_friend:=shell._friend_rows.get_child(0)
@@ -91,17 +92,22 @@ func _run()->void:
 	await process_frame
 	_expect(not shell._chat_big and shell.chat_panel.position==old_position,"collapse restores original position")
 	_rect(shell._chat_input_clip,Rect2(179,74,253,11))
+	shell._chat_tabs[1].pressed.emit()
+	_expect(not shell._chat_history.text.contains("世界測試") and shell._chat_history.text.contains("隊伍測試"),"world display filter")
 	shell._chat_tabs[3].pressed.emit()
 	_expect(not shell._chat_history.text.contains("隊伍測試") and shell._chat_history.text.contains("私訊測試"),"party display filter")
 	shell._chat_tabs[0].pressed.emit()
 	_expect(not shell._chat_history.text.contains("私訊測試"),"private display filter")
+	shell._chat_tabs[1].pressed.emit()
 	shell._chat_tabs[3].pressed.emit()
 	shell._chat_tabs[0].pressed.emit()
 	_expect(shell._chat_history.text==before,"filters do not discard history")
 	shell._chat_channel.pressed.emit()
-	_expect(shell._chat_send_party,"channel control routes to implemented party channel")
+	_expect(shell._chat_send_channel==1,"channel control routes to world channel")
 	shell._chat_channel.pressed.emit()
-	_expect(not shell._chat_send_party,"return to nearby channel")
+	_expect(shell._chat_send_channel==3,"channel control routes to party channel")
+	shell._chat_channel.pressed.emit()
+	_expect(shell._chat_send_channel==0,"return to nearby channel")
 	var args:=OS.get_cmdline_user_args()
 	if not args.is_empty():
 		# Native renderer only; capture the same 800x600 UI surface without

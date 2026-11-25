@@ -17,6 +17,12 @@ static func check_sender(
 			if sender == actor_id:
 				return "chat_self_delivery_without_send" if sequence > sent_sequence else ""
 			return "" if _matches_connection(entities, sender, connection) else STALE
+		1:
+			# World chat is intentionally cross-map, so a remote sender does not
+			# need to exist in the receiver's AOI. Self echo is still sequence-bound.
+			if sender == actor_id:
+				return "world_chat_self_delivery_without_send" if sequence > sent_sequence else ""
+			return ""
 		3:
 			if party_id <= 0:
 				return STALE

@@ -148,7 +148,7 @@ public enum WireOpcode : ushort
     PlayerAttributeAllocate = 135
 }
 
-public enum ChatChannel : byte { Nearby = 0, Faction = 1, Warband = 2, Party = 3, Whisper = 4 }
+public enum ChatChannel : byte { Nearby = 0, World = 1, Warband = 2, Party = 3, Whisper = 4 }
 public enum WhisperResultStatus : byte
 {
     Delivered = 0,

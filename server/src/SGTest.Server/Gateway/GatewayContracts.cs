@@ -119,7 +119,7 @@ public readonly record struct TrustedPlayerShopCommand(
 public readonly record struct TrustedChatCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint ChatSequence,ChatChannel Channel,byte BubbleType,string Message,
-    long TargetActorId=0,string TargetName="");
+    long TargetActorId=0,string TargetName="",int PlayerLevel=0);
 public readonly record struct TrustedPartyCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint PartySequence,PartyCommandAction Action,long PartyId,long TargetActorId,

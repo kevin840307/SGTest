@@ -467,12 +467,13 @@ public sealed partial class GatewayConnection
             WireProtocol.TryDecodeChatCommand(frame,out var chat))
         {
             if(!GameplayReady(bound)||chat.MapEpoch!=bound.MapEpoch||
-               chat.Channel is not (ChatChannel.Nearby or ChatChannel.Party)||
+               chat.Channel is not (ChatChannel.Nearby or ChatChannel.World or ChatChannel.Party)||
                chat.ChatSequence<=_lastChatSequence)
                 return WireFrameDisposition.ProtocolViolation;
             var request=new TrustedChatCommand(
                 bound.ActorId,bound.ConnectionEpoch,chat.MapEpoch,
-                chat.ChatSequence,chat.Channel,chat.BubbleType,chat.Message);
+                chat.ChatSequence,chat.Channel,chat.BubbleType,chat.Message,
+                PlayerLevel:_combatProfile?.Level??0);
             if(!postChat(request))
                 return WireFrameDisposition.Backpressured;
             _lastChatSequence=chat.ChatSequence;
