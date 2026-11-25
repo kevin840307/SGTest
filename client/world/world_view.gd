@@ -630,8 +630,18 @@ func _exit_tree() -> void:
 func set_player_snapshot(snapshot: Dictionary) -> void:
 	if not show_players or not snapshot.get("world_ready",false) or int(snapshot.map_id) != map_id:
 		return
-	if not _player_snapshot.is_empty() and int(snapshot.map_epoch) < int(_player_snapshot.map_epoch):
-		return
+	if not _player_snapshot.is_empty():
+		var previous_epoch: int = int(_player_snapshot.map_epoch)
+		var incoming_epoch: int = int(snapshot.map_epoch)
+		if incoming_epoch < previous_epoch:
+			return
+		if incoming_epoch == previous_epoch:
+			var previous_tick: int = int(_player_snapshot.get("last_aoi_tick",-1))
+			var incoming_tick: int = int(snapshot.get("last_aoi_tick",-1))
+			if incoming_tick >= 0 and previous_tick >= 0 and incoming_tick < previous_tick:
+				# A delayed same-generation snapshot cannot remove newer ground
+				# drops, monsters or players from the visible world.
+				return
 	_player_snapshot = snapshot
 	_players_dirty = true
 	if phase == "ready":
