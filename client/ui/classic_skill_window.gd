@@ -218,7 +218,12 @@ func _texture_button(
 
 func set_skill_book(skills: Dictionary) -> void:
 	_skills = skills.duplicate(true)
-	_ids = _skills.keys()
+	_ids.clear()
+	for skill_id in _skills:
+		# A roster slot at level 0 (or an invalid negative level) is not learned.
+		# It must not occupy an HK list row or become a selectable ability.
+		if int(_skills[skill_id]) > 0:
+			_ids.append(skill_id)
 	_ids.sort()
 	var last_page_start := 0
 	if not _ids.is_empty():

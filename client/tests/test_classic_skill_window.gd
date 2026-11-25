@@ -31,10 +31,12 @@ func _run() -> void:
 
 	window.skill_selected.connect(func(skill_id: int): selected = skill_id)
 	var skills := {
+		5: 0, 6: -1, # Server snapshots can include slots that are not learned.
 		10101: 1, 1103: 1, 1104: 2, 1201: 1, 2103: 1,
 		2104: 1, 2201: 2, 28101: 3, 7201: 1, 8201: 1
 	}
 	window.set_skill_book(skills)
+	_expect(window._ids.size() == 10, "only positive learned levels populate HK skill pages")
 	_expect(window.get_node("SkillName0").text == "技能 1103", "sorted first skill")
 	_expect(window.get_node("SkillLevel0").text == "1", "server level")
 	_expect(not window.get_node("SkillProgress0").visible, "no fabricated proficiency")
@@ -89,6 +91,14 @@ func _run() -> void:
 	if hk_label_loaded:
 		_expect(window.get_node("SkillName0").text == "治療術",
 			"HK skill.dat source provides localized display without changing level")
+	var last_selected := selected
+	window.set_skill_book({28101: 0, 1103: -2})
+	_expect(window._ids.is_empty() and window.get_node("SkillRow0").disabled and
+		window.get_node("SkillName0").text == "" and
+		window.get_node("SkillIcon0").texture == null,
+		"zero/negative Server levels must leave no selectable row or stale art")
+	window._select_row(0)
+	_expect(selected == last_selected, "unlearned ability must never emit an intent")
 
 	# Malformed local display data must be rejected as a whole.
 	var invalid_path := "user://sgtest_skill_labels_invalid_%d.json" % OS.get_process_id()
