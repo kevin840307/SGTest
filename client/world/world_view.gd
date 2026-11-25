@@ -1019,6 +1019,13 @@ func npc_count() -> int:
 	return npcs.count() if phase == "ready" else 0
 
 
+func pick_player_at(world_point: Vector2) -> int:
+	if phase != "ready":
+		return 0
+	return players.pick_other_at(
+		world_point,Time.get_ticks_usec(),int(_player_snapshot.get("actor_id",0)))
+
+
 func pick_npc_at(world_point: Vector2) -> int:
 	return npcs.pick_at(world_point) if phase == "ready" else 0
 

@@ -739,7 +739,7 @@ public static partial class WireProtocol
         catch(EncoderFallbackException)
         { throw new ArgumentOutOfRangeException(nameof(value)); }
         if(value.MapEpoch<=0||value.PartySequence==0||
-           value.Action is < PartyCommandAction.Invite or > PartyCommandAction.Promote||
+           value.Action is < PartyCommandAction.Invite or > PartyCommandAction.Create||
            value.PartyId<0||value.TargetActorId<0||
            targetName.Length>PlayerIdentityMaxNameBytes)
             throw new ArgumentOutOfRangeException(nameof(value));
@@ -762,7 +762,11 @@ public static partial class WireProtocol
                 (inviteResponse&&(value.PartyId<=0||value.TargetActorId<=0))||
                 (value.Action==PartyCommandAction.Leave&&
                     (value.PartyId<=0||value.TargetActorId!=0))||
-                (!memberTarget&&!inviteResponse&&value.Action!=PartyCommandAction.Leave))
+                (value.Action==PartyCommandAction.Create&&
+                    (value.PartyId!=0||value.TargetActorId!=0))||
+                (!memberTarget&&!inviteResponse&&
+                    value.Action!=PartyCommandAction.Leave&&
+                    value.Action!=PartyCommandAction.Create))
             throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.PartyCommand,
             PartyCommandFrameBytes+targetName.Length);
@@ -804,7 +808,7 @@ public static partial class WireProtocol
     public static byte[] EncodePartyResult(PartyResultWire value)
     {
         if(value.MapEpoch<=0||value.PartySequence==0||
-           value.Action is < PartyCommandAction.Invite or > PartyCommandAction.Promote||
+           value.Action is < PartyCommandAction.Invite or > PartyCommandAction.Create||
            value.Status is < PartyResultStatus.Success or >
                 PartyResultStatus.TargetHasPendingInvite||
            value.PartyId<0||value.TargetActorId<0)
@@ -832,7 +836,7 @@ public static partial class WireProtocol
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(22,8)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(30,8)));
         if(value.MapEpoch<=0||value.PartySequence==0||
-           value.Action is < PartyCommandAction.Invite or > PartyCommandAction.Promote||
+           value.Action is < PartyCommandAction.Invite or > PartyCommandAction.Create||
            value.Status is < PartyResultStatus.Success or >
                 PartyResultStatus.TargetHasPendingInvite||
            value.PartyId<0||value.TargetActorId<0)

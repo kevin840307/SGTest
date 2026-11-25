@@ -180,9 +180,17 @@ var _character_labels:Dictionary={}
 var _character_point_buttons:Array[TextureButton]=[]
 var _character_hp_fill:Control
 var _character_mp_fill:Control
-# Skill rows are owned by classic_skill_window.gd; do not allocate an
-# unparented legacy VBoxContainer (orphaned on every UI teardown).
-var _party_rows:=VBoxContainer.new()
+# Skill rows are owned by classic_skill_window.gd; 026_TEAM also uses only
+# fixed ITF controls, so keep no unparented legacy VBoxContainer here.
+var _party_member_labels:Array[RichTextLabel]=[]
+var _party_hp_clips:Array[Control]=[]
+var _party_mp_clips:Array[Control]=[]
+var _party_member_actor_ids:Array[int]=[0,0,0,0,0,0]
+var _party_question:=Control.new()
+var _party_question_text:=RichTextLabel.new()
+var _party_question_actor:=0
+var _request_menu:=Control.new()
+var _request_menu_actor:=0
 var _clan_rows:=VBoxContainer.new()
 var _shop_buy_rows:=VBoxContainer.new()
 var _shop_sell_rows:=VBoxContainer.new()
@@ -458,10 +466,19 @@ func _process(_delta:float)->void:
 
 
 func _unhandled_key_input(event:InputEvent)->void:
-	if not _friend_question.visible or not event.is_action_pressed("ui_cancel"):
+	if not event.is_action_pressed("ui_cancel"):
 		return
-	_reject_friend_invite()
-	get_viewport().set_input_as_handled()
+	if _party_question.visible:
+		_reject_party_invite()
+		get_viewport().set_input_as_handled()
+		return
+	if _request_menu.visible:
+		close_player_request_menu()
+		get_viewport().set_input_as_handled()
+		return
+	if _friend_question.visible:
+		_reject_friend_invite()
+		get_viewport().set_input_as_handled()
 
 
 func _transparent_line_edit(edit:LineEdit)->void:
@@ -1697,12 +1714,61 @@ func _build_skill()->void:
 	skill_window.visible=false
 
 func _build_party()->void:
-	party_window=_window("PartyWindow","BG_TEAM",Vector2(139,144),Vector2(626,424))
-	_party_rows.name="PartyRows"
-	_party_rows.position=Vector2(7,5)
-	_party_rows.size=Vector2(124,132)
-	_party_rows.add_theme_constant_override("separation",1)
-	party_window.add_child(_party_rows)
+	# HK 026_TEAM.itf: keep source rects exact. The original handler map binds
+	# 2493=BuildTeam, 2685=QuitTeam, 2475..2480=KickTeamMem(index).
+	party_window=Control.new()
+	party_window.name="PartyWindow"
+	party_window.position=Vector2(626,424)
+	party_window.size=Vector2(139,144)
+	party_window.visible=false
+	stage.add_child(party_window)
+	_make_movable(party_window)
+	_background(party_window,"BG_TEAM",party_window.size)
+	_texture_button(party_window,"PartyBuild","B_TEAM_BUILDUP",Vector2(4,1),Vector2(16,16),_party_create,"建立隊伍")
+	_texture_button(party_window,"PartyLeave","B_TEAM_GOOUT",Vector2(23,1),Vector2(16,16),_party_leave,"離開隊伍")
+	_texture_button(party_window,"PartyComplex","B_COMPLEX_TEAM",Vector2(42,1),Vector2(16,16),Callable(),"隊伍功能")
+	_texture_button(party_window,"PartyHelp","B_ONLINEHELP",Vector2(102,1),Vector2(16,16),Callable(),"線上說明")
+	_texture_button(party_window,"PartyClose","CLOSESCREEN",Vector2(119,1),Vector2(16,16),func():party_window.hide(),"關閉")
+	for i in range(6):
+		var y:=24.0+20.0*i
+		var label:=_itf_text(party_window,"PartyMember%d"%i,Rect2(9,y,120,12),9)
+		_party_member_labels.append(label)
+		var hit:=_hit(party_window,"PartyMemberHit%d"%i,Rect2(9,y,120,12),_party_member_pressed.bind(i),"隊伍成員")
+		hit.modulate=Color(1,1,1,0.01)
+		var hp:=_animated_progress(party_window,"PartyHp%d"%i,Rect2(10,38+20*i,88,3),"HP",16)
+		var mp:=_animated_progress(party_window,"PartyMp%d"%i,Rect2(100,38+20*i,29,3),"MP",16)
+		_party_hp_clips.append(hp.clip)
+		_party_mp_clips.append(mp.clip)
+
+	# Paradise CSGOUim::OnTeamInviteReq routes through ONUIQuestion and
+	# CReplierItf, which loads 044_QUESTION_BOX.itf.
+	_party_question.name="PartyInviteQuestion"
+	_party_question.position=Vector2(166,290)
+	_party_question.size=Vector2(469,19)
+	_party_question.visible=false
+	_party_question.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_party_question)
+	_background(_party_question,"BG_QUESTION_BOX",_party_question.size)
+	_party_question_text=_itf_text(
+		_party_question,"QuestionText",Rect2(9,3,382,12),12)
+	_texture_button(_party_question,"QuestionYes","B_OK_BUTTON",Vector2(424,1),Vector2(16,16),_accept_party_invite,"接受")
+	_texture_button(_party_question,"QuestionNo","CLOSESCREEN",Vector2(444,1),Vector2(16,16),_reject_party_invite,"拒絕")
+
+	# 040_Rightbox.itf is created at the clicked player's runtime x/y. 3016
+	# (0xBC8) is CReqMenuItf::OnTeam; other rows keep original art/rects but
+	# remain unbound until their own authoritative slices are implemented.
+	_request_menu.name="PlayerRequestMenu"
+	_request_menu.size=Vector2(86,99)
+	_request_menu.visible=false
+	_request_menu.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_request_menu)
+	_background(_request_menu,"BG_RIGHTBOX",_request_menu.size)
+	var rows:=[
+		["Trade",0.0,"交易"],["Transfer",15.0,"傳送"],["Buy",28.0,"購買"],
+		["Team",42.0,"組隊"],["Friend",57.0,"好友"],["Clan",70.0,"社團"],["Extra",84.0,"更多"]]
+	for row in rows:
+		var callback:=_request_team if str(row[0])=="Team" else Callable()
+		_texture_button(_request_menu,"Request"+str(row[0]),"B_RIGHTBOX_BUTTON",Vector2(-1,float(row[1])),Vector2(86,14),callback,str(row[2]))
 
 func _build_clan()->void:
 	clan_window=_window("ClanWindow","BG_CLUB",Vector2(263,360),Vector2(269,113))
@@ -2014,6 +2080,10 @@ func set_world_active(active:bool)->void:
 		_inventory_render_initialized=false
 		_inventory_render_signature.clear()
 		_social_render_signatures.clear()
+		_party_question.hide()
+		_party_question_actor=0
+		_request_menu.hide()
+		_request_menu_actor=0
 		_friend_editor.hide()
 		_friend_message_panel.hide()
 		_friend_message_actor=0
@@ -2031,7 +2101,9 @@ func apply_snapshot(snapshot:Dictionary)->void:
 		_refresh_inventory()
 	_refresh_character()
 	_refresh_skill()
-	if _social_snapshot_changed("party",["party_members","party_leader_actor_id"]):
+	if _social_snapshot_changed("party",[
+		"party_id","party_members","party_leader_actor_id","pending_party_invite",
+		"pending_party_sequence","player_current_hp","player_max_hp","player_current_mp","player_max_mp"]):
 		_refresh_party()
 	_refresh_clan()
 	_refresh_shop()
@@ -2042,6 +2114,9 @@ func apply_snapshot(snapshot:Dictionary)->void:
 		_refresh_friends()
 	if _social_snapshot_changed("friend_messages",["friend_messages"]):
 		_refresh_friend_message()
+	# Party invite uses the same original question family as other social asks;
+	# if both arrive together, the server-authoritative party invite takes focus.
+	_sync_party_question()
 	_refresh_player_shop()
 	_refresh_storage()
 	_refresh_bank()
@@ -2392,14 +2467,114 @@ func _refresh_skill()->void:
 	else:
 		skill_window.call("set_skill_book",{})
 
+func _party_create()->void:
+	if _panel!=null and _panel.session!=null:
+		_panel.session.party_create()
+
+
+func _party_leave()->void:
+	if _panel!=null and _panel.session!=null:
+		_panel.session.party_leave()
+
+
+func _party_member_pressed(index:int)->void:
+	if index<0 or index>=_party_member_actor_ids.size() or _panel==null or _panel.session==null:
+		return
+	var target:=_party_member_actor_ids[index]
+	var self_actor:=int(_stats.get("actor_id",0))
+	if target<=0 or target==self_actor:
+		return
+	if int(_stats.get("party_leader_actor_id",0))!=self_actor:
+		return
+	_panel.session.party_kick(target)
+
+
 func _refresh_party()->void:
-	_clear_rows(_party_rows)
 	var members:Dictionary=_stats.get("party_members",{})
-	var ids:Array=members.keys();ids.sort()
-	for i in mini(6,ids.size()):
-		var id:=int(ids[i]);var member:Dictionary=members[ids[i]]
-		_classic_row(_party_rows,"%s%s"%["★ " if id==int(_stats.get("party_leader_actor_id",0)) else "",str(member.get("name","玩家"))],21.5)
-	if ids.is_empty():_classic_row(_party_rows,"尚未組隊",21.5)
+	# PartyCoordinator preserves authoritative membership order; do not sort by
+	# actor id and accidentally move the leader/member rows between snapshots.
+	var ids:Array=members.keys()
+	for i in range(6):
+		var label:=_party_member_labels[i]
+		var hp:=_party_hp_clips[i]
+		var mp:=_party_mp_clips[i]
+		_party_member_actor_ids[i]=0
+		label.text=""
+		_set_progress(hp,0,0)
+		_set_progress(mp,0,0)
+		if i>=ids.size():
+			continue
+		var id:=int(ids[i])
+		var member:Dictionary=members[ids[i]]
+		_party_member_actor_ids[i]=id
+		label.text=str(member.get("name",""))
+		# Current PartySnapshot only proves remote identity/generation. Never
+		# synthesize peer HP/MP; consume it only if a future authority adds it.
+		if id==int(_stats.get("actor_id",0)):
+			_set_progress(hp,int(_stats.get("player_current_hp",0)),int(_stats.get("player_max_hp",0)))
+			_set_progress(mp,int(_stats.get("player_current_mp",0)),int(_stats.get("player_max_mp",0)))
+		elif member.has("current_hp") and member.has("max_hp"):
+			_set_progress(hp,int(member.current_hp),int(member.max_hp))
+			if member.has("current_mp") and member.has("max_mp"):
+				_set_progress(mp,int(member.current_mp),int(member.max_mp))
+
+
+func _sync_party_question()->void:
+	var invite:Dictionary=_stats.get("pending_party_invite",{})
+	if invite.is_empty() or int(_stats.get("pending_party_sequence",0))!=0:
+		_party_question_actor=0
+		_party_question.hide()
+		return
+	var inviter:=int(invite.get("inviter_actor_id",0))
+	if inviter<=0:
+		_party_question_actor=0
+		_party_question.hide()
+		return
+	_party_question_actor=inviter
+	# The binary proves inviter identity is inserted into localized copy, but
+	# the CP950 sentence itself is not recovered. Show only the proven name.
+	_party_question_text.text=str(invite.get("inviter_name",""))
+	_friend_question.hide()
+	_party_question.show()
+	_party_question.move_to_front()
+
+
+func _accept_party_invite()->void:
+	if _panel!=null and _panel.session!=null and _panel.session.party_accept():
+		_party_question.hide()
+		_sync_friend_question()
+
+
+func _reject_party_invite()->void:
+	if _panel!=null and _panel.session!=null and _panel.session.party_reject():
+		_party_question.hide()
+		_sync_friend_question()
+
+
+func open_player_request_menu(actor_id:int,viewport_position:Vector2)->void:
+	if not _active or _panel==null or _panel.session==null or actor_id<=0 or actor_id==int(_stats.get("actor_id",0)):
+		close_player_request_menu()
+		return
+	var transform:=stage.get_global_transform_with_canvas().affine_inverse()
+	var local:=transform*viewport_position
+	local.x=clampf(local.x,0.0,BASE_SIZE.x-_request_menu.size.x)
+	local.y=clampf(local.y,0.0,BASE_SIZE.y-_request_menu.size.y)
+	_request_menu_actor=actor_id
+	_request_menu.position=local
+	_request_menu.show()
+	_request_menu.move_to_front()
+
+
+func close_player_request_menu()->void:
+	_request_menu_actor=0
+	_request_menu.hide()
+
+
+func _request_team()->void:
+	var target:=_request_menu_actor
+	close_player_request_menu()
+	if target>0 and _panel!=null and _panel.session!=null:
+		_panel.session.party_invite(target)
 
 func _refresh_clan()->void:
 	var header=clan_window.get_node_or_null("ClanHeader")

@@ -274,6 +274,40 @@ func _run() -> void:
 	):
 		_fail("original SPR world geometry not applied by independent ClassicWorldShell")
 		return
+	var party_rects:={
+		"PartyBuild":[Vector2(4,1),Vector2(16,16)],
+		"PartyLeave":[Vector2(23,1),Vector2(16,16)],
+		"PartyComplex":[Vector2(42,1),Vector2(16,16)],
+		"PartyHelp":[Vector2(102,1),Vector2(16,16)],
+		"PartyClose":[Vector2(119,1),Vector2(16,16)],
+		"PartyMember0":[Vector2(9,24),Vector2(120,12)],
+		"PartyMember5":[Vector2(9,124),Vector2(120,12)],
+		"PartyHp0Clip":[Vector2(10,38),Vector2(88,3)],
+		"PartyMp5Clip":[Vector2(100,138),Vector2(29,3)],
+	}
+	for control_name in party_rects:
+		var control:=world.party_window.get_node_or_null(control_name) as Control
+		var expected:Array=party_rects[control_name]
+		if control==null or control.position!=expected[0] or control.size!=expected[1]:
+			_fail("HK 026_TEAM control rect drifted: "+str(control_name))
+			return
+	if (
+		world._party_question.size!=Vector2(469,19) or
+		world._party_question_text.position!=Vector2(9,3) or world._party_question_text.size!=Vector2(382,12) or
+		(world._party_question.get_node("QuestionYes") as Control).position!=Vector2(424,1) or
+		(world._party_question.get_node("QuestionNo") as Control).position!=Vector2(444,1) or
+		world._request_menu.size!=Vector2(86,99) or
+		(world._request_menu.get_node("RequestTeam") as Control).position!=Vector2(-1,42) or
+		(world._request_menu.get_node("RequestTeam") as Control).size!=Vector2(86,14)
+	):
+		_fail("HK 026_TEAM / 040_Rightbox / 044_QUESTION_BOX geometry drifted q=%s/%s text=%s/%s yes=%s no=%s right=%s team=%s/%s"%[
+			str(world._party_question.size),str(world._party_question.position),
+			str(world._party_question_text.position),str(world._party_question_text.size),
+			str((world._party_question.get_node("QuestionYes") as Control).position),
+			str((world._party_question.get_node("QuestionNo") as Control).position),
+			str(world._request_menu.size),str((world._request_menu.get_node("RequestTeam") as Control).position),
+			str((world._request_menu.get_node("RequestTeam") as Control).size)])
+		return
 	var system_controls := {
 		"CloseWindow":[Vector2(270,1),Vector2(16,16)],
 		"QualityDown":[Vector2(144,34),Vector2(17,17)],

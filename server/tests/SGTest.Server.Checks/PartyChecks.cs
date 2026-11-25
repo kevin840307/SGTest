@@ -11,6 +11,7 @@ internal static class PartyChecks
     public static void Verify(string root)
     {
         Checks.Run("party wire binds compact command result invite and snapshot",Wire);
+        Checks.Run("party explicit source build creates authoritative singleton",ExplicitCreate);
         Checks.Run("party coordinator owns invite leader kick disconnect and recipients",Lifecycle);
         Checks.Run("party invite resolves exact authenticated online character name",InviteByName);
         Checks.Run("party invite cannot cross target reconnect or stale old cleanup",InviteGeneration);
@@ -52,6 +53,22 @@ internal static class PartyChecks
         Checks.Require(dualSelectorRejected,
             "party command admitted ActorId plus name");
 
+        var create=new PartyCommandWire(
+            3,10,PartyCommandAction.Create,0,0);
+        Checks.Require(WireProtocol.TryDecodePartyCommand(
+                WireProtocol.EncodePartyCommand(create),out var createBack)&&
+            createBack==create,
+            "party create command roundtrip mismatch");
+        bool badCreateRejected=false;
+        try
+        {
+            _=WireProtocol.EncodePartyCommand(new(
+                3,11,PartyCommandAction.Create,9001,0));
+        }
+        catch(ArgumentOutOfRangeException){badCreateRejected=true;}
+        Checks.Require(badCreateRejected,
+            "party create admitted nonzero party id");
+
         var result=new PartyResultWire(
             3,7,PartyCommandAction.Invite,PartyResultStatus.Success,9001,22);
         Checks.Require(WireProtocol.TryDecodePartyResult(
@@ -87,6 +104,45 @@ internal static class PartyChecks
             trusted.Action==PartyCommandAction.Invite&&
             trusted.PartyId==0&&trusted.TargetActorId==22,
             "party Gateway did not bind authenticated sender/sequence");
+    }
+
+    private static void ExplicitCreate()
+    {
+        var router=new WorldResultRouter();
+        var a=Gateway(Actor(11,1,1),"PartyA");
+        Checks.Require(router.TryAttach(a),"party create gateway attach failed");
+        var party=new PartyCoordinator();
+
+        var create=new TrustedPartyCommand(
+            11,1,1,1,PartyCommandAction.Create,0,0);
+        party.HandleAsync(create,router).GetAwaiter().GetResult();
+        var result=DrainResult(a);
+        var singleton=DrainSnapshot(a);
+        Checks.Require(result.Status==PartyResultStatus.Success&&
+            result.Action==PartyCommandAction.Create&&result.PartyId>0&&
+            singleton.PartyId==result.PartyId&&singleton.LeaderActorId==11&&
+            singleton.Members.Select(x=>x.ActorId).SequenceEqual([11L])&&
+            party.PartyCount==1,
+            "party explicit create did not return singleton authority");
+
+        var duplicate=new TrustedPartyCommand(
+            11,1,1,2,PartyCommandAction.Create,0,0);
+        party.HandleAsync(duplicate,router).GetAwaiter().GetResult();
+        var duplicateResult=DrainResult(a);
+        Checks.Require(duplicateResult.Status==PartyResultStatus.AlreadyInParty&&
+            duplicateResult.PartyId==result.PartyId&&party.PartyCount==1,
+            "party duplicate create changed membership");
+
+        var leave=new TrustedPartyCommand(
+            11,1,1,3,PartyCommandAction.Leave,result.PartyId,0);
+        party.HandleAsync(leave,router).GetAwaiter().GetResult();
+        Checks.Require(DrainResult(a).Status==PartyResultStatus.Success,
+            "party explicit create leave result missing");
+        var cleared=DrainSnapshot(a);
+        Checks.Require(cleared.Members.Count==0&&cleared.LeaderActorId==0&&
+            party.PartyCount==0,
+            "party explicit create leave did not clear singleton");
+        router.TryDetach(a);
     }
 
     private static void Lifecycle()

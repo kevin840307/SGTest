@@ -1833,7 +1833,7 @@ internal static class Program
                 }
                 if (results[0].Reason != AesWireEndReason.CleanEof ||
                     results[1].Reason != AesWireEndReason.CleanEof ||
-                    results[1].CommandsAccepted != (portals ? 9 : crossmap ? 11 : 6) ||
+                    results[1].CommandsAccepted != (portals ? 9 : crossmap ? 12 : 6) ||
                     parties.PartyCount != 0 ||
                     router.Statistics.ActiveSessions != 0 ||
                     router.Statistics.ReceiptsQueued < (crossmap || portals ? 2 : 1) ||

@@ -3434,7 +3434,7 @@ static func encode_party_command(
 	)->PackedByteArray:
 	var name_bytes:=target_name.to_utf8_buffer()
 	if (
-		epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>6 or
+		epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>7 or
 		party_id<0 or target_actor_id<0 or
 		name_bytes.size()>CHAT_MAX_SENDER_NAME_BYTES
 	):
@@ -3456,6 +3456,9 @@ static func encode_party_command(
 			return PackedByteArray()
 	elif action==4:
 		if name_target or party_id<=0 or target_actor_id!=0:
+			return PackedByteArray()
+	elif action==7:
+		if name_target or party_id!=0 or target_actor_id!=0:
 			return PackedByteArray()
 	else:
 		return PackedByteArray()
@@ -3481,7 +3484,7 @@ static func decode_party_result(frame:PackedByteArray)->Dictionary:
 	var party_id:=reader.get_64()
 	var target:=reader.get_64()
 	if (
-		epoch<=0 or sequence==0 or action<1 or action>6 or
+		epoch<=0 or sequence==0 or action<1 or action>7 or
 		status<0 or status>10 or party_id<0 or target<0
 	):
 		return {}

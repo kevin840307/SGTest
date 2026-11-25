@@ -121,6 +121,27 @@ func _initialize()->void:
 	if not WireCodec.encode_party_command(3,1,4,0,0).is_empty():
 		_fail("leave without party admitted")
 		return
+	var create_command:=WireCodec.encode_party_command(3,3,7,0,0)
+	if create_command.size()!=WireCodec.PARTY_COMMAND_FRAME_BYTES:
+		_fail("create command encoding")
+		return
+	if not WireCodec.encode_party_command(3,4,7,9,0).is_empty():
+		_fail("create admitted existing party id")
+		return
+	var created:=_base_world(55,5,10)
+	if not created.mark_party_sent(1,7,0,0):
+		_fail("create reducer admission")
+		return
+	if not created.apply_frame(_party_result(10,1,7,0,9200,0)):
+		_fail("create result "+created.protocol_error)
+		return
+	if not created.apply_frame(_party_snapshot(
+		10,9200,1,55,[{"actor_id":55,"connection_epoch":5,"name":"Builder"}])):
+		_fail("create singleton snapshot "+created.protocol_error)
+		return
+	if int(created.snapshot().party_id)!=9200 or int(created.snapshot().party_leader_actor_id)!=55:
+		_fail("create authority state")
+		return
 
 	var by_name:=_base_world(44,4,9)
 	if not by_name.mark_party_sent(1,1,0,0,"PartyB"):
@@ -244,5 +265,5 @@ func _initialize()->void:
 		_fail("party chat admitted after clear")
 		return
 
-	print("PARTY_WIRE_PASS command=100 result=101 invite=102 snapshot=103 max_members=8 crossmap_chat=true nonmember=STALE leader_promote=true clear=true")
+	print("PARTY_WIRE_PASS command=100 result=101 invite=102 snapshot=103 max_members=8 create=true crossmap_chat=true nonmember=STALE leader_promote=true clear=true")
 	quit(0)

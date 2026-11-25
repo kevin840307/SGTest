@@ -96,10 +96,22 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 			return
 	var crossmap_chat_stale_before := -1
 	if crossmap and not portal:
+		if not session.party_create():
+			_fail("observer explicit party create intent rejected",session)
+			return
+		var create_result:=_wait_party_result(session,1,7,0,7000)
+		if create_result.is_empty() or int(create_result.get("status",-1))!=0 or int(create_result.get("party_id",0))<=0:
+			_fail("observer explicit party create result missing %s" % session.snapshot(),session)
+			return
+		var created_party_id:=int(create_result.get("party_id",0))
+		var singleton:=_wait_party_members(session,created_party_id,1,7000)
+		if singleton.is_empty() or int(singleton.get("party_leader_actor_id",0))!=self_id:
+			_fail("observer explicit party create snapshot missing %s" % session.snapshot(),session)
+			return
 		if not session.party_invite_name("MultiHeroTwo"):
 			_fail("observer party name invite intent rejected",session)
 			return
-		var invite_result:=_wait_party_result(session,1,1,remote_id,7000)
+		var invite_result:=_wait_party_result(session,2,1,remote_id,7000)
 		if invite_result.is_empty() or int(invite_result.get("status",-1))!=0:
 			_fail("observer party invite result missing %s" % session.snapshot(),session)
 			return

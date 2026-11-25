@@ -408,6 +408,14 @@ func _input(event: InputEvent) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed and session_panel.active and world_view.phase == "ready" and classic_world.visible:
+		var player_point:Vector2=world_view.camera.screen_to_world(event.position)
+		var player_actor:int=world_view.pick_player_at(player_point)
+		if player_actor>0:
+			classic_world.open_player_request_menu(player_actor,event.position)
+			get_viewport().set_input_as_handled()
+			return
+		classic_world.close_player_request_menu()
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and session_panel.active and world_view.phase == "ready":
 		var point: Vector2 = world_view.camera.screen_to_world(event.position)
 		var drop_id: int = world_view.pick_ground_drop_at(point)

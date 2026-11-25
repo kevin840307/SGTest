@@ -84,6 +84,9 @@ public sealed class PartyCoordinator
                 case PartyCommandAction.Promote:
                     HandlePromoteLocked(request,sender,router);
                     break;
+                case PartyCommandAction.Create:
+                    HandleCreateLocked(request,sender,router);
+                    break;
                 default:
                     throw new InvalidOperationException("Unhandled party action");
             }
@@ -165,6 +168,33 @@ public sealed class PartyCoordinator
 
             RemoveMemberLocked(party,binding.ActorId,router,sendCleared:false);
         }
+    }
+
+    private void HandleCreateLocked(
+        TrustedPartyCommand request,ConnectionBinding sender,WorldResultRouter router)
+    {
+        if(request.PartyId!=0||request.TargetActorId!=0||
+           !string.IsNullOrEmpty(request.TargetName))
+        {
+            QueueResultLocked(request,PartyResultStatus.InviteStale,0,0,router);
+            return;
+        }
+        if(_partyByActor.TryGetValue(request.ActorId,out long existingId))
+        {
+            QueueResultLocked(request,PartyResultStatus.AlreadyInParty,existingId,0,router);
+            return;
+        }
+
+        long id=checked(_nextPartyId++);
+        var party=new Party{PartyId=id,LeaderActorId=request.ActorId};
+        // A successful command receipt is enqueued before membership mutates.
+        // If reliable output is unavailable there must be no invisible party.
+        QueueResultLocked(request,PartyResultStatus.Success,id,0,router);
+        party.Members.Add(request.ActorId);
+        party.Connections.Add(request.ActorId,request.ConnectionEpoch);
+        _parties.Add(id,party);
+        _partyByActor.Add(request.ActorId,id);
+        BroadcastSnapshotLocked(party,router);
     }
 
     private void HandleInviteLocked(

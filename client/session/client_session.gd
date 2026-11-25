@@ -496,6 +496,11 @@ func _queue_whisper_intent(
 	})
 
 
+func party_create()->bool:
+	var current:=snapshot()
+	return _queue_party_intent(7,0,0,current)
+
+
 func party_invite(target_actor_id:int)->bool:
 	var current:=snapshot()
 	return _queue_party_intent(
@@ -947,6 +952,9 @@ func _queue_party_intent(
 			target_actor_id<=0 or target_actor_id==int(current.get("actor_id",0)) or
 			not members.has(target_actor_id)
 		):
+			return false
+	elif action==7:
+		if not clean_name.is_empty() or party_id!=0 or target_actor_id!=0 or int(current.get("party_id",0))!=0:
 			return false
 	else:
 		return false

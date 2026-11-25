@@ -686,6 +686,25 @@ func actors_at(now_usec: int) -> Array:
 	return result
 
 
+func pick_other_at(point: Vector2, now_usec: int, own_actor_id: int, radius: float = 32.0) -> int:
+	if not point.is_finite() or radius <= 0.0:
+		return 0
+	var best_id := 0
+	var best_distance := radius * radius
+	for raw in actors_at(now_usec):
+		var actor_id := int(raw.get("id","0"))
+		if actor_id <= 0 or actor_id == own_actor_id:
+			continue
+		var position := Vector2(raw.get("p",Vector2.INF))
+		if not position.is_finite():
+			continue
+		var distance := point.distance_squared_to(position)
+		if distance < best_distance or (is_equal_approx(distance,best_distance) and (best_id == 0 or actor_id < best_id)):
+			best_distance = distance
+			best_id = actor_id
+	return best_id
+
+
 func position_at(actor_id: int, now_usec: int) -> Vector2:
 	var actor: Dictionary = _actors.get(actor_id,{})
 	if actor.is_empty():

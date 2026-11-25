@@ -201,7 +201,8 @@ public enum MechaResultStatus : byte
 
 public enum PartyCommandAction : byte
 {
-    Invite = 1, Accept = 2, Reject = 3, Leave = 4, Kick = 5, Promote = 6
+    Invite = 1, Accept = 2, Reject = 3, Leave = 4, Kick = 5, Promote = 6,
+    Create = 7
 }
 public enum PartyResultStatus : byte
 {

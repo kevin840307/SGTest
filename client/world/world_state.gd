@@ -908,7 +908,7 @@ func mark_party_sent(
 		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
 		last_world_ready_ack_epoch!=map_epoch or pending_party_sequence!=0 or
 		sequence<=party_sequence or sequence>0xffffffff or
-		action<1 or action>6 or request_party_id<0 or target_actor_id<0
+		action<1 or action>7 or request_party_id<0 or target_actor_id<0
 	):
 		return false
 	var clean_name:=target_name.strip_edges()
@@ -944,6 +944,9 @@ func mark_party_sent(
 				party_leader_actor_id!=actor_id or target_actor_id<=0 or
 				target_actor_id==actor_id or not party_members.has(target_actor_id)
 			):
+				return false
+		7:
+			if not clean_name.is_empty() or party_id!=0 or request_party_id!=0 or target_actor_id!=0:
 				return false
 		_:
 			return false
@@ -4637,8 +4640,10 @@ func _apply_party_result(frame:PackedByteArray)->bool:
 	if status==0:
 		if action in [2,3]:
 			pending_party_invite.clear()
-		if action==1 and response_party<=0:
-			return fail("party_invite_success_without_party")
+		if action in [1,7] and response_party<=0:
+			return fail("party_success_without_party")
+		if action==7 and response_target!=0:
+			return fail("party_create_success_with_target")
 		if action==1 and not pending_party_target_name.is_empty() and response_target<=0:
 			return fail("party_name_invite_success_without_resolved_target")
 	elif status<1 or status>10:
