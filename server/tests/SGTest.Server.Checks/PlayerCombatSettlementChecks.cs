@@ -13,6 +13,8 @@ internal static class PlayerCombatSettlementChecks
     {
         Checks.Run("player combat baseline and committed damage wire are exact and generation-safe",
             WireContract);
+        Checks.Run("profile-only actor without settlement slot is not treated as dead",
+            ProfileOnlyActorIsNotDead);
         Checks.Run("committed damage is queued reliably before combat drain completes",
             () => ReliableDelivery(root).GetAwaiter().GetResult());
         Checks.Run("monster hit reservation is nonblocking and emits only after SQLite commit",
@@ -64,6 +66,30 @@ internal static class PlayerCombatSettlementChecks
         catch(ArgumentOutOfRangeException) { rejected=true; }
         Checks.Require(rejected,
             "zero HP without explicit death was accepted");
+    }
+
+    private static void ProfileOnlyActorIsNotDead()
+    {
+        string db=Path.Combine(Path.GetTempPath(),
+            "combat-profile-only-"+Guid.NewGuid().ToString("N")+".db");
+        try
+        {
+            using var store=new SqliteIdentityStore(db);
+            var settlement=new PlayerCombatSettlement(store,new(Capacity:8));
+            var actor=Actor(91,15,7,3);
+            Checks.Require(settlement.CurrentHp(actor)==0,
+                "legacy CurrentHp sentinel changed for missing combat slot");
+            Checks.Require(!settlement.IsIncapacitated(actor),
+                "missing combat slot was incorrectly interpreted as death");
+            Checks.Require(settlement.IsIncapacitated(actor with { CombatDead=true }),
+                "authoritative World CombatDead no longer gates gameplay");
+        }
+        finally
+        {
+            // Close SQLite before deleting the isolated regression fixture.
+            foreach(var suffix in new[]{"","-wal","-shm"})
+                try{File.Delete(db+suffix);}catch{}
+        }
     }
 
     private static async Task ReliableDelivery(string root)

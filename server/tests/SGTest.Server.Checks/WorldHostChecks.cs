@@ -184,8 +184,12 @@ refused:
         var final = await host.TrustedPrepareDisconnectAsync(
             actor.ActorId, actor.ConnectionEpoch, actor.MapEpoch)
             ?? throw new Exception("prepare disconnect rejected current actor");
-        Require(final.X == 24 && final.Y == 24 && !final.IsMoving,
-            "prepare disconnect did not freeze authoritative snapshot");
+        // Move may already have advanced on a prior 30 Hz tick before the
+        // trusted prepare command is processed. The snapshot must freeze the
+        // actual authoritative position, not necessarily the spawn position.
+        Require(final.MapId == 90 && final.X >= 24 && final.X <= 120 &&
+                final.Y == 24 && !final.IsMoving,
+            "prepare disconnect did not capture a legal frozen snapshot");
 
         var duplicate = await host.TrustedRegisterAsync(actor.ActorId, 90, 40, 40);
         Require(duplicate is null,
@@ -193,10 +197,12 @@ refused:
 
         long before = host.Statistics.Ticks;
         await WaitForTicks(host, before + 2);
-        var results = new List<WorldTickResult>();
-        while (host.Results.TryRead(out var tick)) results.Add(tick);
-        Require(results.SelectMany(x => x.Changed)
-                .All(x => x.ActorId != actor.ActorId || (x.X == 24 && x.Y == 24)),
+        // Reading all buffered tick results would include legitimate movement
+        // emitted before prepare. Query the World owner after the barrier
+        // instead: any post-prepare motion must be rejected.
+        var frozen = await host.TrustedGetActorAsync(actor.ActorId)
+            ?? throw new Exception("prepared actor disappeared before persistence");
+        Require(frozen.X == final.X && frozen.Y == final.Y && !frozen.IsMoving,
             "queued movement changed actor after persistence snapshot");
 
         Require(await host.TrustedDisconnectAsync(

@@ -59,7 +59,7 @@ internal sealed class NpcQuestHandler
                 return;
             }
 
-            bool dead=_combat is not null&&_combat.CurrentHp(actor)<=0;
+            bool dead=_combat?.IsIncapacitated(actor) ?? actor.CombatDead;
             QuestNpcAccessStatus access=dead
                 ? QuestNpcAccessStatus.PlayerDead
                 : _quests is null

@@ -79,7 +79,7 @@ internal sealed class NpcEconomyHandler
                 return;
             }
 
-            bool dead=_combat is not null&&_combat.CurrentHp(actor)<=0;
+            bool dead=_combat?.IsIncapacitated(actor) ?? actor.CombatDead;
             NpcShopCatalog.Shop? shop=null;
             ShopAccessStatus access;
             if(dead)access=ShopAccessStatus.PlayerDead;
@@ -307,7 +307,7 @@ internal sealed class NpcEconomyHandler
                 return;
             }
 
-            bool dead=_combat is not null&&_combat.CurrentHp(actor)<=0;
+            bool dead=_combat?.IsIncapacitated(actor) ?? actor.CombatDead;
             BankNpcAccessStatus access=dead
                 ? BankNpcAccessStatus.PlayerDead
                 : _banks is null

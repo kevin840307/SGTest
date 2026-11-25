@@ -52,7 +52,7 @@ internal sealed class InventoryCommandHandler
                 actor.MapEpoch != request.RequestMapEpoch ||
                 actor.ActorId != request.ActorId)
                 result = new(PickupStatus.StaleGeneration,request.DropId);
-            else if (_combat is not null && _combat.CurrentHp(actor) <= 0)
+            else if (_combat?.IsIncapacitated(actor) ?? actor.CombatDead)
                 result = new(PickupStatus.PlayerDead,request.DropId);
             else
                 result = await _identity.ClaimGroundDropAsync(

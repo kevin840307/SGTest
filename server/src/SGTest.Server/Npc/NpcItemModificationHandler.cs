@@ -80,7 +80,7 @@ internal sealed class NpcItemModificationHandler
                 return;
             }
 
-            bool dead=_combat is not null&&_combat.CurrentHp(actor)<=0;
+            bool dead=_combat?.IsIncapacitated(actor) ?? actor.CombatDead;
             RepairNpcAccessStatus access=dead
                 ? RepairNpcAccessStatus.PlayerDead
                 : _repairs is null||_repairItemRules is null
@@ -195,7 +195,7 @@ internal sealed class NpcItemModificationHandler
                 return;
             }
 
-            bool dead=_combat is not null&&_combat.CurrentHp(actor)<=0;
+            bool dead=_combat?.IsIncapacitated(actor) ?? actor.CombatDead;
             EnhancementNpcAccessStatus access=dead
                 ? EnhancementNpcAccessStatus.PlayerDead
                 : _enhancers is null||_enhancementItemRules is null

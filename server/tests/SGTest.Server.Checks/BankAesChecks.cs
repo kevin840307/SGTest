@@ -44,8 +44,11 @@ internal static class BankAesChecks
                 new NpcBankCatalog.BankPoint(
                     79,88,8,8,BankScopePolicy.Account,"ci:bank-tls-account")
             ]);
+            // Production Host has a settlement owner even for characters without
+            // a combat slot. NPC economy must not interpret that as death.
+            var combat=new SGTest.Server.Combat.PlayerCombatSettlement(store,new(Capacity:8));
             var authorization=new IdentitySessionAuthorization(
-                store,world,pickupWorldGeneration:generation,banks:banks);
+                store,world,combat:combat,pickupWorldGeneration:generation,banks:banks);
             var router=new WorldResultRouter();
 
             var first=await StartSession(authorization,router);
