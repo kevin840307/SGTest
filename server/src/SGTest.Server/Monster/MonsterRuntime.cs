@@ -212,14 +212,17 @@ public sealed class MonsterRuntime
             .ToArray();
     }
 
+    // An unobserved map still advances authoritative respawn deadlines,
+    // but need not spend AI/path budget on monsters no player can see.
     public IReadOnlyList<MonsterWorldEvent> Tick(
         long worldTick,
-        IReadOnlyList<MonsterCombatTarget> targets)
+        IReadOnlyList<MonsterCombatTarget> targets,
+        bool skipAi = false)
     {
         if (worldTick <= _lastWorldTick)
             throw new InvalidOperationException("Monster runtime Tick must be strictly monotonic");
         ArgumentNullException.ThrowIfNull(targets);
-        bool aiDue = _order.Length != 0 &&
+        bool aiDue = !skipAi && _order.Length != 0 &&
             worldTick % _options.AiIntervalTicks == 0;
         // Do not advance the clock or publish respawns for an invalid AI input.
         var targetMap = aiDue ? ValidateTargets(targets) : null;

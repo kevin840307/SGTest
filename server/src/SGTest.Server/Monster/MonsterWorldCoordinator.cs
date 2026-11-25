@@ -231,10 +231,10 @@ public sealed class MonsterWorldCoordinator
                     x.ActorId, x.MapId, x.X, x.Y,
                     CurrentHp: Math.Max(0, currentHp?.Invoke(x) ?? 1)))
                 .ToArray();
-            if (targets.Length == 0)
-                continue;
-
-            var events = runtime.Tick(batch.Tick, targets);
+            // Keep death/respawn deadlines moving even when this map is empty.
+            // Only AI/pathfinding is suspended until a player returns.
+            var events = runtime.Tick(batch.Tick, targets,
+                skipAi: targets.Length == 0);
             Interlocked.Increment(ref _runtimeTicks);
             foreach (var evt in events)
             {

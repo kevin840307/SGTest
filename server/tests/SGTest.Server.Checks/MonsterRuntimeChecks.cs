@@ -2,6 +2,8 @@ using SGTest.Server.Monster;
 using SGTest.Server.Map;
 using System.Text.Json;
 using SGTest.Server.World;
+using SGTest.Server.Visibility;
+using SGTest.Server.Gateway;
 
 internal static class MonsterRuntimeChecks
 {
@@ -25,6 +27,8 @@ internal static class MonsterRuntimeChecks
             () => DamageRespawnAndBudget(root));
         Checks.Run("monster respawn deadline is independent of AI cadence and budget",
             () => RespawnDeadlineIndependentOfAi(root));
+        Checks.Run("monster respawns on deadline when the last player leaves its map",
+            () => RespawnWithoutObservers(root));
     }
 
     private static void PopulationGate(string root)
@@ -397,6 +401,52 @@ internal static class MonsterRuntimeChecks
                        "dead monster did not respawn when its bounded AI slot returned");
         Checks.Require(runtime.DamageContributions(first.EntityId).Count==0,
             "respawn did not clear prior-life damage contributors");
+    }
+
+    private static void RespawnWithoutObservers(string root)
+    {
+        const int mapId = 222;
+        string dir = Checks.Fixture(root, mapId, 12, 12, (_, _) => 0);
+        var grid = BlockingGrid.Load(dir, mapId);
+        string path = Path.Combine(dir, "population.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(Document(
+            mapId, true, [Spawn(0, 1, 24, 24)],
+            [Definition(1, respawn: 3, wanderRadius: 0, wanderInterval: 100)])));
+        var runtime = new MonsterRuntime(grid,
+            MonsterPopulationCatalog.LoadVerified(path, mapId, grid),
+            new(AiIntervalTicks: 1, MaxAiPerStep: 1));
+        var coordinator = new MonsterWorldCoordinator([runtime]);
+        var actor = new ActorSnapshot(600, mapId, 1, 1, 0, 0, 24, 24, 1, false);
+
+        coordinator.Process(new WorldChangedBatch(1, [],
+            [new(ActorLifecycleKind.Joined, actor)]));
+        var monster = runtime.SnapshotAll().Single();
+        Checks.Require(runtime.ApplyTrustedDamage(
+                monster.EntityId, actor.ActorId, 100, 1).Killed,
+            "setup failed to kill the monster before the last player left");
+
+        coordinator.Process(new WorldChangedBatch(2, [],
+            [new(ActorLifecycleKind.Left, actor)]));
+        var early = coordinator.Process(new WorldChangedBatch(3, []));
+        Checks.Require(early.Events!.All(e => e.Kind != MonsterWorldEventKind.Respawn) &&
+                       runtime.Find(monster.EntityId)!.Value.State == MonsterAiState.Dead,
+            "unobserved monster respawned before its deadline");
+
+        var due = coordinator.Process(new WorldChangedBatch(4, []));
+        var restored = runtime.Find(monster.EntityId)!.Value;
+        Checks.Require(due.Events!.Count == 1 &&
+                       due.Events[0].Kind == MonsterWorldEventKind.Respawn &&
+                       due.Events[0].Tick == 4 &&
+                       due.Changed.Count == 1 &&
+                       restored.State == MonsterAiState.Idle &&
+                       restored.CurrentHp == restored.MaxHp &&
+                       runtime.DamageContributions(monster.EntityId).Count == 0,
+            "monster respawn deadline was lost when the map became empty");
+        Checks.Require(runtime.Statistics.AiSteps == 1,
+            "empty-map respawn processing performed unnecessary patrol AI");
+        Checks.Require(coordinator.Process(new WorldChangedBatch(5, []))
+                           .Events!.All(e => e.Kind != MonsterWorldEventKind.Respawn),
+            "unobserved monster respawned more than once");
     }
 
     private static void RespawnDeadlineIndependentOfAi(string root)
