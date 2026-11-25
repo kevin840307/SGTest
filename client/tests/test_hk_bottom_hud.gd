@@ -3,6 +3,22 @@ extends SceneTree
 const Shell = preload("res://ui/classic_world_shell.gd")
 var failed := false
 
+class ChatSessionStub:
+	extends RefCounted
+	var sent:Array[Dictionary]=[]
+	func _record(channel:String,message:String,bubble_type:int)->bool:
+		sent.append({"channel":channel,"message":message,"bubble_type":bubble_type})
+		return true
+	func send_world_chat(message:String,bubble_type:int=0)->bool:return _record("world",message,bubble_type)
+	func send_warband_chat(message:String,bubble_type:int=0)->bool:return _record("warband",message,bubble_type)
+	func send_party_chat(message:String,bubble_type:int=0)->bool:return _record("party",message,bubble_type)
+	func send_nearby_chat(message:String,bubble_type:int=0)->bool:return _record("nearby",message,bubble_type)
+
+class ChatPanelStub:
+	extends RefCounted
+	var session
+	func _init(value)->void:session=value
+
 func _initialize()->void:
 	root.size=Vector2i(800,600)
 	_run.call_deferred()
@@ -109,19 +125,36 @@ func _run()->void:
 	_expect(not shell._chat_history.text.contains("隊伍測試") and shell._chat_history.text.contains("私訊測試"),"party display filter")
 	shell._chat_tabs[0].pressed.emit()
 	_expect(not shell._chat_history.text.contains("私訊測試"),"private display filter")
+	shell._chat_tabs[4].pressed.emit()
+	_expect(not shell._chat_history.text.contains("附近訊息 19"),"nearby display filter")
 	shell._chat_tabs[1].pressed.emit()
 	shell._chat_tabs[2].pressed.emit()
 	shell._chat_tabs[3].pressed.emit()
 	shell._chat_tabs[0].pressed.emit()
+	shell._chat_tabs[4].pressed.emit()
 	_expect(shell._chat_history.text==before,"filters do not discard history")
+	_expect(not shell._chat_tabs[4].disabled,"original E channel filter must be interactive")
+	_expect(shell._chat_send_channel==0,"original channel type 0 starts on world")
 	shell._chat_channel.pressed.emit()
-	_expect(shell._chat_send_channel==1,"channel control routes to world channel")
+	_expect(shell._chat_send_channel==2,"original channel cycle world to Warband")
 	shell._chat_channel.pressed.emit()
-	_expect(shell._chat_send_channel==2,"channel control routes to Warband channel")
+	_expect(shell._chat_send_channel==3,"original channel cycle Warband to party")
 	shell._chat_channel.pressed.emit()
-	_expect(shell._chat_send_channel==3,"channel control routes to party channel")
+	_expect(shell._chat_send_channel==4,"original channel cycle party to nearby")
 	shell._chat_channel.pressed.emit()
-	_expect(shell._chat_send_channel==0,"return to nearby channel")
+	_expect(shell._chat_send_channel==0,"original channel cycle nearby to world")
+	var chat_session:=ChatSessionStub.new()
+	shell._panel=ChatPanelStub.new(chat_session)
+	for route in [[0,"world"],[2,"warband"],[3,"party"],[4,"nearby"]]:
+		shell._chat_send_channel=int(route[0])
+		shell._chat_bubble_type=5
+		shell._chat_input.text="路由測試 "+str(route[1])
+		shell._send_chat()
+		var sent:Dictionary=chat_session.sent.back()
+		_expect(str(sent.get("channel",""))==str(route[1]),"chat input routes original channel type %d"%int(route[0]))
+		_expect(int(sent.get("bubble_type",-1))==5,"chat input preserves bubble type")
+		_expect(shell._chat_input.text.is_empty(),"accepted chat clears editor")
+	shell._chat_send_channel=0
 	var old_bubble_type:=shell._chat_bubble_type
 	shell._chat_bubble.pressed.emit()
 	_expect(shell._chat_balloon_menu.visible,"bubble icon opens original selector")
@@ -140,5 +173,5 @@ func _run()->void:
 		await RenderingServer.frame_post_draw
 		_expect(root.get_texture().get_image().save_png(args[0])==OK,"native capture")
 	shell.free()
-	if not failed:print("HK_BOTTOM_HUD_PASS status=128x90 chat=469x90 friend=203x90 original_controls=true expanded=289x578 preserve_draft=true filters=true")
+	if not failed:print("HK_BOTTOM_HUD_PASS status=128x90 chat=469x90 friend=203x90 original_controls=true expanded=289x578 preserve_draft=true filters=private/world/warband/party/nearby channel_cycle=0-2-3-4-0 send_routes=true")
 	quit(1 if failed else 0)
