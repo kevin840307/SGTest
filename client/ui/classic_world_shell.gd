@@ -48,6 +48,7 @@ var hud:=Control.new()
 # Command strip is intentionally excluded: its buttons must remain click-only.
 var status_panel:=Control.new()
 var minimap_panel:=Control.new()
+var _minimap_compact:=false
 var hotkey_panel:=Control.new()
 var _hotkey_page:=0
 var command_panel:=Control.new()
@@ -425,6 +426,18 @@ func _build_hud()->void:
 	minimap.stretch_mode=TextureRect.STRETCH_SCALE
 	minimap.mouse_filter=Control.MOUSE_FILTER_IGNORE
 	minimap_panel.add_child(minimap)
+	# 008_MINIMAP_L.itf: the 115x81 source-backed overlay is hidden when
+	# switched to the separate 133x20 compact 008_MINIMAP_S.itf layout.
+	var map_points:=TextureRect.new()
+	map_points.name="MinimapPointsArt"
+	map_points.position=Vector2(8,37)
+	map_points.size=Vector2(115,81)
+	map_points.texture=_tex("BG_MINIMAP_POINT")
+	map_points.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
+	map_points.stretch_mode=TextureRect.STRETCH_KEEP
+	map_points.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	minimap_panel.add_child(map_points)
+	_texture_button(minimap_panel,"MinimapSizeToggle","MINISCREEN",Vector2(115,1),Vector2(17,17),_toggle_minimap_size,"縮小地圖")
 
 	# 007_HOTKEY_Yl.itf: keep the source 30x358 strip and every label/control
 	# at its decoded local rectangle. The previous 27.2px approximation was
@@ -566,6 +579,25 @@ func _build_hud()->void:
 	_texture_button(menu,"Menu2","B_BASIC_ITEM",Vector2(58,2),Vector2(24,23),_menu_action.bind(2),"包包")
 	_texture_button(menu,"Menu3","B_BASIC_PSHOP",Vector2(88,4),Vector2(24,23),_menu_action.bind(3),"小商店")
 	_texture_button(menu,"Menu4","B_BASIC_SYSTEM",Vector2(117,2),Vector2(24,23),_menu_action.bind(4),"系統")
+
+# Original 008_MINIMAP_L/S ITFs switch between complete 133x122 and
+# 133x20 backgrounds; never shrink the map artwork into a 20px row.
+# Map pixel plotting/scale remains source-gated, not invented here.
+func _toggle_minimap_size()->void:
+	_minimap_compact=not _minimap_compact
+	minimap_panel.size=Vector2(133,20 if _minimap_compact else 122)
+	var art:=minimap_panel.get_node("MiniMap") as TextureRect
+	art.texture=_tex("MINIMAP_S" if _minimap_compact else "MINIMAP_L")
+	art.size=minimap_panel.size
+	var map_points:=minimap_panel.get_node("MinimapPointsArt") as TextureRect
+	map_points.visible=not _minimap_compact
+	var toggle:=minimap_panel.get_node("MinimapSizeToggle") as TextureButton
+	var toggle_art:="ZONESCREEN" if _minimap_compact else "MINISCREEN"
+	toggle.texture_normal=_tex(toggle_art+"_0")
+	toggle.texture_hover=_tex(toggle_art+"_1")
+	toggle.texture_pressed=_tex(toggle_art+"_2")
+	toggle.texture_disabled=_tex(toggle_art+"_3")
+	toggle.tooltip_text="放大地圖" if _minimap_compact else "縮小地圖"
 
 # OFFON.spr contains only two original 11x11 frames: off (0) and on (1).
 # Keep the page selector responsive without inventing skill/item assignments
