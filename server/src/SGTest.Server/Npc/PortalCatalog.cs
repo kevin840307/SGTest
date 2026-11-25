@@ -19,11 +19,11 @@ public sealed class PortalCatalog
     public int Count => _entries.Count;
     public double MaximumInteractionDistance { get; }
 
-    public PortalCatalog(IEnumerable<Portal> entries, double maximumInteractionDistance = 96)
+    public PortalCatalog(IEnumerable<Portal> entries, double maximumInteractionDistance = 600)
     {
         ArgumentNullException.ThrowIfNull(entries);
         if (!double.IsFinite(maximumInteractionDistance) ||
-            maximumInteractionDistance is < 16 or > 256)
+            maximumInteractionDistance is < 16 or > 600)
             throw new ArgumentOutOfRangeException(nameof(maximumInteractionDistance));
         MaximumInteractionDistance = maximumInteractionDistance;
         _entries = new();
@@ -43,7 +43,7 @@ public sealed class PortalCatalog
         _entries.TryGetValue((mapId, spawnId), out portal);
 
     public static PortalCatalog LoadNpcDocuments(
-        IEnumerable<string> npcJsonPaths, double maximumInteractionDistance = 96)
+        IEnumerable<string> npcJsonPaths, double maximumInteractionDistance = 600)
     {
         ArgumentNullException.ThrowIfNull(npcJsonPaths);
         var portals = new List<Portal>();

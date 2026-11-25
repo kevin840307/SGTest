@@ -93,11 +93,11 @@ internal static class NpcPortalChecks
     {
         // The source NPC policy maps 15->13; synthetic Blocking values are
         // explicitly fixtures, never private original map data.
-        var original15 = BlockingGrid.Load(Checks.Fixture(root, 15, 32, 32, (_, _) => 0), 15);
+        var original15 = BlockingGrid.Load(Checks.Fixture(root, 15, 64, 64, (_, _) => 0), 15);
         var original13 = BlockingGrid.Load(Checks.Fixture(root, 13, 32, 32, (_, _) => 0), 13);
         var world = new ServerWorld([original15, original13]);
         var catalog = Catalog(root);
-        Require(world.TryTrustedRegister(900, 15, 200, 200, out var far),
+        Require(world.TryTrustedRegister(900, 15, 625, 24, out var far),
             "far character register");
         var farRequest = world.TryTrustedNpcInteract(900, far.ConnectionEpoch,
             far.MapEpoch, 1, 46, catalog);
@@ -105,8 +105,8 @@ internal static class NpcPortalChecks
                 world.GetActor(900)?.MapId == 15, "remote NPC click transferred player");
         Require(world.TryTrustedDisconnect(900, far.ConnectionEpoch, far.MapEpoch),
                 "far actor logout");
-        Require(world.TryTrustedRegister(901, 15, 24, 24, out var a),
-            "near NPC actor register");
+        Require(world.TryTrustedRegister(901, 15, 624, 24, out var a),
+            "actor at inclusive 600-world-pixel portal boundary registers");
 
         var wrong = world.TryTrustedNpcInteract(901, a.ConnectionEpoch, a.MapEpoch,
             1, 146, catalog);
@@ -191,6 +191,18 @@ internal static class NpcPortalChecks
                     returned.MapEpoch > moved.MapEpoch &&
                     connection.Binding.MapEpoch == returned.MapEpoch,
                 "host NPC return failed");
+            // Exercise eight more transfers on the same authenticated connection.
+            for (int i = 0; i < 8; i++)
+            {
+                int spawn = returned.MapId == 15 ? 46 : 1;
+                var next = await router.TrustedNpcInteractAsync(host, catalog, connection.Binding, 1, spawn);
+                Require(next.Status == NpcPortalStatus.Accepted && next.TransferredActor is not null,
+                    $"repeated portal transfer {i + 3} failed");
+                var nextActor = next.TransferredActor!.Value;
+                Require(nextActor.MapId != returned.MapId && nextActor.MapEpoch > returned.MapEpoch &&
+                    connection.Binding.MapEpoch == nextActor.MapEpoch, "repeated transfer generation did not advance");
+                returned = nextActor;
+            }
             Require(router.TryDetach(connection) &&
                     await host.TrustedDisconnectAsync(
                         returned.ActorId, returned.ConnectionEpoch, returned.MapEpoch),

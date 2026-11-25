@@ -1,6 +1,7 @@
 # SGTest 新版重建 TODO（2026-11-15）
 
 ## ACTIVE MILESTONE — v16（2026-11-25 20:42 玩家實測，基線 a2b6ec9）
+- 2026-11-25 GP-008 user priority: portal-only default/cap 600 world pixels (inclusive); 601 rejected, 10 same-connection transfers pass Server host checks; full 354/354 PASS. Client native second-transfer freeze remains OPEN; actual player UI, monsters and skills remain OPEN; protected user server/DB unchanged.
 - **M1 IN PROGRESS → M2 第一個核心可玩切片；M0 登入/創角/選角玩家確認，僅回歸。** 目前手動測試 127.0.0.1:17877 / 既有 DB 受保護，不自動重啟。Server ready：怪物 0、技能/裝備/機甲/掉落/商店規則 0、EXP 未啟用。Map13/15 population.json 版本 3、visual_spawn_content、stats_verified=false、gameplay_ready=false（78/4 source spawns，不是可打的怪）。
 - **下一輪首項**：GP-012-01 / GP-011-01 / GP-011-02。沿用 0dd09f0 的原版怪物 AI/距離/重生來源與現有 combat profile 證據，完成第一個來源驗證角色＋怪物的 converter→verified runtime→正式 Host 啟動；建立可重複 playtest launcher/capability 檢查、隔離測試 provision。至少驗真 Client 可見怪物及合法普攻，缺必要資料追直接依賴，不把 v3 標記或假資料當 verified。
 - **並行 P0**：GP-008-01/02，玩家 Map15↔13 換圖兩次卡死；保留實際失敗，追 MapEpoch/WorldReady/ACK/lifecycle，驗連續 10 次並立即走動；之後技能、死亡/掉落/EXP/重生。使用者指定修正不得擱置。
