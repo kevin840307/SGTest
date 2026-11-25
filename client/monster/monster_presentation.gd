@@ -81,34 +81,44 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 	var map := int(snapshot.map_id)
 	if map != _map:
 		return ERR_INVALID_DATA
-	if epoch != _epoch:
-		_monsters.clear()
-		_epoch = epoch
 	var visible = snapshot.get("monsters",{})
 	if not visible is Dictionary:
 		return ERR_INVALID_DATA
+	# Validate every entity before clearing an epoch, despawning AOI actors, or
+	# advancing animation histories. A single invalid entry must not turn an
+	# otherwise rejected authoritative frame into a partial visible update.
+	for raw_id in visible:
+		var candidate = visible[raw_id]
+		if not candidate is Dictionary:
+			return ERR_INVALID_DATA
+		var candidate_id := int(raw_id)
+		var enemy_id := int(candidate.get("enemy_id",0))
+		var state := int(candidate.get("state",-1))
+		var facing := int(candidate.get("facing",0))
+		var revision := int(candidate.get("revision",0))
+		var tick := int(candidate.get("server_tick",-1))
+		if candidate_id <= 0 or int(candidate.get("entity_id",0)) != candidate_id or not _definitions.has(enemy_id) or int(candidate.get("map_id",0)) != _map or state < STATE_IDLE or state > STATE_DEAD or facing < 1 or facing > 8 or revision <= 0 or tick < 0 or not candidate.has_all(["source_index","max_hp","current_hp","x","y"]):
+			return ERR_INVALID_DATA
+		var previous: Dictionary = _monsters.get(candidate_id,{}) if epoch == _epoch else {}
+		if not previous.is_empty():
+			var previous_value: Dictionary = previous.value
+			if int(previous_value.enemy_id) != enemy_id or int(previous_value.source_index) != int(candidate.source_index) or int(previous_value.max_hp) != int(candidate.max_hp):
+				return ERR_INVALID_DATA
+	if epoch != _epoch:
+		_monsters.clear()
+		_epoch = epoch
 	for id in _monsters.keys():
 		if not visible.has(id):
 			_monsters.erase(id)
 	for raw_id in visible:
-		var value = visible[raw_id]
-		if not value is Dictionary:
-			return ERR_INVALID_DATA
+		var value: Dictionary = visible[raw_id]
 		var id := int(raw_id)
-		var enemy_id := int(value.get("enemy_id",0))
-		var state := int(value.get("state",-1))
-		var facing := int(value.get("facing",0))
-		var revision := int(value.get("revision",0))
-		var tick := int(value.get("server_tick",-1))
-		if id <= 0 or int(value.get("entity_id",0)) != id or not _definitions.has(enemy_id) or int(value.get("map_id",0)) != _map or state < STATE_IDLE or state > STATE_DEAD or facing < 1 or facing > 8 or revision <= 0 or tick < 0:
-			return ERR_INVALID_DATA
+		var state := int(value.state)
+		var revision := int(value.revision)
+		var tick := int(value.server_tick)
 		var old: Dictionary = _monsters.get(id,{})
-		if not old.is_empty():
-			var old_value: Dictionary = old.value
-			if int(old_value.enemy_id) != enemy_id or int(old_value.source_index) != int(value.source_index) or int(old_value.max_hp) != int(value.max_hp):
-				return ERR_INVALID_DATA
-			if revision < int(old_value.revision):
-				continue
+		if not old.is_empty() and revision < int(old.value.revision):
+			continue
 		var action: String = _action(state)
 		var generation_changed: bool = old.is_empty()
 		var history = PositionHistory.new() if generation_changed else old.history

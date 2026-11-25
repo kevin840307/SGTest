@@ -149,6 +149,41 @@ func run() -> void:
 		"respawn replayed old damage animation")
 	check(monsters.pick_living_at(Vector2(float(revived.x),float(revived.y)),1500000)==1001,
 		"respawn did not restore click selection")
+	# One malformed AOI entry must not partially despawn a second actor or
+	# apply a death update to the first; rejected cross-epoch frames must not
+	# erase the previous map generation either.
+	var another := revived.duplicate(true)
+	another.entity_id = 1002
+	another.source_index = 1
+	another.x = 90.0
+	another.revision = 1
+	snapshot.monsters = {1001:revived,1002:another}
+	check(monsters.apply_snapshot(snapshot,1550000)==OK and monsters.count()==2,
+		"two-monster AOI baseline")
+	var killed := revived.duplicate(true)
+	killed.server_tick = 10
+	killed.revision = 9
+	killed.current_hp = 0
+	killed.state = 4
+	var invalid := another.duplicate(true)
+	invalid.entity_id = 1003
+	invalid.enemy_id = 2
+	snapshot.monsters = {1001:killed,1003:invalid}
+	check(monsters.apply_snapshot(snapshot,1600000)==ERR_INVALID_DATA,
+		"malformed second AOI entity did not reject the whole frame")
+	check(monsters.count()==2 and
+		monsters.pick_living_at(Vector2(31,20),1600000)==1001 and
+		monsters.pick_living_at(Vector2(90,20),1600000)==1002,
+		"rejected AOI frame partially killed or despawned visible monsters")
+	snapshot.map_epoch = 2
+	check(monsters.apply_snapshot(snapshot,1650000)==ERR_INVALID_DATA and
+		monsters.count()==2 and monsters.pick_living_at(Vector2(90,20),1650000)==1002,
+		"rejected epoch transition cleared previous visible monsters")
+	snapshot.map_epoch = 1
+	snapshot.monsters = {1001:revived}
+	check(monsters.apply_snapshot(snapshot,1700000)==OK and monsters.count()==1,
+		"valid AOI despawn after rejection failed")
+	actors=monsters.actors_at(1700000)
 	var draw := DrawList.new()
 	check(draw.configure({
 		"scenery_schema":"sgtest.scenery/v1",
