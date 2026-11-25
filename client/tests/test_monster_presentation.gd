@@ -160,6 +160,20 @@ func run() -> void:
 	snapshot.monsters = {1001:revived,1002:another}
 	check(monsters.apply_snapshot(snapshot,1550000)==OK and monsters.count()==2,
 		"two-monster AOI baseline")
+	# Reject impossible authoritative geometry/HP before altering any other
+	# monster in the same AOI batch. Invalid positions cannot enter history.
+	var invalid_position := revived.duplicate(true)
+	invalid_position.x = INF
+	snapshot.monsters = {1001:invalid_position,1002:another}
+	check(monsters.apply_snapshot(snapshot,1570000)==ERR_INVALID_DATA and
+		monsters.count()==2 and monsters.pick_living_at(Vector2(31,20),1570000)==1001,
+		"non-finite monster position was accepted or changed an existing actor")
+	var invalid_hp := revived.duplicate(true)
+	invalid_hp.current_hp = invalid_hp.max_hp + 1
+	snapshot.monsters = {1001:invalid_hp,1002:another}
+	check(monsters.apply_snapshot(snapshot,1580000)==ERR_INVALID_DATA and
+		monsters.count()==2 and monsters.pick_living_at(Vector2(90,20),1580000)==1002,
+		"monster HP exceeding its authoritative max was accepted")
 	var killed := revived.duplicate(true)
 	killed.server_tick = 10
 	killed.revision = 9
@@ -209,9 +223,32 @@ func run() -> void:
 		"stale valid generation replaced the newer map monster AOI")
 	snapshot.map_epoch = 2
 
-	snapshot.monsters={}
-	check(monsters.apply_snapshot(snapshot,900000)==OK and monsters.count()==0,
-		"monster Despawn presentation retained actor")
+	# A late same-generation WorldState snapshot must not despawn the newer
+	# authoritative AOI or silently clear an existing click target.
+	snapshot.last_aoi_tick = 200
+	snapshot.monsters = {1002:another}
+	check(monsters.apply_snapshot(snapshot,1850000)==OK and monsters.count()==1,
+		"same-generation AOI high-water baseline")
+	snapshot.last_aoi_tick = 199
+	snapshot.monsters = {}
+	check(monsters.apply_snapshot(snapshot,1900000)==OK and
+		monsters.count()==1 and monsters.pick_living_at(Vector2(90,20),1900000)==1002,
+		"stale same-generation AOI despawned a current selectable monster")
+	snapshot.last_aoi_tick = 201
+	check(monsters.apply_snapshot(snapshot,1950000)==OK and monsters.count()==0,
+		"newer monster Despawn presentation retained actor")
+	# A genuinely new map epoch starts a fresh tick domain, even if the new
+	# AOI tick is numerically smaller than the preceding map generation's.
+	snapshot.map_epoch = 3
+	snapshot.last_aoi_tick = 1
+	snapshot.monsters = {1002:another}
+	check(monsters.apply_snapshot(snapshot,2000000)==OK and
+		monsters.count()==1 and monsters.pick_living_at(Vector2(90,20),2000000)==1002,
+		"new map epoch failed to reset the AOI tick high-water")
+	snapshot.last_aoi_tick = 2
+	snapshot.monsters = {}
+	check(monsters.apply_snapshot(snapshot,2050000)==OK and monsters.count()==0,
+		"new-generation AOI despawn was rejected after tick reset")
 	var unknown := idle.duplicate(true)
 	unknown.enemy_id=2
 	snapshot.monsters={1001:unknown}

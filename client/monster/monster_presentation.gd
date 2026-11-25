@@ -17,6 +17,7 @@ var _views := {}
 var _monsters := {}
 var _epoch := 0
 var _map := 0
+var _last_aoi_tick := -1
 
 func clear() -> void:
 	_definitions.clear()
@@ -24,6 +25,7 @@ func clear() -> void:
 	_monsters.clear()
 	_epoch = 0
 	_map = 0
+	_last_aoi_tick = -1
 
 func configure(population: Dictionary, assets: Dictionary) -> Error:
 	clear()
@@ -82,6 +84,14 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 	if map != _map or epoch < _epoch:
 		# Reject delayed map-generation snapshots before changing any AOI state.
 		return ERR_INVALID_DATA
+	var aoi_tick := int(snapshot.get("last_aoi_tick",-1))
+	if aoi_tick < -1:
+		return ERR_INVALID_DATA
+	if epoch == _epoch and aoi_tick >= 0 and _last_aoi_tick >= 0 and aoi_tick < _last_aoi_tick:
+		# WorldState exposes its authoritative AOI high-water tick. A delayed
+		# same-generation snapshot is harmless replay, not a reason to despawn
+		# every absent actor or fail the visible world scene.
+		return OK
 	var visible = snapshot.get("monsters",{})
 	if not visible is Dictionary:
 		return ERR_INVALID_DATA
@@ -100,6 +110,10 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 		var tick := int(candidate.get("server_tick",-1))
 		if candidate_id <= 0 or int(candidate.get("entity_id",0)) != candidate_id or not _definitions.has(enemy_id) or int(candidate.get("map_id",0)) != _map or state < STATE_IDLE or state > STATE_DEAD or facing < 1 or facing > 8 or revision <= 0 or tick < 0 or not candidate.has_all(["source_index","max_hp","current_hp","x","y"]):
 			return ERR_INVALID_DATA
+		var max_hp := int(candidate.max_hp)
+		var hp := int(candidate.current_hp)
+		if int(candidate.source_index) < 0 or max_hp <= 0 or hp < 0 or hp > max_hp or not is_finite(float(candidate.x)) or not is_finite(float(candidate.y)):
+			return ERR_INVALID_DATA
 		var previous: Dictionary = _monsters.get(candidate_id,{}) if epoch == _epoch else {}
 		if not previous.is_empty():
 			var previous_value: Dictionary = previous.value
@@ -108,6 +122,9 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 	if epoch != _epoch:
 		_monsters.clear()
 		_epoch = epoch
+		_last_aoi_tick = -1
+	if aoi_tick >= 0:
+		_last_aoi_tick = maxi(_last_aoi_tick,aoi_tick)
 	for id in _monsters.keys():
 		if not visible.has(id):
 			_monsters.erase(id)
