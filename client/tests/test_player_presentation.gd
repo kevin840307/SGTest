@@ -336,6 +336,136 @@ func run() -> void:
 	actors=players.actors_at(2320000)
 	check(actors.size()==1 and not bool(actors[0].parts[0].flip_h),
 		"own AA required changed-only SelfState generation")
+	# Reliable attack may arrive before its actor enters the current AOI.
+	# A missing actor must not consume the sequence: the same event can be
+	# replayed with the first Spawn and must then start the paper-doll AA.
+	var late_attack := Players.new()
+	check(late_attack.configure(assets)==OK,"late AOI attack profile configure")
+	var late_snapshot: Dictionary = snapshot.duplicate(true)
+	late_snapshot.player_attack_events=[{
+		"receiver_map_epoch":2,"server_tick":5,
+		"attacker_actor_id":2,"attacker_connection_epoch":7,
+		"attack_sequence":61,"target_entity_id":1001500001,
+		"status":0,"damage":3,"target_revision":8,"facing":3}]
+	late_snapshot.entities={}
+	late_attack.apply_snapshot(late_snapshot,2400000)
+	check(late_attack._seen_visual_events.is_empty(),
+		"missing AOI attacker consumed future reliable attack visual")
+	var late_remote: Dictionary = remote.duplicate(true)
+	late_remote.connection_epoch=7
+	late_remote.entity_map_epoch=2
+	late_remote.server_tick=5
+	late_remote.moving=false
+	late_snapshot.entities={2:late_remote}
+	late_attack.apply_snapshot(late_snapshot,2410000)
+	check(late_attack._actors.has(2) and str(late_attack._actors[2].action)=="AA" and
+		int(late_attack._actors[2].action_facing)==3,
+		"newly spawned AOI attacker missed replayed attack visual")
+	late_attack.apply_snapshot(late_snapshot,2420000)
+	check(late_attack._seen_visual_events.size()==1,
+		"same replayed attack was not deduplicated after first valid presentation")
+
+	# A stale actor generation also must not consume a newer generation's
+	# reliable attack. This occurs when a reconnect reuses the ActorId.
+	var late_generation := Players.new()
+	check(late_generation.configure(assets)==OK,"generation replay profile configure")
+	var generation_snapshot: Dictionary = late_snapshot.duplicate(true)
+	generation_snapshot.entities[2].connection_epoch=6
+	late_generation.apply_snapshot(generation_snapshot,2500000)
+	check(late_generation._seen_visual_events.is_empty(),
+		"old connection generation consumed new actor's attack sequence")
+	generation_snapshot.entities[2].connection_epoch=7
+	generation_snapshot.entities[2].server_tick=6
+	late_generation.apply_snapshot(generation_snapshot,2510000)
+	check(str(late_generation._actors[2].action)=="AA",
+		"new connection generation did not replay its first attack")
+
+	# Damage and respawn are independent reliable-event namespaces. A
+	# missing AOI actor cannot burn either key before its visual exists.
+	var late_damage := Players.new()
+	check(late_damage.configure(assets)==OK,"late damage profile configure")
+	var damage_snapshot: Dictionary = late_snapshot.duplicate(true)
+	damage_snapshot.entities={}
+	damage_snapshot.player_attack_events=[]
+	damage_snapshot.player_damage_visual_events=[{
+		"receiver_map_epoch":2,"server_tick":7,"victim_actor_id":2,
+		"victim_connection_epoch":7,"damage_sequence":62,"damage":9,
+		"died":false,"facing":3}]
+	late_damage.apply_snapshot(damage_snapshot,2600000)
+	check(late_damage._seen_visual_events.is_empty(),
+		"missing AOI victim consumed future reliable damage visual")
+	damage_snapshot.entities={2:late_remote.duplicate(true)}
+	damage_snapshot.entities[2].server_tick=7
+	late_damage.apply_snapshot(damage_snapshot,2610000)
+	check(str(late_damage._actors[2].action)=="NH" and
+		int(late_damage._actors[2].action_facing)==3,
+		"newly spawned victim missed replayed hit animation")
+	damage_snapshot.player_damage_visual_events=[]
+	damage_snapshot.player_respawn_visual_events=[{
+		"receiver_map_epoch":2,"server_tick":8,"actor_id":2,
+		"connection_epoch":7,"respawn_sequence":63,"facing":6}]
+	damage_snapshot.entities={}
+	late_damage.apply_snapshot(damage_snapshot,2620000)
+	check(late_damage._seen_visual_events.size()==1,
+		"missing AOI respawn consumed visual replay")
+	damage_snapshot.entities={2:late_remote.duplicate(true)}
+	damage_snapshot.entities[2].server_tick=8
+	late_damage.apply_snapshot(damage_snapshot,2630000)
+	check(late_damage._seen_visual_events.size()==2 and
+		str(late_damage._actors[2].action)=="NS",
+		"newly spawned actor missed authoritative respawn replay")
+
+	# PvP AOE events carry two independently replayable actor-side visuals.
+	# A valid owner hit must not suppress an attacker who joins AOI later.
+	var late_pvp := Players.new()
+	check(late_pvp.configure(assets)==OK,"late PvP profile configure")
+	var pvp_late_snapshot: Dictionary = late_snapshot.duplicate(true)
+	pvp_late_snapshot.entities={}
+	pvp_late_snapshot.player_attack_events=[]
+	pvp_late_snapshot.pvp_combat_visual_events=[{
+		"receiver_map_epoch":2,"server_tick":9,
+		"attacker_actor_id":2,"attacker_connection_epoch":7,"attack_sequence":64,
+		"victim_actor_id":1,"victim_connection_epoch":9,"damage_sequence":65,
+		"damage":4,"died":false,"attacker_facing":3,"victim_facing":3}]
+	late_pvp.apply_snapshot(pvp_late_snapshot,2700000)
+	check(late_pvp._seen_visual_events.size()==1,
+		"PvP invalid attacker consumed its key or suppressed valid owner hit")
+	pvp_late_snapshot.entities={2:late_remote.duplicate(true)}
+	pvp_late_snapshot.entities[2].server_tick=9
+	late_pvp.apply_snapshot(pvp_late_snapshot,2710000)
+	check(late_pvp._seen_visual_events.size()==2 and
+		str(late_pvp._actors[2].action)=="AA",
+		"PvP AOI late attacker missed reliable event replay")
+	# Repeat the mixed-visibility case for PvP skill, independently from
+	# ordinary PvP attack/damage sequences.
+	pvp_late_snapshot.pvp_combat_visual_events=[]
+	pvp_late_snapshot.pvp_skill_visual_events=[{
+		"receiver_map_epoch":2,"server_tick":10,
+		"attacker_actor_id":2,"attacker_connection_epoch":7,"skill_sequence":66,
+		"skill_id":99001,"victim_actor_id":1,"victim_connection_epoch":9,
+		"damage_sequence":67,"damage":4,"died":false,
+		"attacker_facing":3,"victim_facing":3}]
+	pvp_late_snapshot.entities={}
+	late_pvp.apply_snapshot(pvp_late_snapshot,2720000)
+	check(late_pvp._seen_visual_events.size()==3,
+		"PvP skill missing attacker consumed key or dropped valid victim")
+	pvp_late_snapshot.entities={2:late_remote.duplicate(true)}
+	pvp_late_snapshot.entities[2].server_tick=10
+	late_pvp.apply_snapshot(pvp_late_snapshot,2730000)
+	check(late_pvp._seen_visual_events.size()==4 and
+		str(late_pvp._actors[2].action)=="AA",
+		"PvP skill AOI late attacker missed reliable replay")
+	# Late packets from a previous map must not consume a new map's ring.
+	pvp_late_snapshot.pvp_skill_visual_events=[]
+	pvp_late_snapshot.player_attack_events=[{
+		"receiver_map_epoch":1,"server_tick":11,
+		"attacker_actor_id":2,"attacker_connection_epoch":7,
+		"attack_sequence":68,"target_entity_id":1001500001,
+		"status":0,"damage":4,"target_revision":11,"facing":3}]
+	late_pvp.apply_snapshot(pvp_late_snapshot,2740000)
+	check(late_pvp._seen_visual_events.size()==4,
+		"previous map's attack consumed the new map visual replay key")
+
 	var view := WorldView.new()
 	root.add_child(view)
 	view.show_players=true

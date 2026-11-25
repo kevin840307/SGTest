@@ -72,6 +72,15 @@ func _remember_visual_event(domain: String, event_key: String) -> bool:
 	return true
 
 
+func _visual_actor_matches_generation(actor_id: int, connection_epoch: int) -> bool:
+	if not _actors.has(actor_id):
+		return false
+	var actor: Dictionary = _actors[actor_id]
+	var current_epoch := int(actor.value.connection_epoch)
+	# An own-actor WorldReady fallback may precede the first SelfState.
+	return current_epoch == connection_epoch or (actor_id == _own_actor_id and current_epoch == 0)
+
+
 func configure(assets: Dictionary, appearance: Dictionary = {}) -> Error:
 	clear()
 	var error := add_profile(assets,appearance)
@@ -328,16 +337,16 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var attacker := int(event.get("attacker_actor_id",0))
 			var connection := int(event.get("attacker_connection_epoch",0))
 			var sequence := int(event.get("attack_sequence",0))
+			# A reliable visual can precede its AOI Spawn. Only a visible
+			# actor with the matching generation may consume the replay key.
+			if int(event.get("receiver_map_epoch",_epoch)) != _epoch or \
+					not _visual_actor_matches_generation(attacker,connection):
+				continue
 			var key := "%d:%d:%d" % [attacker,connection,sequence]
 			if not _remember_visual_event("attack",key):
 				continue
-			if not _actors.has(attacker) or not _actors[attacker].profile.attack_available or \
-					bool(_actors[attacker].get("dead_visual",false)):
-				continue
 			var actor: Dictionary = _actors[attacker]
-			var actor_connection := int(actor.value.connection_epoch)
-			var own_without_self_state := attacker == int(snapshot.actor_id) and actor_connection == 0
-			if actor_connection != connection and not own_without_self_state:
+			if not actor.profile.attack_available or bool(actor.get("dead_visual",false)):
 				continue
 			actor.action = "AA"
 			actor.action_facing = int(event.get("facing",actor.value.facing))
@@ -352,16 +361,13 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var victim := int(event.get("victim_actor_id",0))
 			var connection := int(event.get("victim_connection_epoch",0))
 			var sequence := int(event.get("damage_sequence",0))
+			if int(event.get("receiver_map_epoch",_epoch)) != _epoch or \
+					not _visual_actor_matches_generation(victim,connection):
+				continue
 			var key := "%d:%d:%d" % [victim,connection,sequence]
 			if not _remember_visual_event("damage",key):
 				continue
-			if not _actors.has(victim):
-				continue
 			var actor: Dictionary = _actors[victim]
-			var actor_connection := int(actor.value.connection_epoch)
-			var own_without_self_state := victim == int(snapshot.actor_id) and actor_connection == 0
-			if actor_connection != connection and not own_without_self_state:
-				continue
 			var died := bool(event.get("died",false))
 			if died:
 				actor.dead_visual = true
@@ -386,8 +392,11 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var victim:=int(event.get("victim_actor_id",0))
 			var victim_connection:=int(event.get("victim_connection_epoch",0))
 			var damage_sequence:=int(event.get("damage_sequence",0))
+			if int(event.get("receiver_map_epoch",_epoch)) != _epoch:
+				continue
 			var attack_key:="pvp:%d:%d:%d" % [attacker,attacker_connection,attack_sequence]
-			if _remember_visual_event("attack",attack_key):
+			if _visual_actor_matches_generation(attacker,attacker_connection) and \
+					_remember_visual_event("attack",attack_key):
 				if _actors.has(attacker) and _actors[attacker].profile.attack_available and \
 						not bool(_actors[attacker].get("dead_visual",false)):
 					var attacker_actor:Dictionary=_actors[attacker]
@@ -399,7 +408,8 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 						attacker_actor.started=now_usec
 						_actors[attacker]=attacker_actor
 			var damage_key:="pvp:%d:%d:%d" % [victim,victim_connection,damage_sequence]
-			if _remember_visual_event("damage",damage_key):
+			if _visual_actor_matches_generation(victim,victim_connection) and \
+					_remember_visual_event("damage",damage_key):
 				if _actors.has(victim):
 					var victim_actor:Dictionary=_actors[victim]
 					var current_connection:=int(victim_actor.value.connection_epoch)
@@ -428,8 +438,11 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var victim:=int(event.get("victim_actor_id",0))
 			var vc:=int(event.get("victim_connection_epoch",0))
 			var damage_sequence:=int(event.get("damage_sequence",0))
+			if int(event.get("receiver_map_epoch",_epoch)) != _epoch:
+				continue
 			var attack_key:="pvpskill:%d:%d:%d" % [attacker,ac,skill_sequence]
-			if _remember_visual_event("attack",attack_key):
+			if _visual_actor_matches_generation(attacker,ac) and \
+					_remember_visual_event("attack",attack_key):
 				if _actors.has(attacker) and _actors[attacker].profile.attack_available and \
 						not bool(_actors[attacker].get("dead_visual",false)):
 					var actor:Dictionary=_actors[attacker]
@@ -441,7 +454,8 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 						actor.started=now_usec
 						_actors[attacker]=actor
 			var damage_key:="pvpskill:%d:%d:%d" % [victim,vc,damage_sequence]
-			if _remember_visual_event("damage",damage_key):
+			if _visual_actor_matches_generation(victim,vc) and \
+					_remember_visual_event("damage",damage_key):
 				if _actors.has(victim):
 					var actor:Dictionary=_actors[victim]
 					var current_connection:=int(actor.value.connection_epoch)
@@ -467,16 +481,13 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			var revived := int(event.get("actor_id",0))
 			var connection := int(event.get("connection_epoch",0))
 			var sequence := int(event.get("respawn_sequence",0))
+			if int(event.get("receiver_map_epoch",_epoch)) != _epoch or \
+					not _visual_actor_matches_generation(revived,connection):
+				continue
 			var key := "%d:%d:%d" % [revived,connection,sequence]
 			if not _remember_visual_event("respawn",key):
 				continue
-			if not _actors.has(revived):
-				continue
 			var actor: Dictionary = _actors[revived]
-			var actor_connection := int(actor.value.connection_epoch)
-			var own_without_self_state := revived == int(snapshot.actor_id) and actor_connection == 0
-			if actor_connection != connection and not own_without_self_state:
-				continue
 			actor.dead_visual = false
 			actor.action = "NR" if bool(actor.value.moving) else "NS"
 			actor.action_facing = int(event.get("facing",actor.value.facing))
