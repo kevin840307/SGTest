@@ -9,4 +9,6 @@
 
 每輪至少一個玩家可觀察成果（或實質解除最早核心 blocker 並保留未完成接續），完成繼續下一直接依賴。禁止自由挑無關小修、只堆測試/解析/空殼 UI 或用 fixture/headless 代替玩家實測。原版外觀、文字、座標、功能、資料、動畫同時驗；已知 FAIL 不被舊 PASS 覆蓋。
 
+每個畫面先實際開啟 docs/ORIGINAL_REFERENCE_INDEX.md 對應本機原圖；缺圖/狀態（社團、玩家小商店、NPC 買賣/交易等）依 AGENTS §3 原版正常操作補圖或 ITF/SPR/PNG/.lst + Server 來源補證，繼續實作；不能以缺圖跳過，也不能只做圖片。每個可達控件驗原版事件、條件、真操作→權威結果→UI/動畫及適用雙 Client/重登，空 callback 不算完成。
+
 遵守 AGENTS.md 的原版來源、權威、Git/WIP/清理安全與五 Gate；真 Server + 可見 Windows Godot + 真鍵鼠；使用者當前測試程序/DB 保護，測試使用同設定隔離環境。更新 TODO/Matrix 的 ACTIVE MILESTONE、未完成及下一具體動作；明確提交 push main、fetch 驗 0/0。回報玩家成果、未通功能、capability、下一 blocker、SHA 和停止原因，不湊時間。

@@ -4,6 +4,8 @@
 
 ## 0. 每輪必須讀取的執行規格（先用已整理證據，禁止從零猜測）
 
+每輪處理 UI/世界呈現/玩法，先按 [原版畫面與功能參考索引](docs/ORIGINAL_REFERENCE_INDEX.md) 找當前 Task 的原圖與缺圖狀態，實際開啟相符原圖。沒有截圖也必須補證、實作、驗功能；不限定已有圖片，不遍讀或反覆整理全索引。
+
 正式任務庫：`docs/legacy_task_catalog_20261124/executable/`。其上層保留原始盤點。每輪用索引定位工作，只讀選中任務與直接相依檔，不全文讀 519 份：
 - `README.md` / `EXECUTION_INDEX.csv`：152 UI、163 Gameplay leaf、71 Gameplay integration、133 Asset evidence。任務庫是工作規格，不是完成度；不能將初始 NOT VERIFIED 解讀成每項都要重做。
 - `ui/UI-*.md`：每個 ITF 的原始控制項 offset/type/ID/group/local rect、文字候選、SPR、幀數、origin 與反編譯函式、逐控件驗收。優先使用 `UI_CONTROL_METADATA.json` / `SPR_FRAME_METADATA.json` 取同畫面精確資料，禁止目測猜位置或直接取 screenshot 當整張 UI。
@@ -67,6 +69,12 @@
 - 唯一正式 converter：tools/asset_converter/；UI 解析入口 tools/ui_art/sync_original_ie_ui.py。以現有工具/manifest 補缺，不建第二套正式產線。
 - **截圖先查** C:\SGO\SGO Paradise\program\ScreenShot。缺同狀態則可直接啟動 C:\SGO\SGO Paradise\program\client.exe，以既有授權測試帳號實際操作，不重問已提供的資料。只在安全本機測試環境輸入憑證；不記錄到公開 Git/log/報告。Paradise 是舊版；版本衝突以 HK ITF/.lst/Data1 為準，不把舊版 screenshot 當 HK 像素真相。
 - HK .lst 只追當前視窗、資源 loader、frame/control ID、字型建立/繪字、狀態和 handler；不足時才深入。Old Server/data：C:\SGO\Recovered\Old；二創參考：C:\SGO\Recovered、C:\SGO\NewVersion\Recovered2；SGOAuto：C:\SGO\SGOAuto（原版狀態觀察、導航、重現操作；必要時唯讀研究，優先正常輸入，正式 Runtime 不依賴原版 process memory/地址）。來源全部唯讀。
+
+### 原版缺圖與功能一致性（強制）
+- docs/ORIGINAL_REFERENCE_INDEX.md 涵蓋已有圖及缺圖組，包括社團所有管理子窗、玩家小商店/擺攤、NPC 買賣、雙方交易、銀行/倉庫/修理/強化、寵物/機甲、任務/PvP 等全部 catalog 功能。索引只是導航，不是 scope 限制或新狀態矩陣；新增原版圖隨相關 Task 補入。
+- 實際開相關原圖；缺同狀態用授權原版 Client 正常操作補圖/錄影，保留原始畫面、版本/狀態/入口；安全上不能取得時依 HK ITF/SPR/PNG/.lst、Old Server .lst/Dat/cfg/DB、Recovered 等定向補證，按索引 §3。補圖放 git-ignored .cache/ui-parity/reference/<TaskID>/，原版唯讀；不得假造實拍、擅動其他玩家/真實帳號資產或搶使用者桌面。重用有效證據，不另做大盤點；不能因無圖跳過功能或整輪只補圖。
+- 每一畫面及可達控件同時還原 **外觀 + 完整原版功能**：入口/條件、事件/資料/規則、輸入命中、Server 權威與成敗回饋、正常/取消/拒絕/重開/換圖/斷線/權限/併發、適用雙 Client 及重登。未接通（空 Callable、假 disabled、只切圖示、fixture 假資料）不得視為完成；本地設定亦驗實際效果。對照原版行為而非照圖猜功能。
+- Reference/Before/After 與真玩家操作證據依既有 Task ID 記錄 UI/Gameplay 各 Gate、適用 Multiplayer/Performance/Persistence。畫面像但功能不對、功能可用但畫面錯，均不可標 COMPLETE；缺圖時按已驗來源先實作可玩切片，未知 NOT VERIFIED 並接續，不因逐像素差異阻塞獨立玩法。
 
 ### 整屏 HK 驗收
 - HK-only 預設保留 skin 切換；不疊錯誤 HUD、不移除地圖/人物/怪物/NPC/地上物或既有功能。HUD HP/MP/EXP 原圖、數值 baseline、動態動畫、F1…文字、右側/背包按鈕、聊天、各面板 tab/關閉/資料都驗。
