@@ -98,8 +98,10 @@ Write-Output 'SGTEST_HK_SOURCE_READY account=800x600 select=800x600 create=800x6
 if ($VerifyOnly) { return }
 
 # Only spawn our own process. Never steal focus, stop another Client, kill a
-# shared Server, change the screen resolution, or mutate another Session's DB.
+# shared Server, change the OS display mode, or mutate another Session's DB.
+# The 800x600 argument selects the original HK client viewport baseline only.
 $process = Start-Process -FilePath $GodotPath -WorkingDirectory $repo -ArgumentList @(
-    '--path', ('"' + $client + '"'), '--', '--pack', ('"' + $PackPath + '"')
+    '--path', ('"' + $client + '"'), '--resolution', '800x600',
+    '--', '--pack', ('"' + $PackPath + '"')
 ) -PassThru
 Write-Output "SGTEST_HK_CLIENT_STARTED pid=$($process.Id) parity_gate=NOT_VERIFIED"
