@@ -11,5 +11,6 @@
 5. Godot MCP 已安裝：需要 Godot 時先發現實際可用工具、確認版本及正式 client/project.godot；能查 scene/tree、rect/anchor/theme/font/texture、debug error 或 run_project 就使用。工具不提供或連續失敗兩次立即 fallback 到本機 Godot/Remote debugger/OpenChatX；只操作本輪隔離程序，禁止假裝已使用 MCP。MCP、headless、直接 handler/emit 不是玩家驗收。
 6. 真 Server + 可見 Windows Godot + 真鍵鼠；UI 必須同狀態 800×600 同 DPI 的完整 HK Reference/Before/After、ROI/overlay/diff、已知幾何 ±1px、逐控件及 hitbox/拖曳、動態項連續影格。玩法實測成功、失敗/取消、真權威及適用重登/雙可見 Client；依 AGENTS.md T0–T3 風險分級，不重跑無關全量 suite。原版未確認數值、語意、frame 或 AA 如實標未知，不猜；已知差異不得宣稱 1:1/COMPLETE。
 7. 每輪記錄 Task ID、已關閉的子項、Gameplay Gate 與 UI Gate 分別結果、實機證據/剩餘缺口/下一項，更新 TODO/Matrix（唯一正式功能矩陣）。review diff，僅提交本輪成果，push main、fetch 驗 0/0。保護私有圖檔、字型、截圖、反編譯全文、憑證及並行 WIP。
+8. 每輪持續交付：開局選一個可玩主題及 2～4 個候選 Task ID，目標 25～40 分鐘有效開發、3～5 個實質相關 leaf 或完整大型玩法/UI 畫面。首項及每次 commit/push 後立即續做下一項；遇阻塞換安全獨立項。結束前重查可做候選與資源，有安全高優先項且資源足夠就繼續；只有主題與合理工作量完成且無合適續作、實際資源限制需交接，或剩餘項均有具體阻塞才結束。回報實際交付 Task ID、Gate、main SHA、停止原因及下一項。不得 sleep、湊時間/測試/commit、降驗收或拆假任務。
 
 回報玩家現在能實際做什麼、哪些整屏差異已修、哪些未驗、main SHA；不能用文件、class、測試數量替代玩家成果。沒有成果時具體說明 blocker。
