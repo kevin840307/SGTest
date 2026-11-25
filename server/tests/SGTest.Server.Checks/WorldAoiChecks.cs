@@ -59,6 +59,8 @@ internal static class WorldAoiChecks
             PlayerDamageVisualInterest);
         Checks.Run("same map-bucket AOI tracks durable ground drop enter, exit, resync and pickup removal",
             GroundDropInterest);
+        Checks.Run("ground drop committed batches fail atomically on later invalid UID and AOI backpressure",
+            GroundDropBatchAtomicAdmission);
         Checks.Run("20 observers and 500 ground drops share one bounded AOI with zero idle resends",
             GroundDropDensity);
         Checks.Run("AOI self state is changed-only, generation-safe and retained on bounded overflow", OwnState);
@@ -496,6 +498,81 @@ internal static class WorldAoiChecks
         try{aoi.SeedGroundDrops([D(504,15,56,24)]);}
         catch(InvalidOperationException){late=true;}
         Require(late,"late bootstrap mutated live AOI");
+    }
+
+    private static void GroundDropBatchAtomicAdmission()
+    {
+        GroundDropRecord D(long uid) => new(
+            uid,15,40+(uid-901)*8,24,1001500001,4294967301,0,2701,1,
+            LootSourceTrust.Verified,"ci:atomic-drop-batch",null);
+        var first=D(901);
+        var second=D(902);
+        var third=D(903);
+        var viewer=Actor(601,15,24,24);
+
+        // Failures on the last item cannot publish the first item.
+        var aoi=new WorldAoi(new WorldAoiOptions(
+            MaxEntities:3,MaxVisiblePerObserver:2,MaxPendingEventsPerObserver:3));
+        Life(aoi,1,Join(viewer));
+        Drain(aoi,viewer);
+        void Refused(Action action, string reason)
+        {
+            bool blocked=false;
+            try { action(); }
+            catch(InvalidOperationException) { blocked=true; }
+            catch(AoiBackpressureException) { blocked=true; }
+            Require(blocked && aoi.GroundDropCount==0 &&
+                    aoi.PendingEvents(viewer.ActorId)==0,
+                reason);
+        }
+        Refused(() => aoi.ApplyGroundDrops(1,[first,second,third]),
+            "global entity cap partially published a committed drop batch");
+        Refused(() => aoi.ApplyGroundDrops(1,[first,second with {Quantity=0}]),
+            "invalid late record partially published a committed drop batch");
+        Refused(() => aoi.ApplyGroundDrops(1,[first,first with {Quantity=2}]),
+            "conflicting UID inside one batch partially published a drop");
+        aoi.ApplyGroundDrops(1,[first,second]);
+        var emitted=Drain(aoi,viewer);
+        Require(aoi.GroundDropCount==2 &&
+                emitted.Length==2 &&
+                emitted.Select(e=>e.GroundDrop?.DropId)
+                    .SequenceEqual(new long?[]{901,902}),
+            "valid two-drop batch did not publish both UIDs in order");
+        aoi.ApplyGroundDrops(1,[first,second]);
+        Require(Drain(aoi,viewer).Length==0,
+            "identical committed batch rebroadcast immutable UIDs");
+
+        var visibleCap=new WorldAoi(new WorldAoiOptions(
+            MaxVisiblePerObserver:1));
+        Life(visibleCap,1,Join(viewer));
+        Drain(visibleCap,viewer);
+        bool visibleRejected=false;
+        try { visibleCap.ApplyGroundDrops(1,[first,second]); }
+        catch(AoiBackpressureException) { visibleRejected=true; }
+        Require(visibleRejected && visibleCap.GroundDropCount==0 &&
+                visibleCap.PendingEvents(viewer.ActorId)==0,
+            "observer visible cap partially published a committed drop batch");
+
+        var fifoCap=new WorldAoi(new WorldAoiOptions(
+            MaxPendingEventsPerObserver:1));
+        Life(fifoCap,1,Join(viewer));
+        Drain(fifoCap,viewer);
+        bool pendingRejected=false;
+        try { fifoCap.ApplyGroundDrops(1,[first,second]); }
+        catch(AoiBackpressureException) { pendingRejected=true; }
+        Require(pendingRejected && fifoCap.GroundDropCount==0 &&
+                fifoCap.PendingEvents(viewer.ActorId)==0,
+            "observer reliable FIFO cap partially published a committed drop batch");
+
+        var bootstrap=new WorldAoi(new WorldAoiOptions(MaxEntities:1));
+        bool bootstrapRejected=false;
+        try { bootstrap.SeedGroundDrops([first,second]); }
+        catch(AoiBackpressureException) { bootstrapRejected=true; }
+        Require(bootstrapRejected && bootstrap.GroundDropCount==0,
+            "invalid startup batch left a partial persistent ground-drop index");
+        bootstrap.SeedGroundDrops([first]);
+        Require(bootstrap.GroundDropCount==1,
+            "valid startup drop rejected after prior fail-closed batch");
     }
 
     private static void GroundDropDensity()

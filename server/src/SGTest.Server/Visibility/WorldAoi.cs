@@ -912,6 +912,7 @@ public sealed class WorldAoi
         if (_lastTick != 0 || _observers.Count != 0 || _groundDrops.Count != 0)
             throw new InvalidOperationException(
                 "Ground drop bootstrap must occur before the first AOI World tick");
+        PreflightGroundDropBatch(active);
         foreach (var drop in active)
             StageGroundDrop(drop);
     }
@@ -923,6 +924,11 @@ public sealed class WorldAoi
         ArgumentNullException.ThrowIfNull(committed);
         if (tick <= 0 || tick != _lastTick)
             throw new InvalidOperationException("Drops must share an active AOI World tick");
+        // A single SQLite death batch is indivisible. Check immutable UIDs,
+        // shared capacity and every observer's reliable FIFO before publishing
+        // the first drop; otherwise a later rejection leaves half a death
+        // visible to some players and permanently loses the rest of the batch.
+        PreflightGroundDropBatch(committed);
         foreach (var drop in committed)
         {
             if (!StageGroundDrop(drop)) continue;
@@ -946,7 +952,40 @@ public sealed class WorldAoi
                     observer.Self.MapEpoch,GroundDropId:dropId));
     }
 
-    private bool StageGroundDrop(GroundDropRecord drop)
+    private void PreflightGroundDropBatch(IReadOnlyList<GroundDropRecord> committed)
+    {
+        var newDrops = new Dictionary<long, GroundDropRecord>();
+        foreach (var drop in committed)
+        {
+            ValidateGroundDrop(drop);
+            if (_groundDrops.TryGetValue(drop.DropId, out var prior))
+            {
+                if (prior != drop)
+                    throw new InvalidOperationException("Immutable drop UID content changed");
+            }
+            else if (!newDrops.TryAdd(drop.DropId, drop) &&
+                     newDrops[drop.DropId] != drop)
+                throw new InvalidOperationException("Conflicting drop UID inside one batch");
+        }
+        if (newDrops.Count > _limits.MaxEntities - TrackedEntityCount)
+            throw new AoiBackpressureException("Ground drop AOI entity capacity exceeded");
+
+        foreach (var observer in _observers.Values)
+        {
+            int incoming = 0;
+            foreach (var drop in newDrops.Values)
+                if (Within(observer.Self, drop, false))
+                    incoming++;
+            if (observer.Visible.Count + observer.VisibleMonsters.Count +
+                observer.VisibleGroundDrops.Count + observer.VisiblePets.Count +
+                incoming > _limits.MaxVisiblePerObserver)
+                throw new AoiBackpressureException("AOI visible ground entity cap exceeded");
+            if (incoming > _limits.MaxPendingEventsPerObserver - observer.Pending.Count)
+                throw new AoiBackpressureException("AOI reliable event backlog exceeded");
+        }
+    }
+
+    private static void ValidateGroundDrop(GroundDropRecord drop)
     {
         if (drop.DropId <= 0 || drop.MapId is < 1 or > 65535 ||
             !double.IsFinite(drop.X) || !double.IsFinite(drop.Y) ||
@@ -955,6 +994,11 @@ public sealed class WorldAoi
             drop.Quantity is < 1 or > 1_000_000 ||
             drop.PickedByCharacterId is not null)
             throw new InvalidOperationException("Invalid committed ground drop");
+    }
+
+    private bool StageGroundDrop(GroundDropRecord drop)
+    {
+        ValidateGroundDrop(drop);
         if (_groundDrops.TryGetValue(drop.DropId,out var prior))
         {
             if (prior != drop)
