@@ -1,14 +1,15 @@
-# SGTest Scheduler v16 — Playable First / HK Parity
+# SGTest Scheduler v17 — 原版對齊、完成可玩功能
 
-立即實際開發。正式目錄 C:\SGO\SRC\SGTest；GitHub https://github.com/kevin840307/SGTest；唯一正式分支 main。
-先讀最新版 AGENTS.md（唯一正式規範）、todo.txt 的 ACTIVE MILESTONE、docs/FEATURE_MATRIX.md 及上輪未驗事項；v16 取代舊規則。
+C:\SGO\SRC\SGTest，唯一 main。立即修改正式 Client／Server，不只規劃、研究、寫文件或增加測試。先讀 AGENTS.md（完整來源／安全／驗收規則）、todo.txt ACTIVE、FEATURE_MATRIX 的相關 OPEN；已好的登入／創角／選角只做回歸。
 
-登入、創角、選角已由使用者確認完成，除非回歸不再重做。第二次密碼錯位、連續換圖卡住、沒有怪物/普攻/技能、聊天無氣泡/頻道與好友未通、快捷鍵及包包錯位、物品/裝備動畫/機甲缺失皆為待驗修正。
+**目前先對齊登入後浮動 UI：每個畫面都要原版外觀＋文字位置＋實際功能。**
+1. 聊天：輸入、頻道切換、歷史、本人與其他玩家頭頂氣泡。
+2. 好友／社交／組隊／社團：頁籤、好友增刪、黑名單、線上狀態、邀請、社團建立/加入/管理/成員等。
+3. HUD：HP、MP、SP／WP、金錢、等級、經驗值與即時變化。
+4. 快捷列：原圖、文字、位置、長短/分頁、技能/物品拖放與 F1–F12 真使用。
+5. 右側全部選單：背包、人物資料/裝備及動態紙娃娃、機甲、玩家小商店、社團、系統登出/音效/設定；NPC 對話、買賣、銀行/倉庫/修理、交易等也要做。修第二次密碼、快捷列、背包與其他文字錯位。
+6. **Server P0：** 修連續換圖兩次卡住（Map15↔13 至少10次）；正式可見怪物能追擊、普攻、MISS、死亡、EXP、掉落/重生；學習/施放技能、MP、冷卻、效果和多人同步。零怪物/零技能規則的 Server 不算可玩。
 
-按 AGENTS.md §1 最早未通里程碑推進：統一可玩測試環境→連續換圖/怪物/普攻/技能/掉落→背包/裝備/快捷鍵→完整 UI/聊天/好友→寵物/機甲→多人同步效能。使用者指定及 P0 優先。先核對真 Server capability、角色 combat profile、verified population/manifest/runtime；不能用 0 怪物/0 技能規則的 listening Server 冒充可玩。缺資料就追 原版→converter→runtime→啟動→可見玩家流程，直到直接依賴打通。
+**盡量先查原版反編譯再動手：** docs/ORIGINAL_REFERENCE_INDEX.md、Paradise ScreenShot、HK 的 ITF/SPR/PNG/.lst、UI_CONTROL_METADATA.json／SPR_FRAME_METADATA.json、C:\SGO\Recovered\Old（Client/Server .lst、Dat、cfg）、C:\SGO\Recovered、Recovered2；完整路徑與版本優先序在 AGENTS.md。比對 Control rect、繁中文字、字型、frame、handler、封包與數值，不猜、不用自畫圖取代原圖；缺截圖也要從反編譯補功能。所有原始參考與現有測試/證據保留唯讀，不提交私有素材。
 
-每輪至少一個玩家可觀察成果（或實質解除最早核心 blocker 並保留未完成接續），完成繼續下一直接依賴。禁止自由挑無關小修、只堆測試/解析/空殼 UI 或用 fixture/headless 代替玩家實測。原版外觀、文字、座標、功能、資料、動畫同時驗；已知 FAIL 不被舊 PASS 覆蓋。
-
-每個畫面先實際開啟 docs/ORIGINAL_REFERENCE_INDEX.md 對應本機原圖；缺圖/狀態（社團、玩家小商店、NPC 買賣/交易等）依 AGENTS §3 原版正常操作補圖或 ITF/SPR/PNG/.lst + Server 來源補證，繼續實作；不能以缺圖跳過，也不能只做圖片。每個可達控件驗原版事件、條件、真操作→權威結果→UI/動畫及適用雙 Client/重登，空 callback 不算完成。
-
-遵守 AGENTS.md 的原版來源、權威、Git/WIP/清理安全與五 Gate；真 Server + 可見 Windows Godot + 真鍵鼠；使用者當前測試程序/DB 保護，測試使用同設定隔離環境。更新 TODO/Matrix 的 ACTIVE MILESTONE、未完成及下一具體動作；明確提交 push main、fetch 驗 0/0。回報玩家成果、未通功能、capability、下一 blocker、SHA 和停止原因，不湊時間。
+**每輪至少完成一個可操作流程：** 真輸入→Server 權威→回傳→UI/動畫→適用重登/雙 Client；未通繼續同一功能，不隨機挑易做小修。保護其他 Session WIP/DB/port/程序；背景編譯、headless 與隔離測試，不搶使用者前台鍵鼠。真 UI 只能在安全獨立桌面驗，無法驗即 NOT VERIFIED，仍繼續開發。驗收後僅提交本輪檔案、push main/fetch 0/0；簡報玩家新功能、未通項、測試、SHA、下一個 blocker。
