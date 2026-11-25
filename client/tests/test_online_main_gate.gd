@@ -5,6 +5,7 @@ const MainScene = preload("res://app/main.tscn")
 const UiSkinCatalog = preload("res://ui/ui_skin_catalog.gd")
 const TRANSFER_CYCLES := 10
 const CHAT_E2E_TEXT := "主介面聊天 E2E"
+const WHISPER_E2E_TEXT := "主介面私訊 E2E"
 
 var _app: Main
 var _online_gate_role := ""
@@ -33,6 +34,7 @@ var _hold_next_msec := 0
 var _hold_large_corrections_before := 0
 var _transfer_cycle := 0
 var _chat_proof_seen := false
+var _whisper_proof_seen := false
 var _manual_input_required := false
 var _manual_click_seen := false
 var _manual_click_screen := Vector2.ZERO
@@ -231,9 +233,22 @@ func _online_gate_observer() -> void:
 			if delivered and history and bubble:
 				_chat_proof_seen = true
 				print("ONLINE_MAIN_GATE_CHAT_UI_DELIVERY role=observer history=PASS bubble=PASS")
+		if not _whisper_proof_seen and entities.has(_online_gate_remote_id):
+			var messages: Array = _app._last_snapshot.get("chat_messages",[])
+			var delivered := messages.any(func(entry):
+				return entry is Dictionary and int(entry.get("channel",-1))==4 and \
+					int(entry.get("sender_actor_id",0))==_online_gate_remote_id and \
+					str(entry.get("message",""))==WHISPER_E2E_TEXT)
+			var history := _app.classic_world._chat_history.text.contains(WHISPER_E2E_TEXT)
+			if delivered and history:
+				_whisper_proof_seen = true
+				print("ONLINE_MAIN_GATE_WHISPER_UI_DELIVERY role=observer authority=PASS history=PASS")
 		if not entities.has(_online_gate_remote_id):
 			if not _chat_proof_seen:
 				_online_gate_fail("chat_ui_delivery_missing_before_despawn")
+				return
+			if not _whisper_proof_seen:
+				_online_gate_fail("whisper_ui_delivery_missing_before_despawn")
 				return
 			print("ONLINE_MAIN_GATE_DESPAWN role=observer actor=",_online_gate_remote_id)
 			_online_gate_phase = 4
@@ -327,6 +342,10 @@ func _online_gate_actor() -> void:
 			if not _app.classic_world.visible:
 				_online_gate_fail("classic_world_not_visible_for_chat_ui")
 				return
+			# This baseline proves nearby AOI delivery/bubbles. The production
+			# Classic UI intentionally starts on original type 0 = World, so select
+			# original type 4 = Nearby explicitly instead of relying on stale state.
+			_app.classic_world._chat_send_channel=4
 			_app.classic_world._chat_input.text=CHAT_E2E_TEXT
 			_app.classic_world._chat_input.text_submitted.emit(CHAT_E2E_TEXT)
 			if not _app.classic_world._chat_input.text.is_empty():
@@ -346,6 +365,33 @@ func _online_gate_actor() -> void:
 			return int(entry.get("actor_id",0))==own_id and str(entry.get("text",""))==CHAT_E2E_TEXT)
 		if echoed and history and bubble:
 			print("ONLINE_MAIN_GATE_CHAT_UI_ECHO role=actor authority=PASS history=PASS bubble=PASS")
+			# EntityDelta intentionally does not expose character names. The isolated
+			# runner provisions both exact characters, so pass the known peer name
+			# as test environment instead of weakening production AOI identity data.
+			var target_name := OS.get_environment("SGTEST_E2E_WHISPER_TARGET_NAME").strip_edges()
+			if target_name.is_empty():
+				_online_gate_fail("whisper_target_name_missing")
+				return
+			var command := "/name %s %s" % [target_name,WHISPER_E2E_TEXT]
+			_app.classic_world._chat_input.text=command
+			_app.classic_world._chat_input.text_submitted.emit(command)
+			if not _app.classic_world._chat_input.text.is_empty():
+				_online_gate_fail("whisper_ui_submit_not_queued")
+				return
+			print("ONLINE_MAIN_GATE_WHISPER_UI_SUBMIT role=actor input=PASS")
+			_online_gate_phase = 12
+	elif _online_gate_phase == 12:
+		var own_id := int(_app._last_snapshot.get("actor_id",0))
+		var messages: Array = _app._last_snapshot.get("chat_messages",[])
+		var echoed := messages.any(func(entry):
+			return entry is Dictionary and int(entry.get("channel",-1))==4 and \
+				str(entry.get("direction",""))=="outgoing" and \
+				str(entry.get("message",""))==WHISPER_E2E_TEXT)
+		var history := _app.classic_world._chat_history.text.contains(WHISPER_E2E_TEXT)
+		var authority_ok := int(_app._last_snapshot.get("pending_whisper_sequence",0))==0 and \
+			int(_app._last_snapshot.get("last_whisper_result_status",-1))==0
+		if echoed and history and authority_ok:
+			print("ONLINE_MAIN_GATE_WHISPER_UI_ECHO role=actor authority=PASS history=PASS")
 			_app._begin_ground_navigation(Vector2(808,808),Time.get_ticks_msec())
 			_online_gate_phase = 3
 	elif _online_gate_phase == 3:

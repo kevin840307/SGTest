@@ -2212,12 +2212,37 @@ func _send_chat()->void:
 	if message.is_empty():
 		return
 	var queued:=false
-	match _chat_send_channel:
-		0: queued=_panel.session.send_world_chat(message,_chat_bubble_type)
-		2: queued=_panel.session.send_warband_chat(message,_chat_bubble_type)
-		3: queued=_panel.session.send_party_chat(message,_chat_bubble_type)
-		4: queued=_panel.session.send_nearby_chat(message,_chat_bubble_type)
-		_: return
+	# Old CChatItf::ProcessPrivateMsg parses private chat before the normal
+	# channel route. /name targets the first space-delimited character name;
+	# /uin targets the numeric player identifier. Keep these commands in the
+	# original 016/017 input instead of inventing a separate whisper widget.
+	if message.begins_with("/name "):
+		var payload:=message.substr(6)
+		var split:=payload.find(" ")
+		if split<=0 or split>=payload.length()-1:
+			return
+		var target_name:=payload.left(split).strip_edges()
+		var private_message:=payload.substr(split+1).strip_edges()
+		if target_name.is_empty() or private_message.is_empty():
+			return
+		queued=_panel.session.send_whisper_name(target_name,private_message,_chat_bubble_type)
+	elif message.begins_with("/uin "):
+		var payload:=message.substr(5)
+		var split:=payload.find(" ")
+		if split<=0 or split>=payload.length()-1:
+			return
+		var target_text:=payload.left(split).strip_edges()
+		var private_message:=payload.substr(split+1).strip_edges()
+		if not target_text.is_valid_int() or int(target_text)<=0 or private_message.is_empty():
+			return
+		queued=_panel.session.send_whisper(int(target_text),private_message,_chat_bubble_type)
+	else:
+		match _chat_send_channel:
+			0: queued=_panel.session.send_world_chat(message,_chat_bubble_type)
+			2: queued=_panel.session.send_warband_chat(message,_chat_bubble_type)
+			3: queued=_panel.session.send_party_chat(message,_chat_bubble_type)
+			4: queued=_panel.session.send_nearby_chat(message,_chat_bubble_type)
+			_: return
 	if queued:
 		_chat_input.clear()
 

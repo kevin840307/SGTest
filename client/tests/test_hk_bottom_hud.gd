@@ -14,6 +14,12 @@ class ChatSessionStub:
 	func send_warband_chat(message:String,bubble_type:int=0)->bool:return _record("warband",message,bubble_type)
 	func send_party_chat(message:String,bubble_type:int=0)->bool:return _record("party",message,bubble_type)
 	func send_nearby_chat(message:String,bubble_type:int=0)->bool:return _record("nearby",message,bubble_type)
+	func send_whisper(target_actor_id:int,message:String,bubble_type:int=0)->bool:
+		sent.append({"channel":"whisper_uin","target_actor_id":target_actor_id,"message":message,"bubble_type":bubble_type})
+		return true
+	func send_whisper_name(target_name:String,message:String,bubble_type:int=0)->bool:
+		sent.append({"channel":"whisper_name","target_name":target_name,"message":message,"bubble_type":bubble_type})
+		return true
 
 class ChatPanelStub:
 	extends RefCounted
@@ -161,6 +167,25 @@ func _run()->void:
 		_expect(str(sent.get("channel",""))==str(route[1]),"chat input routes original channel type %d"%int(route[0]))
 		_expect(int(sent.get("bubble_type",-1))==5,"chat input preserves bubble type")
 		_expect(shell._chat_input.text.is_empty(),"accepted chat clears editor")
+	# Old ProcessPrivateMsg accepts /name <character> <message> and
+	# /uin <numeric-id> <message> in this same source input control.
+	shell._chat_bubble_type=4
+	shell._chat_input.text="/name 好友一 私訊名稱測試"
+	shell._send_chat()
+	var name_whisper:Dictionary=chat_session.sent.back()
+	_expect(str(name_whisper.get("channel",""))=="whisper_name" and str(name_whisper.get("target_name",""))=="好友一","/name routes to name-authoritative whisper")
+	_expect(str(name_whisper.get("message",""))=="私訊名稱測試" and int(name_whisper.get("bubble_type",-1))==4,"/name preserves message and bubble")
+	_expect(shell._chat_input.text.is_empty(),"accepted /name clears editor")
+	shell._chat_input.text="/uin 42 私訊編號測試"
+	shell._send_chat()
+	var uin_whisper:Dictionary=chat_session.sent.back()
+	_expect(str(uin_whisper.get("channel",""))=="whisper_uin" and int(uin_whisper.get("target_actor_id",0))==42,"/uin routes to numeric-authoritative whisper")
+	_expect(str(uin_whisper.get("message",""))=="私訊編號測試" and int(uin_whisper.get("bubble_type",-1))==4,"/uin preserves message and bubble")
+	_expect(shell._chat_input.text.is_empty(),"accepted /uin clears editor")
+	var sent_before_invalid:=chat_session.sent.size()
+	shell._chat_input.text="/name 缺訊息"
+	shell._send_chat()
+	_expect(chat_session.sent.size()==sent_before_invalid and shell._chat_input.text=="/name 缺訊息","invalid private command is not silently sent")
 	shell._chat_send_channel=0
 	var old_bubble_type:=shell._chat_bubble_type
 	shell._chat_bubble.pressed.emit()
