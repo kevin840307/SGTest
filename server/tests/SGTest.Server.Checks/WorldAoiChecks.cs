@@ -377,6 +377,39 @@ internal static class WorldAoiChecks
                 owner.Select(x=>x.PlayerSkill)) &&
             Drain(aoi,far).Length==0,
             "area skill per-target visual payload/order mismatch");
+
+        // A server-authoritative single-target MISS carries zero damage.
+        // Fan-out must preserve MISS rather than throwing and killing the
+        // AOI pump (or silently advertising an Applied hit).
+        var missMonster=monster with { EntityRevision=3, CurrentHp=100 };
+        var missOutcome=new SkillUseOutcome(
+            SkillUseStatus.Miss,1,99001,monster.EntityId,
+            0,100,100,3,missMonster);
+        Require(aoi.EnqueuePlayerSkillVisual(
+                request with {SkillSequence=5},missOutcome)==2,
+            "single-target skill MISS rejected by AOI");
+        owner=Drain(aoi,attacker);
+        peer=Drain(aoi,observer);
+        Require(owner is [var missOwner] &&
+            missOwner.Kind==AoiEventKind.PlayerSkillVisual &&
+            missOwner.PlayerSkill?.Status==SkillUseStatus.Miss &&
+            missOwner.PlayerSkill?.Damage==0 &&
+            missOwner.PlayerSkill?.TargetEntityId==monster.EntityId &&
+            peer is [var missPeer] &&
+            missPeer.PlayerSkill==missOwner.PlayerSkill &&
+            Drain(aoi,far).Length==0,
+            "skill MISS not faithfully scoped/fanned out as zero damage");
+
+        bool rejectedInvalidMiss=false;
+        try
+        {
+            aoi.EnqueuePlayerSkillVisual(
+                request with {SkillSequence=6},
+                missOutcome with {Damage=1});
+        }
+        catch(InvalidOperationException){rejectedInvalidMiss=true;}
+        Require(rejectedInvalidMiss&&Drain(aoi,attacker).Length==0,
+            "malformed nonzero-damage skill MISS was admitted");
     }
 
     private static void PlayerDamageVisualInterest()

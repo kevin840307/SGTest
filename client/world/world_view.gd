@@ -52,6 +52,11 @@ var _camera_visual_focus := Vector2.INF
 var _camera_last_usec := 0
 var _pending_player_profiles: Dictionary = {}
 var _combat_seen := {}
+var _combat_seen_ring: Array[String] = []
+var _combat_seen_next := 0
+# Five WorldState visual streams retain at most 4096 recent events each.
+# Keep more than their combined bounded window, but not an entire play session.
+const COMBAT_DEDUP_MAX := 32768
 var _combat_overlays: Array[Dictionary] = []
 const COMBAT_OVERLAY_LIFETIME_USEC := 900000
 # Retain only reusable map/atlas textures across short MapEpoch transfers.
@@ -153,6 +158,8 @@ func clear_map(retain_cache: bool = false) -> void:
 	_players_dirty = true
 	_pending_player_profiles.clear()
 	_combat_seen.clear()
+	_combat_seen_ring.clear()
+	_combat_seen_next = 0
 	_combat_overlays.clear()
 	camera.clear()
 	_map = {}
@@ -499,6 +506,37 @@ func _follow_camera_visual(target: Vector2, now_usec: int) -> void:
 	camera.set_focus(epoch,_camera_visual_focus)
 
 
+func _remember_combat_visual(key: String) -> bool:
+	if _combat_seen.has(key):
+		return false
+	_combat_seen[key] = true
+	if _combat_seen_ring.size() < COMBAT_DEDUP_MAX:
+		_combat_seen_ring.append(key)
+	else:
+		# O(1) ring eviction, not Array.pop_front() of 32768 entries on
+		# every attack during an extended multi-player fight.
+		var expired: String = _combat_seen_ring[_combat_seen_next]
+		_combat_seen.erase(expired)
+		_combat_seen_ring[_combat_seen_next] = key
+		_combat_seen_next = (_combat_seen_next+1) % COMBAT_DEDUP_MAX
+	return true
+
+
+func _combat_overlay_position(overlay: Dictionary, now_usec: int) -> Vector2:
+	var current := Vector2.INF
+	if overlay.has("target_entity_id"):
+		current = monsters.position_at(int(overlay.target_entity_id),now_usec)
+	elif overlay.has("target_actor_id"):
+		current = players.position_at(int(overlay.target_actor_id),now_usec)
+	if current.is_finite():
+		# Remember a previously visible, authoritative target location so a
+		# kill/damage float survives AOI despawn during its short animation.
+		overlay["last_target_position"] = current
+		return current
+	var previous: Variant = overlay.get("last_target_position",Vector2.INF)
+	return previous if previous is Vector2 and previous.is_finite() else Vector2.INF
+
+
 func present() -> void:
 	if phase != "ready":
 		return
@@ -546,11 +584,7 @@ func present() -> void:
 		if age < 0 or age > COMBAT_OVERLAY_LIFETIME_USEC:
 			continue
 		surviving.append(overlay)
-		var p := Vector2(INF,INF)
-		if overlay.has("target_entity_id"):
-			p = monsters.position_at(int(overlay.target_entity_id),now_usec)
-		elif overlay.has("target_actor_id"):
-			p = players.position_at(int(overlay.target_actor_id),now_usec)
+		var p := _combat_overlay_position(overlay,now_usec)
 		if not p.is_finite() or not rect.has_point(p):
 			continue
 		var progress := clampf(float(age)/float(COMBAT_OVERLAY_LIFETIME_USEC),0.0,1.0)
@@ -667,6 +701,7 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 			_fail("寵物狀態與地圖世代不一致")
 			return
 		_consume_player_attack_events(snapshot,now_usec)
+		_consume_player_skill_events(snapshot,now_usec)
 		_consume_player_damage_visual_events(snapshot,now_usec)
 		_consume_pvp_combat_visual_events(snapshot,now_usec)
 		_consume_pvp_skill_visual_events(snapshot,now_usec)
@@ -687,18 +722,61 @@ func _consume_player_attack_events(snapshot: Dictionary,now_usec: int) -> void:
 		var sequence := int(event.get("attack_sequence",0))
 		var target := int(event.get("target_entity_id",0))
 		var status := int(event.get("status",-1))
+		# Only a structurally valid committed hit/MISS may reserve the
+		# per-attacker sequence. A malformed packet must not poison its key.
+		var damage := int(event.get("damage",-1))
+		if attacker <= 0 or connection <= 0 or sequence <= 0 or target <= 0 \
+				or status not in [0,1] or damage < 0 or (status == 1 and damage != 0):
+			continue
 		var key := "attack:%d:%d:%d" % [attacker,connection,sequence]
-		if _combat_seen.has(key):
+		if not _remember_combat_visual(key):
 			continue
-		_combat_seen[key] = true
-		if target <= 0 or status not in [0,1]:
-			continue
-		_combat_overlays.append({
+		var overlay: Dictionary = {
 			"target_entity_id":target,
-			"text":"MISS" if status==1 else str(int(event.get("damage",0))),
+			"text":"MISS" if status==1 else str(damage),
 			"miss":status==1,
 			"started_usec":now_usec
-		})
+		}
+		var last_point := monsters.position_at(target,now_usec)
+		if last_point.is_finite():
+			overlay["last_target_position"] = last_point
+		_combat_overlays.append(overlay)
+
+
+func _consume_player_skill_events(snapshot: Dictionary,now_usec: int) -> void:
+	# Opcode 46 is an authoritative per-target visual for both single and
+	# area skills. The skill-use result is only a receipt, not an extra hit.
+	var events = snapshot.get("player_skill_events",[])
+	if not events is Array:
+		return
+	for event in events:
+		if not event is Dictionary:
+			continue
+		var attacker := int(event.get("attacker_actor_id",0))
+		var connection := int(event.get("attacker_connection_epoch",0))
+		var sequence := int(event.get("skill_sequence",0))
+		var skill_id := int(event.get("skill_id",0))
+		var target := int(event.get("target_entity_id",0))
+		var status := int(event.get("status",-1))
+		var damage := int(event.get("damage",-1))
+		if attacker <= 0 or connection <= 0 or sequence <= 0 or target <= 0 \
+				or skill_id < 1 or skill_id > 100000000 or status not in [0,1] \
+				or (status == 0 and damage <= 0) or (status == 1 and damage != 0):
+			continue
+		# One area skill sequence legitimately hits several different monsters.
+		var key := "skill:%d:%d:%d:%d" % [attacker,connection,sequence,target]
+		if not _remember_combat_visual(key):
+			continue
+		var overlay: Dictionary = {
+			"target_entity_id":target,
+			"text":"MISS" if status==1 else str(damage),
+			"miss":status==1,
+			"started_usec":now_usec
+		}
+		var last_point := monsters.position_at(target,now_usec)
+		if last_point.is_finite():
+			overlay["last_target_position"] = last_point
+		_combat_overlays.append(overlay)
 
 
 func _consume_player_damage_visual_events(snapshot: Dictionary,now_usec: int) -> void:
@@ -712,21 +790,24 @@ func _consume_player_damage_visual_events(snapshot: Dictionary,now_usec: int) ->
 		var connection := int(event.get("victim_connection_epoch",0))
 		var sequence := int(event.get("damage_sequence",0))
 		var damage := int(event.get("damage",0))
-		var key := "hit:%d:%d:%d" % [victim,connection,sequence]
-		if _combat_seen.has(key):
-			continue
-		_combat_seen[key] = true
 		if victim <= 0 or connection <= 0 or sequence <= 0 or damage <= 0:
+			continue
+		var key := "hit:%d:%d:%d" % [victim,connection,sequence]
+		if not _remember_combat_visual(key):
 			continue
 		# Presentation-only: use only the committed damage amount from opcode42.
 		# Do not inspect or infer remote HP; actor position comes from the normal
 		# authoritative player snapshot/interpolation path.
-		_combat_overlays.append({
+		var overlay: Dictionary = {
 			"target_actor_id":victim,
 			"text":str(damage),
 			"miss":false,
 			"started_usec":now_usec
-		})
+		}
+		var last_point := players.position_at(victim,now_usec)
+		if last_point.is_finite():
+			overlay["last_target_position"] = last_point
+		_combat_overlays.append(overlay)
 
 
 func _consume_pvp_combat_visual_events(snapshot: Dictionary,now_usec: int) -> void:
@@ -743,20 +824,23 @@ func _consume_pvp_combat_visual_events(snapshot: Dictionary,now_usec: int) -> vo
 		var victim_connection:=int(event.get("victim_connection_epoch",0))
 		var damage_sequence:=int(event.get("damage_sequence",0))
 		var damage:=int(event.get("damage",0))
+		if attacker<=0 or attacker_connection<=0 or attack_sequence<=0 or victim<=0 or victim_connection<=0 or damage_sequence<=0 or damage<=0:
+			continue
 		var key:="pvphit:%d:%d:%d:%d:%d:%d" % [
 			attacker,attacker_connection,attack_sequence,
 			victim,victim_connection,damage_sequence]
-		if _combat_seen.has(key):
+		if not _remember_combat_visual(key):
 			continue
-		_combat_seen[key]=true
-		if attacker<=0 or attacker_connection<=0 or attack_sequence<=0 or victim<=0 or victim_connection<=0 or damage_sequence<=0 or damage<=0:
-			continue
-		_combat_overlays.append({
+		var overlay: Dictionary = {
 			"target_actor_id":victim,
 			"text":str(damage),
 			"miss":false,
 			"started_usec":now_usec
-		})
+		}
+		var last_point := players.position_at(victim,now_usec)
+		if last_point.is_finite():
+			overlay["last_target_position"] = last_point
+		_combat_overlays.append(overlay)
 
 
 func _consume_pvp_skill_visual_events(snapshot:Dictionary,now_usec:int)->void:
@@ -774,19 +858,22 @@ func _consume_pvp_skill_visual_events(snapshot:Dictionary,now_usec:int)->void:
 		var vc:=int(event.get("victim_connection_epoch",0))
 		var damage_sequence:=int(event.get("damage_sequence",0))
 		var damage:=int(event.get("damage",0))
-		var key:="pvpskillhit:%d:%d:%d:%d:%d:%d:%d" % [
-			attacker,ac,sequence,skill_id,victim,vc,damage_sequence]
-		if _combat_seen.has(key):
-			continue
-		_combat_seen[key]=true
 		if attacker<=0 or ac<=0 or sequence<=0 or skill_id<=0 or victim<=0 or vc<=0 or damage_sequence<=0 or damage<=0:
 			continue
-		_combat_overlays.append({
+		var key:="pvpskillhit:%d:%d:%d:%d:%d:%d:%d" % [
+			attacker,ac,sequence,skill_id,victim,vc,damage_sequence]
+		if not _remember_combat_visual(key):
+			continue
+		var overlay: Dictionary = {
 			"target_actor_id":victim,
 			"text":str(damage),
 			"miss":false,
 			"started_usec":now_usec
-		})
+		}
+		var last_point := players.position_at(victim,now_usec)
+		if last_point.is_finite():
+			overlay["last_target_position"] = last_point
+		_combat_overlays.append(overlay)
 
 
 func combat_overlay_count() -> int:

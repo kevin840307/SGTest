@@ -673,13 +673,15 @@ public sealed class WorldAoi
         {
             var monster=hit.Monster;
             if(monster.EntityId<=0 || monster.MapId!=attacker.MapId ||
-                monster.EntityRevision<=0 || hit.Damage<=0 ||
+                monster.EntityRevision<=0 ||
+                (outcome.Status==SkillUseStatus.Applied && hit.Damage<=0) ||
+                (outcome.Status==SkillUseStatus.Miss && hit.Damage!=0) ||
                 !_monsters.ContainsKey(monster.EntityId))
                 throw new InvalidOperationException(
                     "Area skill hit is not an authoritative visible monster");
             var visual=new PlayerSkillVisual(
                 attacker.ActorId,attacker.ConnectionEpoch,request.SkillSequence,
-                request.SkillId,monster.EntityId,SkillUseStatus.Applied,
+                request.SkillId,monster.EntityId,outcome.Status,
                 hit.Damage,monster.EntityRevision,attacker.Facing);
 
             foreach(var observer in _observers.Values)
