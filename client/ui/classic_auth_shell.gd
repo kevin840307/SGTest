@@ -16,6 +16,9 @@ const HK_SHARED_FONT_FACE := "新細明體"
 const HK_SHARED_FONT_HEIGHT := 12
 const HK_SHARED_FONT_WEIGHT := 500
 const HK_SHARED_FONT_BASELINE := 10.0
+# Old Paradise.exe.lst CServerSelectLogic::ConnectingHandle at 0x004F8118
+# passes 0x1D4C0 to CConnectingItf::SetTimer (120000 milliseconds).
+const HK_CONNECTING_TIMEOUT_MS := 120_000
 
 class LoginCaption extends Control:
 	var text := ""
@@ -58,6 +61,13 @@ var _login_password_label: LoginCaption
 var _login_confirm_label: LoginCaption
 var _login_exit_label: LoginCaption
 var _login_font := SystemFont.new()
+# 011_LOGIN_LOADING.ITF is a modal over the login page. Its timer-driven
+# CELProgressBar is presentation only; authenticated session state stays owned
+# by SessionPanel and may complete or fail independently of the visual frame.
+var _login_loading := Control.new()
+var _login_loading_progress := TextureRect.new()
+var _login_loading_since := 0
+var _login_loading_frame := -1
 var _login_input_font: Font
 var _shared_ui_font: Font
 var _status: Label
@@ -108,6 +118,7 @@ func _init() -> void:
 		page.hide()
 	_shared_ui_font = _make_hk_shared_ui_font()
 	_build_login()
+	_build_login_loading()
 	_build_select()
 	_build_create()
 	set_process(false)
@@ -365,6 +376,71 @@ func _build_login() -> void:
 		caption.visible = native_captions.texture == null
 	_status = _label(login_page,"",237,343,326,32)
 	_status.add_theme_color_override("font_color",Color("#7a3517"))
+
+func _build_login_loading() -> void:
+	# 011_LOGIN_LOADING.ITF: 233x49 BG_LOGIN_LOADING.spr, origin (-2,-1).
+	# The source's two controls are ID 2000 at (55,9,132,12) and ID 2153
+	# at (6,30,225,10). EXP.spr is 16 frames of 225x12; clip its bottom
+	# two pixels to the ITF control rect instead of shrinking the artwork.
+	_login_loading.name = "HkLoginLoading"
+	_login_loading.size = SOURCE
+	_login_loading.mouse_filter = Control.MOUSE_FILTER_STOP
+	_login_loading.hide()
+	login_page.add_child(_login_loading)
+	var origin := Vector2(284,275)
+	var backdrop := _sprite_at(
+		_login_loading,"BG_LOGIN_LOADING",origin.x+2,origin.y+1,233,49)
+	backdrop.name = "HkConnectingBackground"
+	_shared_text(_login_loading,"登入伺服器中，請稍候。",
+		origin.x+55,origin.y+9,132,12,false)
+	var progress_clip := Control.new()
+	progress_clip.name = "HkConnectingProgressClip"
+	progress_clip.position = origin+Vector2(6,30)
+	progress_clip.size = Vector2(225,10)
+	progress_clip.clip_contents = true
+	progress_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_login_loading.add_child(progress_clip)
+	_login_loading_progress.name = "HkConnectingProgress"
+	_login_loading_progress.size = Vector2(225,12)
+	_login_loading_progress.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_login_loading_progress.stretch_mode = TextureRect.STRETCH_SCALE
+	_login_loading_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	progress_clip.add_child(_login_loading_progress)
+
+func _set_login_loading(pending: bool) -> void:
+	# The real connection must remain pending; never show a modal after
+	# failure or after entering character select. Missing private HK artwork
+	# fails visibly to the existing status label, not to synthetic graphics.
+	var available := _tex("BG_LOGIN_LOADING") != null and _tex("EXP.0000") != null
+	var show := pending and available and login_page.visible
+	if show and not _login_loading.visible:
+		_login_loading_since = Time.get_ticks_msec()
+		_login_loading_frame = -1
+	_login_loading.visible = show
+	if show:
+		# Old CConnectingItf::OnUpdate drives the bar from GetSysTimer and its
+		# configured timeout, NOT from Server gameplay or asset percentages.
+		# The original caller uses a 120s timer. Its 16-frame atlas is used
+		# only for display; no timer or art frame grants authentication.
+		var elapsed := maxi(0,Time.get_ticks_msec()-_login_loading_since)
+		var frame := mini(14,int(elapsed * 15 / HK_CONNECTING_TIMEOUT_MS))
+		if frame != _login_loading_frame:
+			var art := _tex("EXP.%04d" % frame)
+			if art != null:
+				_login_loading_progress.texture = art
+				_login_loading_frame = frame
+	_username.editable = not pending
+	_password.editable = not pending
+	_login_confirm.disabled = pending
+	_login_exit.disabled = pending
+
+func _input(event: InputEvent) -> void:
+	# A pending TLS login must be cancellable, even when the visual progress
+	# reaches its penultimate frame. No new UI-side connection state exists.
+	if _login_loading.visible and event is InputEventKey and event.pressed \
+		and not event.echo and event.keycode == KEY_ESCAPE and _panel != null:
+		_panel.disconnect_session()
+		get_viewport().set_input_as_handled()
 
 func _build_select() -> void:
 	_art(select_page,"SELECT_CHARACTER.png")
@@ -735,6 +811,7 @@ func enable_for_page(page: int,on: bool) -> void:
 	if not visible or page != Layout.Page.CHARACTER_SELECT:
 		_close_slot_modals()
 	if not visible:
+		_set_login_loading(false)
 		return
 	_current_page = page
 	login_page.visible = page == Layout.Page.LOGIN
@@ -763,11 +840,13 @@ func _process(_delta: float) -> void:
 		enable_for_page(_panel._layout.current_page,true)
 	if login_page.visible:
 		var login_status := str(_panel.status.text)
+		var pending_login: bool = _panel.active and login_status == "安全連線中…"
+		_set_login_loading(pending_login)
 		# 001_ACCOUNT_LOGIN.ITF has no neutral instructional status label.
 		# Keep actual failures visible as a temporary usability fallback until
 		# the HK message-modal path is mapped, but do not paint SGTest-only idle
 		# or connection-progress prose over the original login artwork.
-		_status.text = "" if login_status in ["請登入伺服器","安全連線中…"] else login_status
+		_status.text = "" if login_status == "請登入伺服器" or _login_loading.visible else login_status
 	if create_page.visible:
 		_create_note.text = _panel.character_create_status.text
 	if select_page.visible:
