@@ -14,6 +14,7 @@ internal static class ChatWireChecks
         Checks.Run("whisper wire binds sender and target in shared chat sequence", Whisper);
         Checks.Run("chat gateway admits trusted World and rejects unsupported channel/replay", Gate);
         Checks.Run("trusted chat routing isolates nearby and cross-map whisper", Routing);
+        Checks.Run("chat recipient ignore filters world and whisper delivery", IgnoreRouting);
         Checks.Run("trusted world chat enforces original level gate and crosses maps", WorldRouting);
         Checks.Run("trusted party chat reaches cross-map members only", PartyRouting);
     }
@@ -69,6 +70,40 @@ internal static class ChatWireChecks
         Checks.Require(!sender.TryDequeueReliable(out _)&&
             !target.TryDequeueReliable(out _),
             "stale authenticated chat generation delivered a frame");
+    }
+
+    private static void IgnoreRouting()
+    {
+        var router=new WorldResultRouter();
+        var sender=new GatewayConnection(
+            new ActorSnapshot(11,15,5,3,0,0,8,8,1,false),
+            displayName:"IgnoredSender",
+            pvpState:new CharacterPvpState(11,PvpMode.ProtectedBlue,false,0,0,0));
+        var target=new GatewayConnection(
+            new ActorSnapshot(22,13,7,4,0,0,8,8,1,false),
+            displayName:"BlockingTarget",
+            pvpState:new CharacterPvpState(22,PvpMode.ProtectedBlue,false,0,0,0));
+        Checks.Require(router.TryAttach(sender)&&router.TryAttach(target),
+            "ignore chat routing fixture attach failed");
+        Task<bool> Ignore(long owner,long source)=>
+            Task.FromResult(owner==22&&source==11);
+
+        ChatRouting.RouteAsync(
+            new(11,5,3,1,ChatChannel.World,0,"hidden world",PlayerLevel:10),
+            router,null,Ignore).GetAwaiter().GetResult();
+        Checks.Require(sender.TryDequeueReliable(out var selfFrame)&&
+            WireProtocol.TryDecodeChatDelivery(selfFrame,out var selfMessage)&&
+            selfMessage.Message=="hidden world"&&!target.TryDequeueReliable(out _),
+            "ignored world message reached blocking recipient or missed sender echo");
+
+        ChatRouting.RouteAsync(
+            new(11,5,3,2,ChatChannel.Whisper,0,"hidden whisper",22),
+            router,null,Ignore).GetAwaiter().GetResult();
+        Checks.Require(!target.TryDequeueReliable(out _)&&
+            sender.TryDequeueReliable(out var receipt)&&
+            WireProtocol.TryDecodeWhisperResult(receipt,out var result)&&
+            result.Status==WhisperResultStatus.TargetUnavailable,
+            "ignored whisper reached blocking recipient or leaked a delivered receipt");
     }
 
     private static void WorldRouting()

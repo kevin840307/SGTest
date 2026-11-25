@@ -27,6 +27,37 @@ c.name
 FROM character_friendships f
 JOIN characters c ON c.character_id=
     CASE WHEN f.character_low_id=$id THEN f.character_high_id ELSE f.character_low_id END
+WHERE (f.character_low_id=$id OR f.character_high_id=$id)
+AND NOT EXISTS (
+    SELECT 1 FROM character_ignores i
+    WHERE i.owner_character_id=$id AND i.target_character_id=
+        CASE WHEN f.character_low_id=$id THEN f.character_high_id ELSE f.character_low_id END
+)
+ORDER BY c.name,friend_id;";
+            command.Parameters.AddWithValue("$id",characterId);
+            using var reader=command.ExecuteReader();
+            var result=new List<FriendRecord>();
+            while(reader.Read())
+                result.Add(new(reader.GetInt64(0),reader.GetString(1)));
+            return result;
+        },cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<FriendRecord>> GetFriendRelationsAsync(
+        long characterId,CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        if(characterId<=0)return Array.Empty<FriendRecord>();
+        return await Task.Run<IReadOnlyList<FriendRecord>>(()=>
+        {
+            using var connection=Open();
+            using var command=connection.CreateCommand();
+            command.CommandText=@"SELECT
+CASE WHEN f.character_low_id=$id THEN f.character_high_id ELSE f.character_low_id END AS friend_id,
+c.name
+FROM character_friendships f
+JOIN characters c ON c.character_id=
+    CASE WHEN f.character_low_id=$id THEN f.character_high_id ELSE f.character_low_id END
 WHERE f.character_low_id=$id OR f.character_high_id=$id
 ORDER BY c.name,friend_id;";
             command.Parameters.AddWithValue("$id",characterId);
@@ -144,9 +175,149 @@ WHERE character_low_id=$low AND character_high_id=$high;";
             delete.Parameters.AddWithValue("$high",high);
             int changed=delete.ExecuteNonQuery();
             if(changed!=1)return FriendStoreStatus.NotFriends;
+            using(var clearIgnore=connection.CreateCommand())
+            {
+                clearIgnore.Transaction=tx;
+                clearIgnore.CommandText=@"DELETE FROM character_ignores
+WHERE (owner_character_id=$a AND target_character_id=$b)
+   OR (owner_character_id=$b AND target_character_id=$a);";
+                clearIgnore.Parameters.AddWithValue("$a",characterId);
+                clearIgnore.Parameters.AddWithValue("$b",targetCharacterId);
+                clearIgnore.ExecuteNonQuery();
+            }
             tx.Commit();
             return FriendStoreStatus.Success;
         },cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<FriendRecord>> GetIgnoredFriendsAsync(
+        long characterId,CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        if(characterId<=0)return Array.Empty<FriendRecord>();
+        return await Task.Run<IReadOnlyList<FriendRecord>>(()=>
+        {
+            using var connection=Open();
+            using var command=connection.CreateCommand();
+            command.CommandText=@"SELECT i.target_character_id,c.name
+FROM character_ignores i
+JOIN characters c ON c.character_id=i.target_character_id
+WHERE i.owner_character_id=$id
+ORDER BY c.name,i.target_character_id;";
+            command.Parameters.AddWithValue("$id",characterId);
+            using var reader=command.ExecuteReader();
+            var result=new List<FriendRecord>();
+            while(reader.Read())
+                result.Add(new(reader.GetInt64(0),reader.GetString(1)));
+            return result;
+        },cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<FriendStoreStatus> IgnoreFriendAsync(
+        long characterId,long targetCharacterId,
+        CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        if(characterId<=0||targetCharacterId<=0)
+            return FriendStoreStatus.TargetNotFound;
+        if(characterId==targetCharacterId)
+            return FriendStoreStatus.CannotTargetSelf;
+        return await Task.Run(()=>
+        {
+            using var connection=Open();
+            using var tx=connection.BeginTransaction();
+            if(!FriendCharacterExists(connection,tx,characterId)||
+               !FriendCharacterExists(connection,tx,targetCharacterId))
+                return FriendStoreStatus.TargetNotFound;
+            if(!FriendshipExists(connection,tx,characterId,targetCharacterId))
+                return FriendStoreStatus.NotFriends;
+            using(var existing=connection.CreateCommand())
+            {
+                existing.Transaction=tx;
+                existing.CommandText=@"SELECT 1 FROM character_ignores
+WHERE owner_character_id=$owner AND target_character_id=$target LIMIT 1;";
+                existing.Parameters.AddWithValue("$owner",characterId);
+                existing.Parameters.AddWithValue("$target",targetCharacterId);
+                if(existing.ExecuteScalar() is not null)
+                    return FriendStoreStatus.Conflict;
+            }
+            using(var insert=connection.CreateCommand())
+            {
+                insert.Transaction=tx;
+                insert.CommandText=@"INSERT INTO character_ignores(
+owner_character_id,target_character_id,created_unix_ms)
+VALUES($owner,$target,$now);";
+                insert.Parameters.AddWithValue("$owner",characterId);
+                insert.Parameters.AddWithValue("$target",targetCharacterId);
+                insert.Parameters.AddWithValue(
+                    "$now",_timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
+                if(insert.ExecuteNonQuery()!=1)
+                    return FriendStoreStatus.Conflict;
+            }
+            tx.Commit();
+            return FriendStoreStatus.Success;
+        },cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<FriendStoreStatus> RestoreIgnoredFriendAsync(
+        long characterId,long targetCharacterId,
+        CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        if(characterId<=0||targetCharacterId<=0)
+            return FriendStoreStatus.NotFriends;
+        if(characterId==targetCharacterId)
+            return FriendStoreStatus.CannotTargetSelf;
+        return await Task.Run(()=>
+        {
+            using var connection=Open();
+            using var tx=connection.BeginTransaction();
+            if(!FriendshipExists(connection,tx,characterId,targetCharacterId))
+                return FriendStoreStatus.NotFriends;
+            using var delete=connection.CreateCommand();
+            delete.Transaction=tx;
+            delete.CommandText=@"DELETE FROM character_ignores
+WHERE owner_character_id=$owner AND target_character_id=$target;";
+            delete.Parameters.AddWithValue("$owner",characterId);
+            delete.Parameters.AddWithValue("$target",targetCharacterId);
+            if(delete.ExecuteNonQuery()!=1)
+                return FriendStoreStatus.NotFriends;
+            tx.Commit();
+            return FriendStoreStatus.Success;
+        },cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<bool> IsIgnoredAsync(
+        long ownerCharacterId,long targetCharacterId,
+        CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        if(ownerCharacterId<=0||targetCharacterId<=0||ownerCharacterId==targetCharacterId)
+            return false;
+        return await Task.Run(()=>
+        {
+            using var connection=Open();
+            using var command=connection.CreateCommand();
+            command.CommandText=@"SELECT 1 FROM character_ignores
+WHERE owner_character_id=$owner AND target_character_id=$target LIMIT 1;";
+            command.Parameters.AddWithValue("$owner",ownerCharacterId);
+            command.Parameters.AddWithValue("$target",targetCharacterId);
+            return command.ExecuteScalar() is not null;
+        },cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool FriendshipExists(
+        SqliteConnection connection,SqliteTransaction tx,long characterId,long targetCharacterId)
+    {
+        long low=Math.Min(characterId,targetCharacterId);
+        long high=Math.Max(characterId,targetCharacterId);
+        using var command=connection.CreateCommand();
+        command.Transaction=tx;
+        command.CommandText=@"SELECT 1 FROM character_friendships
+WHERE character_low_id=$low AND character_high_id=$high LIMIT 1;";
+        command.Parameters.AddWithValue("$low",low);
+        command.Parameters.AddWithValue("$high",high);
+        return command.ExecuteScalar() is not null;
     }
 
     private static long ResolveFriendTarget(

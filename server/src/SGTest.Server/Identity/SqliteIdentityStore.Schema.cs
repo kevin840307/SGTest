@@ -1007,6 +1007,18 @@ END;",tx);
 );",tx);
             Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_character_friendships_high
 ON character_friendships(character_high_id,character_low_id);",tx);
+            // Schema v43: original icq.sql keeps ignorelist owner-scoped rather than
+            // destroying the peer's contact. Keep the bilateral friendship durable and
+            // layer one unilateral ignore row over the owner's friend view.
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS character_ignores (
+    owner_character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    target_character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    created_unix_ms INTEGER NOT NULL,
+    PRIMARY KEY(owner_character_id,target_character_id),
+    CHECK(owner_character_id <> target_character_id)
+);",tx);
+            Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_character_ignores_target
+ON character_ignores(target_character_id,owner_character_id);",tx);
             // Schema v36: durable Mecha roster and exactly one mounted instance per
             // character. Exact HK parts/card/stat semantics remain source-gated;
             // parts_blob is opaque server-owned state in this lifecycle baseline.

@@ -383,6 +383,9 @@ func _run() -> void:
 			43:{"actor_id":43,"name":"附近玩家","online":true},
 			44:{"actor_id":44,"name":"離線好友","online":false},
 		},
+		"ignored_friends":{
+			45:{"actor_id":45,"name":"黑名單玩家","online":false,"ignored":true},
+		},
 		"pending_friend_sequence":0,
 		"chat_messages":[
 			{"channel":0,"sender_actor_id":43,"sender_name":"附近玩家","message":"你好"},
@@ -483,6 +486,30 @@ func _run() -> void:
 		not str(world._friend_rows.get_child(1).text).begins_with("○ ")
 	):
 		_fail("classic persistent chat/friend panels did not bind authoritative friend presence")
+		return
+	var ignore_button:=world.friend_panel.get_node("FriendIgnore") as TextureButton
+	var ignore_list_button:=world.friend_panel.get_node("IgnoreList") as TextureButton
+	if (
+		ignore_button==null or ignore_button.get_rect()!=Rect2(31,7,24,24) or
+		ignore_list_button==null or ignore_list_button.get_rect()!=Rect2(154,7,24,24) or ignore_list_button.disabled
+	):
+		_fail("020_FRIENDLIST original ignore controls are not live at source rects")
+		return
+	(world._friend_rows.get_child(0) as Button).pressed.emit()
+	if ignore_button.disabled or ignore_button.tooltip_text!="移至黑名單":
+		_fail("020_FRIENDLIST 2812 did not arm after selecting an authoritative friend")
+		return
+	ignore_list_button.pressed.emit()
+	if (
+		world._friend_rows.get_child_count()!=1 or
+		str(world._friend_rows.get_child(0).text)!="黑名單玩家" or
+		ignore_button.tooltip_text!="解除黑名單"
+	):
+		_fail("020_FRIENDLIST ignore-list view did not bind authoritative ignored_friends")
+		return
+	world.friend_panel.get_node("FriendList").pressed.emit()
+	if world._friend_rows.get_child_count()!=2 or ignore_button.tooltip_text!="移至黑名單":
+		_fail("020_FRIENDLIST friend-list view did not restore source-backed contact view")
 		return
 	world.secondary_menu.get_node("ItemCommand").pressed.emit()
 	if (

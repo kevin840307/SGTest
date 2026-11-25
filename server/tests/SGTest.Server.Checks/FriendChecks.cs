@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using SGTest.Server.Friend;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
@@ -9,11 +10,11 @@ internal static class FriendChecks
 {
     public static void Verify()
     {
-        Checks.Run("friend wire roundtrips invite accept reject remove refresh and presence",Wire);
+        Checks.Run("friend wire roundtrips invite accept reject ignore restore remove refresh",Wire);
         Checks.Run("friend gateway binds authenticated sender and rejects replay",GatewayAdmission);
-        Checks.Run("friend persistence is bilateral durable and deletion is symmetric",
+        Checks.Run("friend persistence keeps unilateral ignore durable across relog and v43 migration",
             ()=>Persistence().GetAwaiter().GetResult());
-        Checks.Run("friend coordinator broadcasts online offline relog and removal",
+        Checks.Run("friend coordinator broadcasts presence ignore restore and removal",
             ()=>PresenceLifecycle().GetAwaiter().GetResult());
     }
 
@@ -43,6 +44,14 @@ internal static class FriendChecks
         Checks.Require(WireProtocol.TryDecodeFriendCommand(
             WireProtocol.EncodeFriendCommand(reject),out parsed)&&parsed==reject,
             "friend reject wire roundtrip failed");
+        var ignore=new FriendCommandWire(7,6,FriendCommandAction.Ignore,42);
+        Checks.Require(WireProtocol.TryDecodeFriendCommand(
+            WireProtocol.EncodeFriendCommand(ignore),out parsed)&&parsed==ignore,
+            "friend ignore wire roundtrip failed");
+        var restore=new FriendCommandWire(7,7,FriendCommandAction.Restore,42);
+        Checks.Require(WireProtocol.TryDecodeFriendCommand(
+            WireProtocol.EncodeFriendCommand(restore),out parsed)&&parsed==restore,
+            "friend restore wire roundtrip failed");
 
         var result=new FriendResultWire(
             7,2,FriendCommandAction.Remove,FriendResultStatus.Success,42);
@@ -52,13 +61,14 @@ internal static class FriendChecks
 
         var snapshot=new FriendSnapshotWire(7,[
             new FriendEntryWire(42,"Buddy",true),
-            new FriendEntryWire(43,"Offline",false)
+            new FriendEntryWire(43,"Ignored",false,true)
         ]);
         Checks.Require(WireProtocol.TryDecodeFriendSnapshot(
             WireProtocol.EncodeFriendSnapshot(snapshot),out var decoded)&&decoded is not null&&
             decoded.Friends.Count==2&&decoded.Friends[0].IsOnline&&
-            !decoded.Friends[1].IsOnline,
-            "friend presence snapshot roundtrip failed");
+            !decoded.Friends[0].IsIgnored&&!decoded.Friends[1].IsOnline&&
+            decoded.Friends[1].IsIgnored,
+            "friend presence/ignore snapshot roundtrip failed");
 
         var invite=new FriendInviteWire(7,42,9,FriendInviteState.Request,"Buddy");
         var inviteBytes=WireProtocol.EncodeFriendInvite(invite);
@@ -127,19 +137,52 @@ internal static class FriendChecks
                 Checks.Require((await store.AddFriendAsync(a,b)).Status==
                     FriendStoreStatus.AlreadyFriends,
                     "duplicate friend relation was not rejected");
+                Checks.Require(await store.IgnoreFriendAsync(a,b)==FriendStoreStatus.Success&&
+                    (await store.GetFriendsAsync(a)).Count==0&&
+                    (await store.GetIgnoredFriendsAsync(a)).Count==1&&
+                    (await store.GetFriendsAsync(b)).Count==1&&
+                    await store.IsIgnoredAsync(a,b)&&!await store.IsIgnoredAsync(b,a),
+                    "ignore was not unilateral over the durable friendship");
             }
 
             using(var reopened=new SqliteIdentityStore(db))
             {
                 await reopened.InitializeAsync();
-                var persisted=await reopened.GetFriendsAsync(a);
-                Checks.Require(persisted.Count==1&&persisted[0].CharacterId==b,
-                    "friend relation did not survive reopen");
-                Checks.Require(await reopened.RemoveFriendAsync(a,b)==
+                var persistedIgnore=await reopened.GetIgnoredFriendsAsync(a);
+                Checks.Require(persistedIgnore.Count==1&&persistedIgnore[0].CharacterId==b&&
+                    (await reopened.GetFriendsAsync(a)).Count==0&&
+                    (await reopened.GetFriendsAsync(b)).Count==1,
+                    "ignore did not survive reopen without destroying peer friendship");
+                Checks.Require(await reopened.RestoreIgnoredFriendAsync(a,b)==
+                    FriendStoreStatus.Success&&
+                    (await reopened.GetFriendsAsync(a)).Count==1&&
+                    (await reopened.GetIgnoredFriendsAsync(a)).Count==0,
+                    "ignore restore did not return contact to friend view");
+                Checks.Require(await reopened.IgnoreFriendAsync(a,b)==
+                    FriendStoreStatus.Success,
+                    "ignore setup before peer-side removal failed");
+                Checks.Require(await reopened.RemoveFriendAsync(b,a)==
                     FriendStoreStatus.Success,"friend remove failed");
                 Checks.Require((await reopened.GetFriendsAsync(a)).Count==0&&
-                    (await reopened.GetFriendsAsync(b)).Count==0,
-                    "friend remove was not symmetric");
+                    (await reopened.GetFriendsAsync(b)).Count==0&&
+                    (await reopened.GetIgnoredFriendsAsync(a)).Count==0&&
+                    (await reopened.GetIgnoredFriendsAsync(b)).Count==0,
+                    "friend remove was not symmetric or left stale ignore state");
+            }
+
+            using(var downgrade=new SqliteConnection($"Data Source={db}"))
+            {
+                downgrade.Open();
+                using var command=downgrade.CreateCommand();
+                command.CommandText=@"DROP TABLE character_ignores;
+UPDATE schema_version SET version=42;";
+                command.ExecuteNonQuery();
+            }
+            using(var migrated=new SqliteIdentityStore(db))
+            {
+                await migrated.InitializeAsync();
+                Checks.Require((await migrated.GetIgnoredFriendsAsync(a)).Count==0,
+                    "v42 to v43 migration did not create the ignore table");
             }
         }
         finally
@@ -223,7 +266,28 @@ internal static class FriendChecks
                 "friend relog did not restore live presence");
 
             FeedFriend(b2,new FriendCommandWire(
-                6,1,FriendCommandAction.Remove,aId),coordinator,router);
+                6,1,FriendCommandAction.Ignore,aId),coordinator,router);
+            var ignoreResult=DrainResult(b2);
+            var bIgnored=DrainSnapshot(b2);
+            Checks.Require(ignoreResult.Status==FriendResultStatus.Success&&
+                bIgnored.Friends.Count==1&&bIgnored.Friends[0].CharacterId==aId&&
+                bIgnored.Friends[0].IsIgnored&&!bIgnored.Friends[0].IsOnline&&
+                (await store.GetFriendsAsync(bId)).Count==0&&
+                (await store.GetFriendRelationsAsync(bId)).Count==1&&
+                !a.TryDequeueReliable(out _),
+                "friend ignore did not move only the owner's view into ignore list");
+
+            FeedFriend(b2,new FriendCommandWire(
+                6,2,FriendCommandAction.Restore,aId),coordinator,router);
+            var restoreResult=DrainResult(b2);
+            var bRestored=DrainSnapshot(b2);
+            Checks.Require(restoreResult.Status==FriendResultStatus.Success&&
+                bRestored.Friends.Count==1&&!bRestored.Friends[0].IsIgnored&&
+                bRestored.Friends[0].IsOnline,
+                "friend restore did not return contact to live friend view");
+
+            FeedFriend(b2,new FriendCommandWire(
+                6,3,FriendCommandAction.Remove,aId),coordinator,router);
             Checks.Require(DrainResult(b2).Status==FriendResultStatus.Success&&
                 DrainSnapshot(b2).Friends.Count==0&&
                 DrainSnapshot(a).Friends.Count==0,

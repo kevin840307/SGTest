@@ -2691,13 +2691,13 @@ static func decode_clan_snapshot(frame:PackedByteArray)->Dictionary:
 static func encode_friend_command(
 		epoch:int,sequence:int,action:int,target_actor_id:int=0,target_name:String="")->PackedByteArray:
 	var payload:=target_name.to_utf8_buffer()
-	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>5 or target_actor_id<0 or payload.size()>PLAYER_IDENTITY_MAX_NAME_BYTES:
+	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>7 or target_actor_id<0 or payload.size()>PLAYER_IDENTITY_MAX_NAME_BYTES:
 		return PackedByteArray()
 	match action:
 		1:
 			if (target_actor_id>0)==(not target_name.is_empty()) or target_name!=target_name.strip_edges():
 				return PackedByteArray()
-		2,4,5:
+		2,4,5,6,7:
 			if target_actor_id<=0 or not target_name.is_empty():
 				return PackedByteArray()
 		3:
@@ -2724,7 +2724,7 @@ static func decode_friend_result(frame:PackedByteArray)->Dictionary:
 	var action:=reader.get_u8()
 	var status:=reader.get_u8()
 	var target:=reader.get_64()
-	if epoch<=0 or sequence<=0 or action<1 or action>5 or status<0 or status>8 or target<0 or reader.get_available_bytes()!=0:
+	if epoch<=0 or sequence<=0 or action<1 or action>7 or status<0 or status>8 or target<0 or reader.get_available_bytes()!=0:
 		return {}
 	return {"map_epoch":epoch,"friend_sequence":sequence,"action":action,"status":status,"target_actor_id":target}
 
@@ -2743,9 +2743,9 @@ static func decode_friend_snapshot(frame:PackedByteArray)->Dictionary:
 		if reader.get_available_bytes()<FRIEND_ENTRY_HEADER_BYTES:
 			return {}
 		var actor:=reader.get_64()
-		var online:=reader.get_u8()
+		var state_flags:=reader.get_u8()
 		var name_count:=reader.get_u16()
-		if actor<=0 or online>1 or name_count<1 or name_count>PLAYER_IDENTITY_MAX_NAME_BYTES or reader.get_available_bytes()<name_count or seen.has(actor):
+		if actor<=0 or state_flags>3 or name_count<1 or name_count>PLAYER_IDENTITY_MAX_NAME_BYTES or reader.get_available_bytes()<name_count or seen.has(actor):
 			return {}
 		var name_result:=reader.get_data(name_count)
 		if name_result[0]!=OK:
@@ -2755,7 +2755,10 @@ static func decode_friend_snapshot(frame:PackedByteArray)->Dictionary:
 		if friend_name.to_utf8_buffer()!=name_bytes or friend_name.strip_edges().is_empty():
 			return {}
 		seen[actor]=true
-		friends.append({"actor_id":actor,"name":friend_name,"online":online==1})
+		friends.append({
+			"actor_id":actor,"name":friend_name,
+			"online":(state_flags&1)!=0,"ignored":(state_flags&2)!=0
+		})
 	if reader.get_available_bytes()!=0:
 		return {}
 	return {"receiver_map_epoch":epoch,"friends":friends}

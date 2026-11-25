@@ -158,6 +158,11 @@ var _friend_up:TextureButton
 var _friend_down:TextureButton
 var _friend_editor:=PopupPanel.new()
 var _friend_delete:TextureButton
+var _friend_ignore:TextureButton
+var _friend_list_button:TextureButton
+var _friend_ignore_list_button:TextureButton
+var _friend_show_ignored:=false
+var _friend_selected_actor:=0
 var _friend_rows:=VBoxContainer.new()
 var _friend_name_input:=LineEdit.new()
 var _friend_action:Button
@@ -816,20 +821,16 @@ func _build_friend_panel()->void:
 	_make_movable(friend_panel)
 	_background(friend_panel,"BG_FRIENDLIST_SMALL",friend_panel.size)
 	_texture_button(friend_panel,"FriendAdd","B_LIST_ADD",Vector2(5,7),Vector2(24,24),_open_friend_editor,"新增好友")
+	_friend_ignore=_texture_button(friend_panel,"FriendIgnore","B_LIST_TO_INGORE",Vector2(31,7),Vector2(24,24),_toggle_selected_friend_ignore,"移至黑名單")
 	_friend_delete=_texture_button(friend_panel,"FriendDelete","B_LIST_DEL",Vector2(71,7),Vector2(24,24),_delete_selected_friend,"移除選取的好友")
-	for item in [
-		["FriendIgnore","B_LIST_TO_INGORE",Vector2(31,7),"黑名單尚未接通"],
-		["FriendEdit","B_LIST_EDIT",Vector2(97,7),"好友備註尚未接通"],
-		["FriendList","B_LIST_FRIENDLIST",Vector2(128,7),"好友清單"],
-		["IgnoreList","B_LIST_IGNORELIST",Vector2(154,7),"黑名單尚未接通"],
-		["FriendExpand","ZONESCREEN",Vector2(183,6),"大型好友清單尚未接通"]]:
-		var button:=_texture_button(friend_panel,item[0],item[1],item[2],Vector2(17,17) if item[0]=="FriendExpand" else Vector2(24,24),Callable(),item[3])
-		button.disabled=true
-		button.texture_disabled=_tex(item[1]+"_0")
-	var friend_list_button:=friend_panel.get_node("FriendList") as TextureButton
-	friend_list_button.disabled=false
-	friend_list_button.pressed.connect(_refresh_friend_server)
-	friend_list_button.tooltip_text="重新整理好友清單"
+	var friend_edit:=_texture_button(friend_panel,"FriendEdit","B_LIST_EDIT",Vector2(97,7),Vector2(24,24),Callable(),"好友備註尚未接通")
+	friend_edit.disabled=true
+	friend_edit.texture_disabled=_tex("B_LIST_EDIT_0")
+	_friend_list_button=_texture_button(friend_panel,"FriendList","B_LIST_FRIENDLIST",Vector2(128,7),Vector2(24,24),_show_friend_list,"好友清單")
+	_friend_ignore_list_button=_texture_button(friend_panel,"IgnoreList","B_LIST_IGNORELIST",Vector2(154,7),Vector2(24,24),_show_ignore_list,"黑名單")
+	var friend_expand:=_texture_button(friend_panel,"FriendExpand","ZONESCREEN",Vector2(183,6),Vector2(17,17),Callable(),"大型好友清單尚未接通")
+	friend_expand.disabled=true
+	friend_expand.texture_disabled=_tex("ZONESCREEN_0")
 	_friend_scroll=ScrollContainer.new()
 	_friend_scroll.name="FriendScroll"
 	_friend_scroll.position=Vector2(9,36)
@@ -907,9 +908,36 @@ func _refresh_friend_server()->void:
 	if _panel!=null and _panel.session!=null:
 		_panel.session.friend_refresh()
 
+func _show_friend_list()->void:
+	_friend_show_ignored=false
+	_friend_selected_actor=0
+	_refresh_friend_server()
+	_refresh_friends()
+
+func _show_ignore_list()->void:
+	_friend_show_ignored=true
+	_friend_selected_actor=0
+	_refresh_friend_server()
+	_refresh_friends()
+
+func _toggle_selected_friend_ignore()->void:
+	if _panel==null or _panel.session==null or _friend_selected_actor<=0:
+		return
+	var queued:bool
+	if _friend_show_ignored:
+		queued=_panel.session.friend_restore(_friend_selected_actor)
+	else:
+		queued=_panel.session.friend_ignore(_friend_selected_actor)
+	if queued:
+		_friend_selected_actor=0
+		_update_friend_action()
+
 func _delete_selected_friend()->void:
-	if _friend_actor_for_name(_friend_name_input.text)>0:
-		_friend_action_pressed()
+	if _friend_show_ignored or _friend_selected_actor<=0 or _panel==null or _panel.session==null:
+		return
+	if _panel.session.friend_remove(_friend_selected_actor):
+		_friend_selected_actor=0
+		_update_friend_action()
 
 func _style_friend_row(button:Button)->void:
 	button.custom_minimum_size=Vector2(150,15)
@@ -1452,7 +1480,7 @@ func apply_snapshot(snapshot:Dictionary)->void:
 	_refresh_quest()
 	if _social_snapshot_changed("chat",["chat_messages"]):
 		_refresh_chat_history()
-	if _social_snapshot_changed("friends",["friends","pending_friend_sequence","pending_friend_invite"]):
+	if _social_snapshot_changed("friends",["friends","ignored_friends","pending_friend_sequence","pending_friend_invite"]):
 		_refresh_friends()
 	_refresh_player_shop()
 	_refresh_storage()
@@ -1912,23 +1940,28 @@ func _refresh_chat_history()->void:
 
 func _refresh_friends()->void:
 	_clear_rows(_friend_rows)
-	var friends:Dictionary=_stats.get("friends",{})
-	var ordered:Array=friends.keys()
+	var entries:Dictionary=_stats.get("ignored_friends",{}) if _friend_show_ignored else _stats.get("friends",{})
+	if _friend_selected_actor>0 and not entries.has(_friend_selected_actor):
+		_friend_selected_actor=0
+	var ordered:Array=entries.keys()
 	ordered.sort_custom(func(a,b):
-		var left:Dictionary=friends[a]
-		var right:Dictionary=friends[b]
-		var lo:=bool(left.get("online",false))
-		var ro:=bool(right.get("online",false))
-		if lo!=ro:return lo and not ro
+		var left:Dictionary=entries[a]
+		var right:Dictionary=entries[b]
+		if not _friend_show_ignored:
+			var lo:=bool(left.get("online",false))
+			var ro:=bool(right.get("online",false))
+			if lo!=ro:return lo and not ro
 		return str(left.get("name",""))<str(right.get("name","")))
 	for raw_actor in ordered:
 		var actor_id:=int(raw_actor)
-		var entry:Dictionary=friends[raw_actor]
+		var entry:Dictionary=entries[raw_actor]
 		var friend_name:=str(entry.get("name","玩家 %d"%actor_id))
-		var prefix:="● " if bool(entry.get("online",false)) else "○ "
-		_style_friend_row(_classic_row(_friend_rows,prefix+friend_name,15.0,_select_friend.bind(friend_name)))
+		var prefix:="" if _friend_show_ignored else ("● " if bool(entry.get("online",false)) else "○ ")
+		_style_friend_row(_classic_row(
+			_friend_rows,prefix+friend_name,15.0,_select_friend.bind(actor_id,friend_name)))
 	if ordered.is_empty():
-		_style_friend_row(_classic_row(_friend_rows,"尚無好友",15.0))
+		_style_friend_row(_classic_row(
+			_friend_rows,"黑名單為空" if _friend_show_ignored else "尚無好友",15.0))
 	_update_friend_action()
 	_sync_friend_question()
 	_update_friend_scroll_buttons.call_deferred()
@@ -1980,7 +2013,8 @@ func _friend_actor_for_name(target_name:String)->int:
 	return 0
 
 
-func _select_friend(friend_name:String)->void:
+func _select_friend(actor_id:int,friend_name:String)->void:
+	_friend_selected_actor=actor_id
 	_friend_name_input.text=friend_name
 	_friend_name_input.caret_column=friend_name.length()
 	_update_friend_action()
@@ -1989,10 +2023,15 @@ func _select_friend(friend_name:String)->void:
 func _update_friend_action()->void:
 	var clean:=_friend_name_input.text.strip_edges()
 	var actor:=_friend_actor_for_name(clean)
+	var pending:=int(_stats.get("pending_friend_sequence",0))!=0
 	_friend_action.text="移除" if actor>0 else "新增"
 	_friend_action.tooltip_text="移除好友" if actor>0 else "新增好友"
-	_friend_action.disabled=clean.is_empty() or int(_stats.get("pending_friend_sequence",0))!=0
-	if _friend_delete!=null:_friend_delete.disabled=actor<=0 or int(_stats.get("pending_friend_sequence",0))!=0
+	_friend_action.disabled=clean.is_empty() or pending
+	if _friend_delete!=null:
+		_friend_delete.disabled=_friend_show_ignored or _friend_selected_actor<=0 or pending
+	if _friend_ignore!=null:
+		_friend_ignore.disabled=_friend_selected_actor<=0 or pending
+		_friend_ignore.tooltip_text="解除黑名單" if _friend_show_ignored else "移至黑名單"
 
 
 func _friend_action_pressed()->void:

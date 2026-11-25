@@ -12,30 +12,34 @@ namespace SGTest.Server.Chat;
 /// </summary>
 public static class ChatRouting
 {
-    public static Task RouteAsync(TrustedChatCommand request,
-        WorldResultRouter router, PartyCoordinator? parties)
+    public static async Task RouteAsync(TrustedChatCommand request,
+        WorldResultRouter router,PartyCoordinator? parties,
+        Func<long,long,Task<bool>>? isIgnored=null)
     {
         var sender=new ConnectionBinding(
             request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
         if(!router.IsCurrentBinding(sender)||
            !router.TryGetPlayerIdentity(
                request.ActorId,request.ConnectionEpoch,out var identity))
-            return Task.CompletedTask;
+            return;
 
         if(request.Channel==ChatChannel.World)
         {
             const int worldChannelMinimumLevel=10; // Old server chat.cfg: [WorldChannel] lvllimit=10
             if(request.PlayerLevel<worldChannelMinimumLevel)
-                return Task.CompletedTask;
+                return;
 
             foreach(var recipient in router.SnapshotActiveBindings())
             {
+                bool self=recipient==sender;
+                if(!self&&isIgnored is not null&&
+                   await isIgnored(recipient.ActorId,request.ActorId).ConfigureAwait(false))
+                    continue;
                 var delivery=new ChatDeliveryWire(
                     recipient.MapEpoch,request.ActorId,request.ConnectionEpoch,
                     request.ChatSequence,ChatChannel.World,request.BubbleType,
                     identity.DisplayName,request.Message);
                 var queued=router.QueueChatDelivery(recipient,delivery);
-                bool self=recipient==sender;
                 if(queued!=GatewaySendStatus.Enqueued)
                 {
                     if(self)
@@ -44,7 +48,7 @@ public static class ChatRouting
                     router.CloseCurrentBinding(recipient);
                 }
             }
-            return Task.CompletedTask;
+            return;
         }
 
         if(request.Channel==ChatChannel.Nearby)
@@ -56,6 +60,9 @@ public static class ChatRouting
                    (!router.IsVisibleActor(sender,recipient)||
                     !router.IsVisibleActor(recipient,sender)))
                     continue;
+                if(!self&&isIgnored is not null&&
+                   await isIgnored(recipient.ActorId,request.ActorId).ConfigureAwait(false))
+                    continue;
                 var delivery=new ChatDeliveryWire(
                     recipient.MapEpoch,request.ActorId,request.ConnectionEpoch,
                     request.ChatSequence,request.Channel,request.BubbleType,
@@ -65,23 +72,26 @@ public static class ChatRouting
                     throw new IOException(
                         "Reliable self nearby-chat delivery could not be queued: "+queued);
             }
-            return Task.CompletedTask;
+            return;
         }
 
         if(request.Channel==ChatChannel.Party)
         {
-            if(parties is null)return Task.CompletedTask;
+            if(parties is null)return;
             if(!parties.TryGetRecipients(sender,router,out var recipients))
-                return Task.CompletedTask;
+                return;
             foreach(var recipient in recipients)
             {
+                bool self=recipient.ActorId==request.ActorId&&
+                    recipient.ConnectionEpoch==request.ConnectionEpoch;
+                if(!self&&isIgnored is not null&&
+                   await isIgnored(recipient.ActorId,request.ActorId).ConfigureAwait(false))
+                    continue;
                 var delivery=new ChatDeliveryWire(
                     recipient.MapEpoch,request.ActorId,request.ConnectionEpoch,
                     request.ChatSequence,ChatChannel.Party,request.BubbleType,
                     identity.DisplayName,request.Message);
                 var queued=router.QueueChatDelivery(recipient,delivery);
-                bool self=recipient.ActorId==request.ActorId&&
-                    recipient.ConnectionEpoch==request.ConnectionEpoch;
                 if(queued!=GatewaySendStatus.Enqueued)
                 {
                     if(self)
@@ -90,7 +100,7 @@ public static class ChatRouting
                     router.CloseCurrentBinding(recipient);
                 }
             }
-            return Task.CompletedTask;
+            return;
         }
 
         bool whisperByName=!string.IsNullOrEmpty(request.TargetName);
@@ -124,6 +134,14 @@ public static class ChatRouting
                 WhisperResultStatus.TargetUnavailable,request.TargetActorId,
                 0,string.Empty);
         }
+        else if(isIgnored is not null&&
+                await isIgnored(target.ActorId,request.ActorId).ConfigureAwait(false))
+        {
+            result=new(
+                request.RequestMapEpoch,request.ChatSequence,
+                WhisperResultStatus.TargetUnavailable,request.TargetActorId,
+                0,string.Empty);
+        }
         else
         {
             var delivery=new ChatDeliveryWire(
@@ -147,6 +165,6 @@ public static class ChatRouting
             throw new IOException(
                 "Reliable whisper sender result could not be queued: "+
                 resultQueued);
-        return Task.CompletedTask;
+        return;
     }
 }

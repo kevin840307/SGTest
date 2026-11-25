@@ -11,7 +11,7 @@ public static partial class WireProtocol
         try{name=StrictUtf8.GetBytes(value.TargetName??string.Empty);}
         catch(EncoderFallbackException){throw new ArgumentOutOfRangeException(nameof(value));}
         if(value.MapEpoch<=0||value.FriendSequence==0||
-           value.Action is <FriendCommandAction.Add or >FriendCommandAction.Reject||
+           value.Action is <FriendCommandAction.Add or >FriendCommandAction.Restore||
            value.TargetActorId<0||name.Length>PlayerIdentityMaxNameBytes)
             throw new ArgumentOutOfRangeException(nameof(value));
         switch(value.Action)
@@ -28,6 +28,8 @@ public static partial class WireProtocol
             case FriendCommandAction.Remove:
             case FriendCommandAction.Accept:
             case FriendCommandAction.Reject:
+            case FriendCommandAction.Ignore:
+            case FriendCommandAction.Restore:
                 if(value.TargetActorId<=0||name.Length!=0)
                     throw new ArgumentOutOfRangeException(nameof(value));
                 break;
@@ -73,7 +75,7 @@ public static partial class WireProtocol
     public static byte[] EncodeFriendResult(FriendResultWire value)
     {
         if(value.MapEpoch<=0||value.FriendSequence==0||
-           value.Action is <FriendCommandAction.Add or >FriendCommandAction.Reject||
+           value.Action is <FriendCommandAction.Add or >FriendCommandAction.Restore||
            value.Status is <FriendResultStatus.Success or >FriendResultStatus.TargetHasPendingInvite||
            value.TargetActorId<0)
             throw new ArgumentOutOfRangeException(nameof(value));
@@ -129,7 +131,8 @@ public static partial class WireProtocol
         {
             BinaryPrimitives.WriteInt64LittleEndian(
                 frame.AsSpan(offset,8),item.Entry.CharacterId);
-            frame[offset+8]=item.Entry.IsOnline?(byte)1:(byte)0;
+            frame[offset+8]=(byte)(
+                (item.Entry.IsOnline?1:0)|(item.Entry.IsIgnored?2:0));
             BinaryPrimitives.WriteUInt16LittleEndian(
                 frame.AsSpan(offset+9,2),(ushort)item.Name.Length);
             item.Name.CopyTo(frame.AsSpan(offset+FriendEntryHeaderBytes));
@@ -157,17 +160,18 @@ public static partial class WireProtocol
             {
                 if(offset+FriendEntryHeaderBytes>frame.Length)return false;
                 long character=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(offset,8));
-                byte online=frame[offset+8];
+                byte state=frame[offset+8];
                 int nameLength=BinaryPrimitives.ReadUInt16LittleEndian(
                     frame.Slice(offset+9,2));
-                if(character<=0||online>1||
+                if(character<=0||state>3||
                    nameLength is <1 or >PlayerIdentityMaxNameBytes||
                    offset+FriendEntryHeaderBytes+nameLength>frame.Length||
                    !ids.Add(character))
                     return false;
                 string name=StrictUtf8.GetString(
                     frame.Slice(offset+FriendEntryHeaderBytes,nameLength));
-                friends.Add(new(character,name,online==1));
+                friends.Add(new(
+                    character,name,(state&1)!=0,(state&2)!=0));
                 offset+=FriendEntryHeaderBytes+nameLength;
             }
             if(offset!=frame.Length)return false;

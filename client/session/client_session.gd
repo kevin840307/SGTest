@@ -524,6 +524,16 @@ func friend_remove(target_actor_id:int)->bool:
 	return _queue_friend_intent(2,target_actor_id,"",current)
 
 
+func friend_ignore(target_actor_id:int)->bool:
+	var current:=snapshot()
+	return _queue_friend_intent(6,target_actor_id,"",current)
+
+
+func friend_restore(target_actor_id:int)->bool:
+	var current:=snapshot()
+	return _queue_friend_intent(7,target_actor_id,"",current)
+
+
 func friend_refresh()->bool:
 	var current:=snapshot()
 	return _queue_friend_intent(3,0,"",current)
@@ -775,6 +785,7 @@ func _queue_friend_intent(
 		return false
 	var actor:=int(current.get("actor_id",0))
 	var friends:Dictionary=current.get("friends",{})
+	var ignored_friends:Dictionary=current.get("ignored_friends",{})
 	match action:
 		1:
 			if (target_actor_id>0)==(not clean.is_empty()) or target_actor_id==actor:
@@ -788,6 +799,12 @@ func _queue_friend_intent(
 		4,5:
 			var invite:Dictionary=current.get("pending_friend_invite",{})
 			if target_actor_id<=0 or target_actor_id==actor or not clean.is_empty() or invite.is_empty() or int(invite.get("actor_id",0))!=target_actor_id:
+				return false
+		6:
+			if target_actor_id<=0 or target_actor_id==actor or not clean.is_empty() or not friends.has(target_actor_id):
+				return false
+		7:
+			if target_actor_id<=0 or target_actor_id==actor or not clean.is_empty() or not ignored_friends.has(target_actor_id):
 				return false
 		_:
 			return false

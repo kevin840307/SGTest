@@ -29,9 +29,11 @@ public sealed class FriendCoordinator
         try
         {
             var friends=await _identity.GetFriendsAsync(binding.ActorId).ConfigureAwait(false);
-            if(friends.Count>0)
+            var ignored=await _identity.GetIgnoredFriendsAsync(binding.ActorId).ConfigureAwait(false);
+            if(friends.Count>0||ignored.Count>0)
                 await QueueSnapshotAsync(binding,router).ConfigureAwait(false);
-            foreach(var friend in friends)
+            var relations=await _identity.GetFriendRelationsAsync(binding.ActorId).ConfigureAwait(false);
+            foreach(var friend in relations)
                 if(router.TryGetCurrentBinding(friend.CharacterId,out var peer))
                     await QueueSnapshotAsync(peer,router).ConfigureAwait(false);
         }
@@ -43,8 +45,8 @@ public sealed class FriendCoordinator
         await _serial.WaitAsync().ConfigureAwait(false);
         try
         {
-            var friends=await _identity.GetFriendsAsync(binding.ActorId).ConfigureAwait(false);
-            foreach(var friend in friends)
+            var relations=await _identity.GetFriendRelationsAsync(binding.ActorId).ConfigureAwait(false);
+            foreach(var friend in relations)
                 if(router.TryGetCurrentBinding(friend.CharacterId,out var peer))
                     await QueueSnapshotAsync(
                         peer,router,binding.ActorId,failOnBackpressure:false)
@@ -112,6 +114,24 @@ public sealed class FriendCoordinator
                     QueueResult(request,FriendResultStatus.Success,0,router);
                     await QueueSnapshotAsync(sender,router).ConfigureAwait(false);
                     return;
+                case FriendCommandAction.Ignore:
+                {
+                    var status=await _identity.IgnoreFriendAsync(
+                        request.ActorId,request.TargetActorId).ConfigureAwait(false);
+                    QueueResult(request,(FriendResultStatus)status,request.TargetActorId,router);
+                    if(status==FriendStoreStatus.Success)
+                        await QueueSnapshotAsync(sender,router).ConfigureAwait(false);
+                    return;
+                }
+                case FriendCommandAction.Restore:
+                {
+                    var status=await _identity.RestoreIgnoredFriendAsync(
+                        request.ActorId,request.TargetActorId).ConfigureAwait(false);
+                    QueueResult(request,(FriendResultStatus)status,request.TargetActorId,router);
+                    if(status==FriendStoreStatus.Success)
+                        await QueueSnapshotAsync(sender,router).ConfigureAwait(false);
+                    return;
+                }
                 default:
                     QueueResult(request,FriendResultStatus.Conflict,request.TargetActorId,router);
                     return;
@@ -203,6 +223,9 @@ public sealed class FriendCoordinator
         await QueueSnapshotAsync(requester,router).ConfigureAwait(false);
     }
 
+    public Task<bool> IsIgnoredAsync(long ownerActorId,long targetActorId)=>
+        _identity.IsIgnoredAsync(ownerActorId,targetActorId);
+
     private static bool SameConnection(ConnectionBinding left,ConnectionBinding right)=>
         left.ActorId==right.ActorId&&left.ConnectionEpoch==right.ConnectionEpoch;
 
@@ -232,12 +255,14 @@ public sealed class FriendCoordinator
         bool failOnBackpressure=true)
     {
         var friends=await _identity.GetFriendsAsync(recipient.ActorId).ConfigureAwait(false);
+        var ignored=await _identity.GetIgnoredFriendsAsync(recipient.ActorId).ConfigureAwait(false);
         var entries=friends.Select(friend=>
         {
             bool online=friend.CharacterId!=forcedOfflineActorId&&
                 router.TryGetCurrentBinding(friend.CharacterId,out _);
             return new FriendEntryWire(friend.CharacterId,friend.Name,online);
-        }).ToArray();
+        }).Concat(ignored.Select(friend=>
+            new FriendEntryWire(friend.CharacterId,friend.Name,false,true))).ToArray();
         var status=router.QueueFriendSnapshot(
             recipient,new FriendSnapshotWire(recipient.MapEpoch,entries));
         if(status==GatewaySendStatus.Backpressured&&failOnBackpressure)

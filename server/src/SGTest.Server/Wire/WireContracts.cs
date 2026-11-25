@@ -166,7 +166,7 @@ public enum ClanResultStatus : byte
     NameTaken=4,InvalidName=5,ClanFull=6,Conflict=7,
     NotLeader=8,TargetNotMember=9,CannotTargetSelf=10,InvalidAnnouncement=11
 }
-public enum FriendCommandAction : byte { Add=1, Remove=2, Refresh=3, Accept=4, Reject=5 }
+public enum FriendCommandAction : byte { Add=1, Remove=2, Refresh=3, Accept=4, Reject=5, Ignore=6, Restore=7 }
 public enum FriendResultStatus : byte
 {
     Success=0,TargetNotFound=1,CannotTargetSelf=2,
@@ -737,7 +737,8 @@ public readonly record struct FriendCommandWire(
 public readonly record struct FriendResultWire(
     long MapEpoch,uint FriendSequence,FriendCommandAction Action,
     FriendResultStatus Status,long TargetActorId);
-public readonly record struct FriendEntryWire(long CharacterId,string Name,bool IsOnline);
+public readonly record struct FriendEntryWire(
+    long CharacterId,string Name,bool IsOnline,bool IsIgnored=false);
 public sealed record FriendSnapshotWire(
     long ReceiverMapEpoch,IReadOnlyList<FriendEntryWire> Friends);
 public readonly record struct FriendInviteWire(

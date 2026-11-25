@@ -312,7 +312,9 @@ public sealed partial class IdentitySessionAuthorization
                 handlePvpSkill:pvpCombat.HandleSkillAsync,
                 handleGmPvpName:pvpStates.HandleGmNameAsync,
                 handlePlayerShop: playerShop is null ? null : playerShop.HandleAsync,
-                handleChat:request=>ChatRouting.RouteAsync(request,router,_parties),
+                handleChat:request=>ChatRouting.RouteAsync(
+                    request,router,_parties,
+                    (owner,target)=>_identity.IsIgnoredAsync(owner,target)),
                 handleParty: _parties is null ? null : request => _parties.HandleAsync(request, router),
                 handleClan: _clans is null ? null : request => _clans.HandleAsync(request, router),
                 handleFriend: _friends is null ? null : request => _friends.HandleAsync(request, router),
