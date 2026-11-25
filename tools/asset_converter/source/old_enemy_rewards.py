@@ -114,6 +114,40 @@ def parse_enemy_catalog(text: str) -> dict[int, tuple[int, int]]:
     return definitions
 
 
+def parse_enemy_behavior_evidence(text: str, *, required_enemy_ids: set[int]) -> dict[int, dict]:
+    """Read only confirmed definition fields, not an executable AI profile.
+
+    LoadNewCSVData 0x100725C0..0x100725DA writes column 10 to WORD
+    property 13 (AttLen). 0x10072722..0x10072748 multiplies column 19
+    by 1000 before writing DWORD property 3 (RebornTime). The property
+    names are confirmed by CDEnemyWORDStr/CDEnemyDWORDStr at 0x100ADF24
+    and 0x100ADF78. Neither field alone proves SGTest runtime scheduling.
+    """
+    result: dict[int, dict] = {}
+    for row in csv.reader(text.splitlines()):
+        if not row or all(not value.strip() for value in row):
+            continue
+        enemy_id = _parse_int(row[0], label="EnemyId", minimum=1,
+                              maximum=MAX_ENEMY_ID)
+        if enemy_id not in required_enemy_ids:
+            continue
+        if enemy_id in result:
+            raise ValueError(f"duplicate Enemy_Data.csv EnemyId {enemy_id}")
+        fields = {}
+        for column, name, maximum, multiplier in (
+            (10, "attack_length", MAX_WORD, 1),
+            (19, "reborn_time_ms", MAX_DWORD // 1000, 1000),
+        ):
+            if len(row) > column and row[column].strip():
+                fields[name] = _parse_int(
+                    row[column], label=f"EnemyId {enemy_id} {name}",
+                    minimum=0, maximum=maximum) * multiplier
+        result[enemy_id] = fields
+    if required_enemy_ids.difference(result):
+        raise ValueError("missing Enemy_Data.csv behavior evidence definition")
+    return result
+
+
 def read_old_enemy_reward_catalog(
     enemy_data_csv: Path,
     *,
@@ -172,6 +206,8 @@ def read_old_enemy_combat_catalog(
     missing = sorted(required_enemy_ids.difference(definitions))
     if missing:
         raise ValueError(f"Enemy_Data.csv missing required EnemyIds: {missing}")
+    behavior_by_enemy = parse_enemy_behavior_evidence(
+        catalog_text, required_enemy_ids=required_enemy_ids)
 
     selectors = sorted({
         definitions[enemy_id][1]
@@ -259,6 +295,8 @@ def read_old_enemy_combat_catalog(
             "attribute_table": selector,
             **stable,
         }
+        if behavior_by_enemy[enemy_id]:
+            resolved[enemy_id]["definition_behavior"] = behavior_by_enemy[enemy_id]
         if ambiguous:
             resolved[enemy_id]["ambiguous_fields"] = ambiguous
 

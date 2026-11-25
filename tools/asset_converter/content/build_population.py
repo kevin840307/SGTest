@@ -83,6 +83,17 @@ def compile_spawn_evidence(source: Path, server_dat: Path, map_id: int) -> dict:
                         evidence['source_columns'][field] = column
                 if row.get('ambiguous_fields'):
                     evidence['ambiguous_fields'] = row['ambiguous_fields']
+                if row.get('definition_behavior'):
+                    behavior = row['definition_behavior']
+                    definition['source_behavior_evidence'] = {
+                        **behavior,
+                        'source': 'Enemy/Enemy_Data.csv',
+                        'source_columns': {
+                            field: column for field, column in
+                            (('attack_length', 10), ('reborn_time_ms', 19))
+                            if field in behavior
+                        },
+                    }
             else:
                 evidence['level_key'] = evidence.pop('level')
                 evidence['source_columns'] = {'level_key': 3}

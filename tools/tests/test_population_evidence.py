@@ -76,6 +76,29 @@ class PopulationEvidenceTests(unittest.TestCase):
             self.assertEqual(result['sources']['Enemy/EN_Att01.csv'],
                              hashlib.sha256((server/'Enemy/EN_Att01.csv').read_bytes()).hexdigest())
 
+    def test_definition_attack_length_and_reborn_time_are_not_runtime_stats(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source, server = self.fixture(Path(directory))
+            path = server/'Enemy/Enemy_Data.csv'
+            path.write_bytes(b'1,1,Enemy One,3,1,,EN010A,0,1,40,150,4,0,400,B,0,2,1,800,15\n')
+            with patch('asset_converter.content.build_population.compile_definition',
+                       side_effect=self.fake_animation):
+                result = compile_spawn_evidence(source, server, 13)
+                definition = result['definitions'][0]
+                self.assertEqual(definition['source_behavior_evidence'], {
+                    'attack_length': 150, 'reborn_time_ms': 15000,
+                    'source': 'Enemy/Enemy_Data.csv',
+                    'source_columns': {'attack_length': 10, 'reborn_time_ms': 19},
+                })
+                self.assertFalse(result['runtime_implemented'])
+                self.assertFalse(definition['combat_stats_verified'])
+                path.write_bytes(b'1,1,Enemy One,3,1,,EN010A,0,1,40,150,4,0,400,B,0,2,1,800,\n')
+                partial = compile_spawn_evidence(source, server, 13)
+                self.assertNotIn('reborn_time_ms', partial['definitions'][0]['source_behavior_evidence'])
+                path.write_bytes(b'1,1,Enemy One,3,1,,EN010A,0,1,40,150,4,0,400,B,0,2,1,800,-1\n')
+                with self.assertRaisesRegex(ValueError, 'unsafe EnemyId 1 reborn_time_ms'):
+                    compile_spawn_evidence(source, server, 13)
+
     def test_conflicting_combat_field_is_marked_ambiguous_without_guessing(self):
         with tempfile.TemporaryDirectory() as directory:
             source, server = self.fixture(Path(directory))
