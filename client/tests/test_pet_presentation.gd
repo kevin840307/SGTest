@@ -151,7 +151,38 @@ func _initialize() -> void:
 		_fail("replacement generation retained old visual identity")
 		return
 
-	print("PET_PRESENTATION_PASS interpolation=true no_extrapolation=true generation=true visual_bridge=true attack_event=true remote_attack_visual=true source_timing=true")
+	# A valid delayed snapshot from an older map generation must not replace
+	# the current summoned pet or rewind its visual identity.
+	if (pets.apply_snapshot(first,560000)!=ERR_INVALID_DATA or
+		pets.count()!=1 or pets.position_at(1001,560000)!=Vector2(300.0,400.0) or
+		pets.unresolved_definition_ids()!=[7001]):
+		_fail("stale pet map generation replaced current summoned pet")
+		return
+
+	# A malformed second entry must not partially despawn the first pet,
+	# including when a newer map epoch is being admitted.
+	var invalid_pet := _entity(1002,5,303,7001,3,4,100.0,110.0)
+	invalid_pet.pet_uid = 0
+	var malformed := _snapshot(9,{1002:invalid_pet})
+	if (pets.apply_snapshot(malformed,570000)!=ERR_INVALID_DATA or
+		pets.count()!=1 or pets.position_at(1001,570000)!=Vector2(300.0,400.0)):
+		_fail("invalid new-epoch pet batch cleared the current AOI")
+		return
+	malformed = _snapshot(8,{1002:invalid_pet})
+	if (pets.apply_snapshot(malformed,580000)!=ERR_INVALID_DATA or
+		pets.count()!=1 or pets.position_at(1001,580000)!=Vector2(300.0,400.0)):
+		_fail("invalid same-epoch pet batch partially despawned current pet")
+		return
+	var duplicate_owner := _snapshot(8,{
+		1001:_entity(1001,5,202,7001,3,3,300.0,400.0),
+		"1001":_entity(1001,5,202,7001,3,3,20.0,40.0)
+	})
+	if (pets.apply_snapshot(duplicate_owner,590000)!=ERR_INVALID_DATA or
+		pets.count()!=1 or pets.position_at(1001,590000)!=Vector2(300.0,400.0)):
+		_fail("duplicate numeric/string owner aliases replaced authoritative pet")
+		return
+
+	print("PET_PRESENTATION_PASS interpolation=true no_extrapolation=true generation=true visual_bridge=true attack_event=true remote_attack_visual=true source_timing=true stale_epoch_rejected=true atomic_aoi=true")
 	quit(0)
 
 func _snapshot(map_epoch:int,entities:Dictionary)->Dictionary:

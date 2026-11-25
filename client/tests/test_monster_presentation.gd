@@ -194,6 +194,21 @@ func run() -> void:
 	check(draw.error==OK and commands.size()==1 and commands[0].actor_id=="monster:1001",
 		"monster did not enter common actor/scenery draw order")
 
+	# A delayed frame from the previous map generation must not replace the
+	# newer AOI, even if all its individual monster definitions are valid.
+	snapshot.map_epoch = 2
+	snapshot.monsters = {1002:another}
+	check(monsters.apply_snapshot(snapshot,1750000)==OK and
+		monsters.count()==1 and monsters.pick_living_at(Vector2(90,20),1750000)==1002,
+		"new generation did not replace monster AOI")
+	snapshot.map_epoch = 1
+	snapshot.monsters = {1001:revived}
+	check(monsters.apply_snapshot(snapshot,1800000)==ERR_INVALID_DATA and
+		monsters.count()==1 and monsters.pick_living_at(Vector2(90,20),1800000)==1002 and
+		monsters.pick_living_at(Vector2(31,20),1800000)==0,
+		"stale valid generation replaced the newer map monster AOI")
+	snapshot.map_epoch = 2
+
 	snapshot.monsters={}
 	check(monsters.apply_snapshot(snapshot,900000)==OK and monsters.count()==0,
 		"monster Despawn presentation retained actor")

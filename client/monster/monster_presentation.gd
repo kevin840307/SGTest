@@ -79,7 +79,8 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 		return ERR_INVALID_PARAMETER
 	var epoch := int(snapshot.map_epoch)
 	var map := int(snapshot.map_id)
-	if map != _map:
+	if map != _map or epoch < _epoch:
+		# Reject delayed map-generation snapshots before changing any AOI state.
 		return ERR_INVALID_DATA
 	var visible = snapshot.get("monsters",{})
 	if not visible is Dictionary:

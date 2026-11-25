@@ -92,24 +92,21 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 	if not bool(snapshot.get("world_ready",false)) or int(snapshot.get("map_epoch",0)) <= 0 or now_usec < 0:
 		return ERR_INVALID_PARAMETER
 	var incoming_epoch := int(snapshot.map_epoch)
-	if incoming_epoch != _epoch:
-		_pets.clear()
-		_epoch = incoming_epoch
-		_last_attack_sequence = 0
+	if incoming_epoch < _epoch:
+		return ERR_INVALID_DATA
 	var visible = snapshot.get("pet_entities",{})
 	if not visible is Dictionary:
 		return ERR_INVALID_DATA
 
-	for owner in _pets.keys():
-		if not visible.has(owner) and not visible.has(str(owner)):
-			_pets.erase(owner)
-
+	# Preflight every PetEntity before retiring an old map generation or
+	# despawning its AOI. A malformed later entry must reject the whole frame.
+	var validated: Dictionary = {}
 	for raw_owner in visible:
 		var value = visible[raw_owner]
 		if not value is Dictionary:
 			return ERR_INVALID_DATA
 		var owner := int(raw_owner)
-		if owner <= 0 or int(value.get("owner_actor_id",0)) != owner:
+		if owner <= 0 or validated.has(owner) or int(value.get("owner_actor_id",0)) != owner:
 			return ERR_INVALID_DATA
 		var pet_uid := int(value.get("pet_uid",0))
 		var definition_id := int(value.get("definition_id",0))
@@ -120,7 +117,31 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 		var position := Vector2(float(value.get("x",INF)),float(value.get("y",INF)))
 		if pet_uid <= 0 or definition_id <= 0 or evolution_id < 0 or evolution_id > 65535 or owner_connection_epoch <= 0 or owner_map_epoch <= 0 or server_tick < 0 or not position.is_finite():
 			return ERR_INVALID_DATA
+		var old: Dictionary = _pets.get(owner,{}) if incoming_epoch == _epoch else {}
+		if (not old.is_empty() and int(old.value.pet_uid) == pet_uid and
+			int(old.value.owner_connection_epoch) == owner_connection_epoch and
+			int(old.value.owner_map_epoch) == owner_map_epoch and
+			server_tick == int(old.value.server_tick) and
+			Vector2(float(old.value.x),float(old.value.y)) != position):
+			return ERR_INVALID_DATA
+		validated[owner] = {"value":value,"position":position,"server_tick":server_tick}
 
+	if incoming_epoch != _epoch:
+		_pets.clear()
+		_epoch = incoming_epoch
+		_last_attack_sequence = 0
+	for owner in _pets.keys():
+		if not validated.has(owner):
+			_pets.erase(owner)
+
+	for owner in validated:
+		var entry: Dictionary = validated[owner]
+		var value: Dictionary = entry.value
+		var pet_uid := int(value.pet_uid)
+		var owner_connection_epoch := int(value.owner_connection_epoch)
+		var owner_map_epoch := int(value.owner_map_epoch)
+		var server_tick := int(entry.server_tick)
+		var position: Vector2 = entry.position
 		var old: Dictionary = _pets.get(owner,{})
 		var same_generation := (
 			not old.is_empty() and
@@ -134,10 +155,8 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> Error:
 			if server_tick < old_tick:
 				continue
 			if server_tick == old_tick:
-				# UI publication can repeat the same immutable AOI entity many
-				# times between network frames. Do not create fake movement.
-				if Vector2(float(old.value.x),float(old.value.y)) != position:
-					return ERR_INVALID_DATA
+				# Preflight already checked immutable same-tick coordinates.
+				# Repeated publications must not create fake movement.
 				old.value = value.duplicate(true)
 				_pets[owner] = old
 				continue
