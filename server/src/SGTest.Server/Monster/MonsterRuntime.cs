@@ -336,7 +336,9 @@ public sealed class MonsterRuntime
         {
             monster.TargetActorId = attackerActorId;
             monster.ReturningHome = false;
-            monster.State = MonsterAiState.Chase;
+            // Damage can acquire aggro immediately, but only a successful
+            // movement step may publish the Chase/run animation.
+            monster.State = MonsterAiState.Idle;
         }
         return new(true, killed, applied, monster.Snapshot(MapId));
     }

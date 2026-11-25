@@ -19,6 +19,8 @@ internal static class MonsterRuntimeChecks
             () => WanderOnlyWhenMoving(root));
         Checks.Run("monster only publishes chasing animation when a legal step moves it",
             () => ChaseOnlyWhenMoving(root));
+        Checks.Run("monster damaged into aggro stays idle until a legal chase step",
+            () => DamageAggroOnlyChasesWhenMoving(root));
         Checks.Run("monster trusted damage owns death/respawn and AI budget is fair across 300 entities",
             () => DamageRespawnAndBudget(root));
         Checks.Run("monster respawn deadline is independent of AI cadence and budget",
@@ -237,6 +239,47 @@ internal static class MonsterRuntimeChecks
                        after.State == MonsterAiState.Idle &&
                        stopped.All(e => e.Kind != MonsterWorldEventKind.Move),
             "blocked target retained a stale chase animation after moving");
+    }
+
+    private static void DamageAggroOnlyChasesWhenMoving(string root)
+    {
+        string dir = Checks.Fixture(root, 221, 12, 12,
+            (x, y) => x == 4 && y != 6 ? (byte)7 : (byte)0);
+        var grid = BlockingGrid.Load(dir, 221);
+        string path = Path.Combine(dir, "population.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(Document(
+            221, true, [Spawn(0, 1, 24, 24)], [Definition(1,
+                moveStep: 12, aggro: 240, lose: 420, leash: 420,
+                attackRange: 28, wanderRadius: 0, wanderInterval: 100)])));
+        var runtime = new MonsterRuntime(grid,
+            MonsterPopulationCatalog.LoadVerified(path, 221, grid),
+            new(AiIntervalTicks: 1, MaxAiPerStep: 8,
+                MaxPathQueriesPerStep: 0));
+        var initial = runtime.SnapshotAll()[0];
+        var damaged = runtime.ApplyTrustedDamage(initial.EntityId, 42, 1, 0);
+        Checks.Require(damaged.Applied && !damaged.Killed &&
+                       damaged.Monster.TargetActorId == 42 &&
+                       damaged.Monster.CurrentHp == 99 &&
+                       damaged.Monster.X == initial.X &&
+                       damaged.Monster.Y == initial.Y &&
+                       damaged.Monster.State == MonsterAiState.Idle,
+            "taking damage started a chase animation before any movement");
+
+        var blockedTarget = new MonsterCombatTarget(42, 221, 136, 24, 100);
+        var blocked = runtime.Tick(1, [blockedTarget]);
+        Checks.Require(runtime.SnapshotAll()[0].State == MonsterAiState.Idle &&
+                       runtime.SnapshotAll()[0].TargetActorId == 42 &&
+                       blocked.All(e => e.Kind != MonsterWorldEventKind.Move &&
+                                        !(e.Kind == MonsterWorldEventKind.State &&
+                                          e.Monster.State == MonsterAiState.Chase)),
+            "blocked path started a chase despite retaining damaged aggro");
+
+        var moved = runtime.Tick(2, [blockedTarget with { X = 56 }]);
+        Checks.Require(moved.Any(e => e.Kind == MonsterWorldEventKind.Move) &&
+                       runtime.SnapshotAll()[0].State == MonsterAiState.Chase &&
+                       runtime.SnapshotAll()[0].X > initial.X &&
+                       runtime.SnapshotAll()[0].TargetActorId == 42,
+            "damaged monster did not chase when the target became reachable");
     }
 
     private static void WanderOnlyWhenMoving(string root)
