@@ -3,6 +3,7 @@
 立即實際開發。正式 C:\SGO\SRC\SGTest，https://github.com/kevin840307/SGTest，唯一 main。先讀最新版 AGENTS.md；v15 取代舊規則。
 
 1. Git/Session 安全同步，保護其他 WIP/程序/桌面/DB/port；真 P0、使用者指定優先。查 todo.txt、docs/FEATURE_MATRIX.md、docs/legacy_task_catalog_20261124/executable/README.md、EXECUTION_INDEX.csv，選未完成 UI-/GP- Task ID、讀直接相依/metadata。
+   每輪開局依 AGENTS.md §4 清理上一輪及更舊、已確認閒置的 SGTest 測試程序/可重建測試 EXE，釋放桌面/port；結束保存證據後關閉本輪測試程序並清暫存。保護正式 EXE、原版素材、DB/證據、活躍 Session/WIP、Scheduler；不因已確認舊殘留跳過實機。
 2. 三軌 UI 35% / 玩法 35% / 多人效能 30% 長期平衡；每輪完整主題、2～4 候選、3～5 實質 leaf 或整體畫面/流程、25～40 分鐘有效工作目標。每個切片 commit 後續作；兩輪同類非 P0 局部修補無玩家成果，重現完整流程或換軌。阻塞記錄後改做安全獨立項。
 3. 先驗正式角色 combat-locked 與最早未通可玩鏈。正常輸入→Server 權威/封包→畫面動畫/回饋→適用雙 Client/持久化。UI 整屏原 SPR/frame/rect/font/baseline/state/hitbox/拖曳/動畫，800×600 同 DPI Reference/Before/After + ROI/overlay/diff、幾何 ±1px。優先 HUD/背包/技能/人物/NPC，HK-only 保留切換、不移除地圖與 actors。
 4. 完整來源見 AGENTS.md §0/§3：UI_CONTROL_METADATA.json、SPR_FRAME_METADATA.json 首選，HK ITF/SPR/.lst/原始 PNG、Old Client/Server、Recovered/Recovered2、Paradise 截圖/原版 client、SGOAuto、正式 converter。參考唯讀，Godot MCP 優先實際工具，兩次失敗 fallback；真 Server + 可見 Windows Godot + 真鍵鼠才是實機。

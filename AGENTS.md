@@ -57,7 +57,12 @@
 
 禁止 reset --hard、clean -fd、force push、覆寫未知 WIP、另建長期 branch 或第二份正式 clone/worktree；測試使用普通 temp、獨立 DB/port/build output。保護其他 Session 程序及使用中的資料；高風險/不可逆另需授權。原圖、SPR/Data1、解包輸出、原版字型/光柵、截圖、反編譯全文、音效、帳密皆不提交 public Git；可提交解析程式、非私有 metadata 與證據摘要。private evidence 放 git-ignored 本機路徑（例如 .cache/ui-parity/），不無故清除仍可重用的證據。
 
-交付前 diff review，僅 commit 本輪及明確安全整合成果，fetch、非 force push main；確認 branch main、HEAD=origin/main、git rev-list --left-right --count main...origin/main 為 0 0；只清本輪自建且不再需要的暫存程序/檔案。工作樹有受保護 WIP 可保留並回報。
+交付前 diff review，僅 commit 本輪及明確安全整合成果，fetch、非 force push main；確認 branch main、HEAD=origin/main、git rev-list --left-right --count main...origin/main 為 0 0；依下列授權清理本輪及已確認的舊輪次測試資源。工作樹有受保護 WIP 可保留並回報。
+
+### 每輪測試資源清理（使用者已授權）
+- 開局必查上一輪/更舊 SGTest 測試 EXE、Godot 測試視窗、dotnet Host、Bot/Probe、PID/啟動時間/命令列/專案路徑/port/連線與 Session 使用狀態。確認是已結束輪次的閒置測試程序後，直接正常關閉；必要時僅停止已核對 PID 與身分的程序，確認視窗及 port 釋放，不把歷史殘留當作實機 blocker。使用中或身分不明者保護，不能只憑名稱或時間殺程序。
+- 可刪除已停止、無引用且可重新建置的上一輪/舊輪次專用測試 EXE/DLL/build output（限已確認的隔離 temp/.cache 測試目錄，逐路徑核對，不遞迴清整個 .cache）。禁止刪正式 Godot/遊戲/Server 執行檔、原版素材、DB、截圖/trace/證據、WIP、系統服務及 Scheduler/ChatGPT。
+- 每輪記錄自建測試 PID、啟動時間、用途、DB/port/輸出路徑；結束前保存驗收證據，再關閉本輪測試 Client/Server/Bot、確認釋放 port，移除不再使用的可重建暫存 EXE。若須留給下一輪，明確交接用途與身分；不得無故留常駐程序。
 
 ## 5. 風險分級驗收（不降品質、不重複做無關工作）
 
