@@ -44,10 +44,18 @@ var _character_raster_font:Font
 
 var stage:=Control.new()
 var hud:=Control.new()
-var menu:=Control.new()
+# HK persistent HUD groups are independent movable interfaces. The right-side
+# Command strip is intentionally excluded: its buttons must remain click-only.
+var status_panel:=Control.new()
+var minimap_panel:=Control.new()
+var hotkey_panel:=Control.new()
+var command_panel:=Control.new()
+var menu:=Control.new() # retained as a non-visible compatibility handle
 var secondary_menu:=Control.new()
 var chat_panel:=Control.new()
 var friend_panel:=Control.new()
+var _drag_target:Control
+var _drag_offset:=Vector2.ZERO
 var inventory: Control
 var character: Control
 var skill_window: Control
@@ -62,11 +70,29 @@ var repair_window: Control
 var trade_window: Control
 var dialog_window: Control
 var settings_window: Control
+var _settings_skin_label: Label
+var _settings_hint: Label
+var _skin_switch_visible:=false
 var _windows:Array[Control]=[]
 
-var _hp_label: Label
-var _mp_label: Label
-var _level_label: Label
+var _hp_label: RichTextLabel
+var _mp_label: RichTextLabel
+var _wp_label: RichTextLabel
+var _level_label: RichTextLabel
+var _exp_percent_label: RichTextLabel
+var _status_value_label: RichTextLabel
+var _hud_hp_clip:Control
+var _hud_mp_clip:Control
+var _hud_wp_clip:Control
+var _hud_exp_clip:Control
+var _hud_hp_fill:TextureRect
+var _hud_mp_fill:TextureRect
+var _hud_wp_fill:TextureRect
+var _hud_exp_fill:TextureRect
+var _hud_animated:Array[Dictionary]=[]
+var _hud_anim_frame:=-1
+var _map_title:Label
+var _map_coords:Label
 var _inventory_rows:=VBoxContainer.new()
 var _equipment_rows:=VBoxContainer.new()
 var _inventory_item_bg:TextureRect
@@ -181,11 +207,34 @@ func _classic_label(parent:Control,node_name:String,rect:Rect2,font_size:=11,cen
 	label.mouse_filter=Control.MOUSE_FILTER_IGNORE
 	label.vertical_alignment=VERTICAL_ALIGNMENT_CENTER
 	label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER if center else HORIZONTAL_ALIGNMENT_LEFT
+	if _character_raster_font!=null:
+		label.add_theme_font_override("font",_character_raster_font)
 	label.add_theme_font_size_override("font_size",font_size)
 	label.add_theme_color_override("font_color",Color("#f9f2d6"))
 	label.add_theme_color_override("font_shadow_color",Color(0,0,0,0.9))
 	label.add_theme_constant_override("shadow_offset_x",1)
 	label.add_theme_constant_override("shadow_offset_y",1)
+	parent.add_child(label)
+	return label
+
+func _itf_text(parent:Control,node_name:String,rect:Rect2,font_size:=9,center:=false)->RichTextLabel:
+	# RichTextLabel with fit_content=false has no intrinsic line-height minimum,
+	# so the decoded ITF rectangle remains authoritative even for 10/12px rows.
+	var label:=RichTextLabel.new()
+	label.name=node_name
+	label.position=rect.position
+	label.size=rect.size
+	label.fit_content=false
+	label.scroll_active=false
+	label.bbcode_enabled=false
+	label.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER if center else HORIZONTAL_ALIGNMENT_LEFT
+	label.vertical_alignment=VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_stylebox_override("normal",StyleBoxEmpty.new())
+	if _character_raster_font!=null:
+		label.add_theme_font_override("normal_font",_character_raster_font)
+	label.add_theme_font_size_override("normal_font_size",font_size)
+	label.add_theme_color_override("default_color",Color("#f9f2d6"))
 	parent.add_child(label)
 	return label
 
@@ -220,6 +269,49 @@ func _texture_button(parent:Control,node_name:String,art:String,position:Vector2
 	parent.add_child(button)
 	return button
 
+func _animated_progress(parent:Control,node_name:String,rect:Rect2,art:String,frame_count:int)->Dictionary:
+	var clip:=Control.new()
+	clip.name=node_name+"Clip"
+	clip.position=rect.position
+	clip.size=rect.size
+	clip.clip_contents=true
+	clip.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	parent.add_child(clip)
+	var fill:=TextureRect.new()
+	fill.name=node_name+"Fill"
+	fill.texture=_tex(art+"_0")
+	fill.size=rect.size
+	fill.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
+	fill.stretch_mode=TextureRect.STRETCH_SCALE
+	fill.texture_filter=CanvasItem.TEXTURE_FILTER_NEAREST
+	fill.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	clip.add_child(fill)
+	var row:={"clip":clip,"fill":fill,"art":art,"frames":frame_count,"width":rect.size.x,"height":rect.size.y}
+	_hud_animated.append(row)
+	return row
+
+func _set_progress(clip:Control,current:int,maximum:int)->void:
+	if clip==null:return
+	var full_width:=float(clip.get_meta("full_width",clip.size.x))
+	if not clip.has_meta("full_width"):
+		clip.set_meta("full_width",full_width)
+	var ratio:=0.0 if maximum<=0 else clampf(float(current)/float(maximum),0.0,1.0)
+	clip.size.x=full_width*ratio
+
+func _animate_status_bars()->void:
+	if not _active:return
+	var tick:=int(Time.get_ticks_msec()/70)
+	if tick==_hud_anim_frame:return
+	_hud_anim_frame=tick
+	for row in _hud_animated:
+		var frames:=int(row.frames)
+		if frames<=0:continue
+		var fill:TextureRect=row.fill
+		fill.texture=_tex("%s_%d"%[str(row.art),tick%frames])
+
+func _process(_delta:float)->void:
+	_animate_status_bars()
+
 func _transparent_line_edit(edit:LineEdit)->void:
 	var empty:=StyleBoxEmpty.new()
 	edit.add_theme_stylebox_override("normal",empty)
@@ -228,6 +320,8 @@ func _transparent_line_edit(edit:LineEdit)->void:
 	edit.add_theme_color_override("font_color",Color("#f9f2d6"))
 	edit.add_theme_color_override("font_placeholder_color",Color("#bda982"))
 	edit.add_theme_color_override("caret_color",Color.WHITE)
+	if _character_raster_font!=null:
+		edit.add_theme_font_override("font",_character_raster_font)
 	edit.add_theme_font_size_override("font_size",11)
 
 func _deferred_background(parent:Control,name:String,size:Vector2)->TextureRect:
@@ -249,82 +343,144 @@ func _ensure_window_art(window:Control)->void:
 		if child is TextureRect and child.has_meta("classic_art_name") and child.texture==null:
 			child.texture=_tex(str(child.get_meta("classic_art_name")))
 
+func _make_movable(control:Control)->void:
+	# Original HK interfaces are movable by pressing any non-interactive area.
+	# Child Buttons/LineEdits keep MOUSE_FILTER_STOP, so clicking them performs
+	# their action instead of beginning a drag.
+	control.mouse_filter=Control.MOUSE_FILTER_STOP
+	control.gui_input.connect(_movable_gui_input.bind(control))
+
+func _clamp_drag_position(control:Control,position:Vector2)->Vector2:
+	# Keep a small grab strip on-screen even for the source windows wider/taller
+	# than the currently visible viewport.
+	const GRAB:=24.0
+	return Vector2(
+		clampf(position.x,-control.size.x+GRAB,BASE_SIZE.x-GRAB),
+		clampf(position.y,-control.size.y+GRAB,BASE_SIZE.y-GRAB))
+
+func _movable_gui_input(event:InputEvent,control:Control)->void:
+	if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_drag_target=control
+			_drag_offset=stage.get_local_mouse_position()-control.position
+			var parent:=control.get_parent()
+			if parent!=null:
+				parent.move_child(control,parent.get_child_count()-1)
+			control.accept_event()
+		elif _drag_target==control:
+			_drag_target=null
+			control.accept_event()
+	elif event is InputEventMouseMotion and _drag_target==control:
+		control.position=_clamp_drag_position(control,stage.get_local_mouse_position()-_drag_offset)
+		control.accept_event()
+
 func _window(name:String,background:String,size:Vector2,position:Vector2)->Control:
 	var window:=Control.new()
 	window.name=name
 	window.position=position
 	window.size=size
-	window.mouse_filter=Control.MOUSE_FILTER_STOP
 	stage.add_child(window)
+	_make_movable(window)
 	_deferred_background(window,background,size)
 	_texture_button(window,"CloseWindow","CLOSESCREEN",Vector2(size.x-20,3),Vector2(17,17),window.hide,"關閉")
 	window.hide()
 	return window
 
 func _build_hud()->void:
-	var hp:=TextureRect.new()
-	hp.name="HpBarArt"
-	hp.texture=_tex("HPBAR")
-	hp.position=Vector2(4,502)
-	hp.size=Vector2(128,90)
-	hp.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
-	hp.stretch_mode=TextureRect.STRETCH_SCALE
-	hp.mouse_filter=Control.MOUSE_FILTER_IGNORE
-	hud.add_child(hp)
-	_level_label=_classic_label(hud,"Level",Rect2(37,505,72,15),11,false)
-	_hp_label=_classic_label(hud,"HP",Rect2(34,527,89,13),10,false)
-	_mp_label=_classic_label(hud,"MP",Rect2(34,543,89,13),10,false)
+	# 006_StatusLite.itf: keep every component in ITF-local coordinates.
+	status_panel.name="ClassicStatusLite"
+	status_panel.position=Vector2(1,518)
+	status_panel.size=Vector2(128,90)
+	hud.add_child(status_panel)
+	_make_movable(status_panel)
+	_background(status_panel,"HPBAR",status_panel.size)
+	var hp_row:=_animated_progress(status_panel,"HP",Rect2(24,20,92,10),"HP",16)
+	_hud_hp_clip=hp_row.clip;_hud_hp_fill=hp_row.fill
+	var mp_row:=_animated_progress(status_panel,"MP",Rect2(24,34,92,10),"MP",16)
+	_hud_mp_clip=mp_row.clip;_hud_mp_fill=mp_row.fill
+	var wp_row:=_animated_progress(status_panel,"WP",Rect2(24,48,92,10),"WP",18)
+	_hud_wp_clip=wp_row.clip;_hud_wp_fill=wp_row.fill
+	var exp_row:=_animated_progress(status_panel,"EXP",Rect2(24,80,92,4),"EXP",16)
+	_hud_exp_clip=exp_row.clip;_hud_exp_fill=exp_row.fill
+	_level_label=_itf_text(status_panel,"Level",Rect2(42,5,25,10),9,true)
+	_exp_percent_label=_itf_text(status_panel,"ExpPercent",Rect2(76,5,25,10),9,true)
+	_status_value_label=_itf_text(status_panel,"StatusValue",Rect2(27,64,87,10),9,true)
+	# CELProgressBar draws current/max over the HP/MP/WP bar itself. Mirror that
+	# instead of placing separate labels elsewhere on the HUD.
+	_hp_label=_itf_text(status_panel,"HPText",Rect2(24,20,92,10),8,true)
+	_mp_label=_itf_text(status_panel,"MPText",Rect2(24,34,92,10),8,true)
+	_wp_label=_itf_text(status_panel,"WPText",Rect2(24,48,92,10),8,true)
 
+	minimap_panel.name="ClassicMinimap"
+	minimap_panel.position=Vector2(647,7)
+	minimap_panel.size=Vector2(133,122)
+	hud.add_child(minimap_panel)
+	_make_movable(minimap_panel)
 	var minimap:=TextureRect.new()
 	minimap.name="MiniMap"
 	minimap.texture=_tex("MINIMAP_L")
-	minimap.position=Vector2(663,4)
-	minimap.size=Vector2(133,122)
+	minimap.size=minimap_panel.size
 	minimap.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
 	minimap.stretch_mode=TextureRect.STRETCH_SCALE
 	minimap.mouse_filter=Control.MOUSE_FILTER_IGNORE
-	hud.add_child(minimap)
+	minimap_panel.add_child(minimap)
 
+	# 007_HOTKEY_Yl.itf: keep the source 30x358 strip and every label/control
+	# at its decoded local rectangle. The previous 27.2px approximation was
+	# visibly wrong, especially F2/F3 and F10-F12.
+	hotkey_panel.name="ClassicHotkey"
+	hotkey_panel.position=Vector2(2,17)
+	hotkey_panel.size=Vector2(30,358)
+	hud.add_child(hotkey_panel)
+	_make_movable(hotkey_panel)
 	var hotkey:=TextureRect.new()
 	hotkey.name="HotkeyArt"
 	hotkey.texture=_tex("HOTKEY_LY")
-	hotkey.position=Vector2(2,5)
-	hotkey.size=Vector2(30,358)
+	hotkey.size=hotkey_panel.size
 	hotkey.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
 	hotkey.stretch_mode=TextureRect.STRETCH_SCALE
 	hotkey.mouse_filter=Control.MOUSE_FILTER_IGNORE
-	hud.add_child(hotkey)
+	hotkey_panel.add_child(hotkey)
+	_texture_button(hotkey_panel,"HotkeyPage1","OFFON",Vector2(3,4),Vector2(11,11),func():pass,"快捷列頁 1")
+	_texture_button(hotkey_panel,"HotkeyPage2","OFFON",Vector2(16,4),Vector2(11,11),func():pass,"快捷列頁 2")
+	var hotkey_rects:=[
+		Rect2(4,18,12,12),Rect2(4,47,12,12),Rect2(4,72,12,12),Rect2(4,99,12,12),
+		Rect2(4,126,12,12),Rect2(4,153,12,12),Rect2(4,180,12,12),Rect2(4,207,12,12),
+		Rect2(4,234,12,12),Rect2(4,261,18,12),Rect2(4,288,18,12),Rect2(4,315,18,12)]
 	for i in 12:
-		var hotkey_label:=_classic_label(hud,"Hotkey%d"%i,Rect2(3,11+float(i)*27.2,27,18),9,true)
+		var hotkey_label:=_itf_text(hotkey_panel,"Hotkey%d"%i,hotkey_rects[i],9,false)
 		hotkey_label.text="F%d"%(i+1)
+	_texture_button(hotkey_panel,"HotkeySizeToggle","HOTKEY_YS_B",Vector2(3,342),Vector2(24,13),func():pass,"切換快捷列大小")
 
+	# 021_COMMAND.itf: the right-side command strip is fixed/clickable, not draggable.
+	# Local control rects come from the decoded HK ITF; in particular the bag is
+	# B_BASIC_ITEM at (3,32,24,23), not the temporary bottom command row.
+	command_panel.name="ClassicCommand"
+	command_panel.position=Vector2(770,0)
+	command_panel.size=Vector2(30,249)
+	command_panel.mouse_filter=Control.MOUSE_FILTER_PASS
+	hud.add_child(command_panel)
 	var command:=TextureRect.new()
 	command.name="CommandArt"
 	command.texture=_tex("COMMAND")
-	command.position=Vector2(770,154)
-	command.size=Vector2(30,249)
+	command.size=command_panel.size
 	command.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
 	command.stretch_mode=TextureRect.STRETCH_SCALE
 	command.mouse_filter=Control.MOUSE_FILTER_IGNORE
-	hud.add_child(command)
+	command_panel.add_child(command)
 	secondary_menu.name="SecondaryCommandHitboxes"
-	secondary_menu.position=command.position
-	secondary_menu.size=command.size
-	hud.add_child(secondary_menu)
-	_texture_button(secondary_menu,"SkillCommand","B_BASIC_SKILL",Vector2(3,4),Vector2(24,23),func():_toggle(skill_window),"技能")
-	_texture_button(secondary_menu,"PartyCommand","B_COMMAND_TEAM",Vector2(3,35),Vector2(24,23),func():_toggle(party_window),"隊伍")
-	var secondary_actions=[
-		["QuestCommand","任務"],
-		["NpcShopCommand","NPC 商店"],
-		["StorageCommand","倉庫"],
-		["BankCommand","銀行"],
-		["RepairCommand","修理"],
-		["TradeCommand","交易"],
-	]
-	for i in secondary_actions.size():
-		var spec:Array=secondary_actions[i]
-		var hit:=_hit(secondary_menu,str(spec[0]),Rect2(0,66+float(i)*30.5,30,29),_secondary_menu_action.bind(i),str(spec[1]))
-		hit.modulate=Color(1,1,1,0.01)
+	secondary_menu.size=command_panel.size
+	secondary_menu.mouse_filter=Control.MOUSE_FILTER_PASS
+	command_panel.add_child(secondary_menu)
+	_texture_button(secondary_menu,"PlayerCommand","B_BASIC_PLAYER",Vector2(3,5),Vector2(24,23),func():_toggle(character),"人物狀態")
+	_texture_button(secondary_menu,"ItemCommand","B_BASIC_ITEM",Vector2(3,32),Vector2(24,23),func():_toggle(inventory),"包包")
+	_texture_button(secondary_menu,"SkillCommand","B_BASIC_SKILL",Vector2(3,59),Vector2(24,23),func():_toggle(skill_window),"技能")
+	_texture_button(secondary_menu,"PartyCommand","B_COMMAND_TEAM",Vector2(2,86),Vector2(24,23),func():_toggle(party_window),"隊伍")
+	_texture_button(secondary_menu,"GuildCommand","B_BASIC_GUILD",Vector2(3,113),Vector2(24,23),func():_toggle(clan_window),"戰團")
+	_texture_button(secondary_menu,"PlayerShopCommand","B_BASIC_PSHOP",Vector2(4,142),Vector2(21,19),func():_toggle(player_shop_window),"小商店")
+	_texture_button(secondary_menu,"QuestCommand","B_BASIC_QUEST",Vector2(2,169),Vector2(25,22),func():_toggle(quest_window),"任務")
+	_texture_button(secondary_menu,"GmCommand","B_BASIC_GM",Vector2(2,196),Vector2(25,22),func():pass,"GM")
+	_texture_button(secondary_menu,"SystemCommand","B_BASIC_SYSTEM",Vector2(2,222),Vector2(24,23),func():_toggle(settings_window),"系統")
 
 	chat_panel.name="ClassicChatPanel"
 	chat_panel.position=Vector2(130,484)
@@ -392,9 +548,12 @@ func _build_hud()->void:
 	_friend_rows.add_theme_constant_override("separation",0)
 	friend_scroll.add_child(_friend_rows)
 
+	# Compatibility handle for older tests/callers. The temporary bottom command
+	# bar is no longer player-visible; HK uses the fixed right-side 021_COMMAND.
 	menu.name="MainCommandBar"
 	menu.position=Vector2(615,489)
 	menu.size=Vector2(145,28)
+	menu.visible=false
 	hud.add_child(menu)
 	_texture_button(menu,"Menu0","B_BASIC_GUILD",Vector2(0,2),Vector2(24,23),_menu_action.bind(0),"戰團")
 	_texture_button(menu,"Menu1","B_BASIC_PLAYER",Vector2(29,2),Vector2(24,23),_menu_action.bind(1),"人物狀態")
@@ -681,22 +840,35 @@ func _build_trade()->void:
 	cancel.text="取消"
 
 func _build_dialog()->void:
-	dialog_window=_window("NpcDialogWindow","BG_NPC_MESSAGE_06",Vector2(570,428),Vector2(115,86))
-	_dialog_title=_classic_label(dialog_window,"DialogTitle",Rect2(40,34,490,28),13,true)
-	_dialog_title.add_theme_color_override("font_color",Color("#5b3514"))
-	_dialog_text=_classic_label(dialog_window,"DialogText",Rect2(48,72,474,126),11,false)
+	# 047_NPC_message.itf is a 399x172 image-backed interface. It does not use
+	# the temporary 570x428 BG_NPC_MESSAGE_06 layout or Godot-drawn panels.
+	dialog_window=Control.new()
+	dialog_window.name="NpcDialogWindow"
+	dialog_window.position=Vector2(201,214)
+	dialog_window.size=Vector2(399,172)
+	stage.add_child(dialog_window)
+	_make_movable(dialog_window)
+	_background(dialog_window,"BG_NPC_MESSAGE",dialog_window.size)
+	# Keep the compatibility title node for existing bindings, but the original
+	# 047 interface has no separate title control.
+	_dialog_title=_classic_label(dialog_window,"DialogTitle",Rect2(0,0,1,1),10,false)
+	_dialog_title.hide()
+	_dialog_text=_classic_label(dialog_window,"DialogText",Rect2(25,10,345,80),10,false)
 	_dialog_text.add_theme_color_override("font_color",Color("#5b3514"))
 	_dialog_text.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+	# Four 13px message areas at y=108/123/138/153. VBox separation 2 gives
+	# exactly those decoded ITF baselines without drawing replacement buttons.
 	_dialog_choices.name="DialogChoices"
-	_dialog_choices.position=Vector2(48,232)
-	_dialog_choices.size=Vector2(474,150)
-	_dialog_choices.add_theme_constant_override("separation",4)
+	_dialog_choices.position=Vector2(26,108)
+	_dialog_choices.size=Vector2(345,58)
+	_dialog_choices.add_theme_constant_override("separation",2)
 	dialog_window.add_child(_dialog_choices)
+	dialog_window.hide()
 
 func _build_settings()->void:
 	settings_window=_window("SettingsWindow","BG_SYSTEM",Vector2(291,207),Vector2(255,196))
-	var label:=_classic_label(settings_window,"UiLabel",Rect2(9,35,102,20),10,false)
-	label.text="介面風格"
+	_settings_skin_label=_classic_label(settings_window,"UiLabel",Rect2(9,35,102,20),10,false)
+	_settings_skin_label.text="介面風格"
 	_settings_picker.name="UiProfilePickerSettings"
 	_settings_picker.position=Vector2(112,34)
 	_settings_picker.size=Vector2(154,23)
@@ -704,9 +876,18 @@ func _build_settings()->void:
 		var id:=str(_settings_picker.get_item_metadata(index))
 		if not id.is_empty():skin_requested.emit(id))
 	settings_window.add_child(_settings_picker)
-	var hint:=_classic_label(settings_window,"SettingsHint",Rect2(10,70,268,118),10,false)
-	hint.text="畫面與介面設定共用 SGTest 系統設定。\n切換 UI 不會重新登入或重載地圖。"
-	hint.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+	_settings_hint=_classic_label(settings_window,"SettingsHint",Rect2(10,42,268,146),10,false)
+	_settings_hint.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+	set_skin_switch_visible(false)
+
+func set_skin_switch_visible(enabled:bool)->void:
+	_skin_switch_visible=enabled
+	if _settings_skin_label!=null:_settings_skin_label.visible=enabled
+	if _settings_picker!=null:_settings_picker.visible=enabled
+	if _settings_hint!=null:
+		_settings_hint.position=Vector2(10,70) if enabled else Vector2(10,42)
+		_settings_hint.size=Vector2(268,118) if enabled else Vector2(268,146)
+		_settings_hint.text="畫面與介面設定共用 SGTest 系統設定。\n切換 UI 不會重新登入或重載地圖。" if enabled else "介面：HK 原版"
 
 func bind_session(panel)->void:
 	_panel=panel
@@ -760,9 +941,33 @@ func _refresh_hud()->void:
 	var profile_ready:=bool(_stats.get("player_profile_ready",false))
 	var hp:=int(_stats.get("player_current_hp",0));var hpmax:=int(_stats.get("player_max_hp",0))
 	var mp:=int(_stats.get("player_current_mp",0));var mpmax:=int(_stats.get("player_max_mp",0))
-	_level_label.text=str(int(_stats.get("player_level",0))) if profile_ready else "—"
-	_hp_label.text="%d / %d"%[hp,hpmax] if hpmax>0 else "—"
-	_mp_label.text="%d / %d"%[mp,mpmax] if mpmax>0 else "—"
+	_level_label.text=str(int(_stats.get("player_level",0))) if profile_ready else ""
+	_hp_label.text="%d/%d"%[hp,hpmax] if hpmax>0 else ""
+	_mp_label.text="%d/%d"%[mp,mpmax] if mpmax>0 else ""
+	_set_progress(_hud_hp_clip,hp,hpmax)
+	_set_progress(_hud_mp_clip,mp,mpmax)
+	# WP is a separate original OnlineObj value. Never substitute Wisdom or a
+	# synthetic number merely to make the green bar look populated.
+	if _stats.has("player_current_wp") and _stats.has("player_max_wp"):
+		var wp:=int(_stats.player_current_wp);var wpmax:=int(_stats.player_max_wp)
+		_wp_label.text="%d/%d"%[wp,wpmax] if wpmax>0 else ""
+		_set_progress(_hud_wp_clip,wp,wpmax)
+	else:
+		_wp_label.text=""
+		_set_progress(_hud_wp_clip,0,0)
+	# Old CalEXPBar uses level-up table thresholds. Current snapshots expose raw
+	# EXP but not that verified threshold, so only render a percent when the
+	# authority explicitly supplies one rather than inventing a formula.
+	if _stats.has("player_experience_percent"):
+		var exp_percent:=clampi(int(_stats.player_experience_percent),0,100)
+		_exp_percent_label.text="%d%%"%exp_percent
+		_set_progress(_hud_exp_clip,exp_percent,100)
+	else:
+		_exp_percent_label.text=""
+		_set_progress(_hud_exp_clip,0,0)
+	# ITF s04 semantics are not yet proven in the current wire snapshot.
+	_status_value_label.text=""
+	_animate_status_bars()
 
 func _clear_rows(box:Container)->void:
 	for child in box.get_children():
@@ -1399,10 +1604,13 @@ func _refresh_dialog()->void:
 	_dialog_text.text=str(quest.get("text",""))
 	_clear_rows(_dialog_choices)
 	for raw in quest.get("choices",[]):
+		if _dialog_choices.get_child_count()>=4:break
 		var choice:Dictionary=raw;var choice_id:=int(choice.get("choice_id",0))
-		var row:=_classic_row(_dialog_choices,str(choice.get("label","選項")),30.0,func():
+		var row:=_classic_row(_dialog_choices,str(choice.get("label","選項")),13.0,func():
 			if _panel!=null:_panel.submit_quest_choice(choice_id))
+		row.add_theme_font_size_override("font_size",10)
 		row.add_theme_color_override("font_color",Color("#5b3514"))
+		row.add_theme_color_override("font_hover_color",Color("#8b4f16"))
 	if key!=_dialog_key and response_sequence>0:
 		_dialog_key=key
 		_hide_windows()

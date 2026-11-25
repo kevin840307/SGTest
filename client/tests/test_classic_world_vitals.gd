@@ -4,9 +4,12 @@ const ClassicWorldShell = preload("res://ui/classic_world_shell.gd")
 
 func _initialize() -> void:
 	var shell = ClassicWorldShell.new()
-	shell._hp_label = Label.new()
-	shell._mp_label = Label.new()
-	shell._level_label = Label.new()
+	shell._hp_label = RichTextLabel.new()
+	shell._mp_label = RichTextLabel.new()
+	shell._wp_label = RichTextLabel.new()
+	shell._level_label = RichTextLabel.new()
+	shell._exp_percent_label = RichTextLabel.new()
+	shell._status_value_label = RichTextLabel.new()
 	shell._stats = {
 		"player_profile_ready": true,
 		"player_level": 7,
@@ -16,11 +19,11 @@ func _initialize() -> void:
 		"player_max_mp": 0,
 	}
 	shell._refresh_hud()
-	if shell._hp_label.text != "75 / 100":
+	if shell._hp_label.text != "75/100":
 		push_error("CLASSIC_WORLD_VITALS_FAIL HP readiness/value")
 		quit(1)
 		return
-	if shell._mp_label.text != "—":
+	if shell._mp_label.text != "":
 		push_error("CLASSIC_WORLD_VITALS_FAIL MP reused HP readiness")
 		quit(1)
 		return
@@ -32,14 +35,17 @@ func _initialize() -> void:
 	shell._stats["player_current_mp"] = 12
 	shell._stats["player_max_mp"] = 20
 	shell._refresh_hud()
-	if shell._mp_label.text != "12 / 20":
+	if shell._mp_label.text != "12/20":
 		push_error("CLASSIC_WORLD_VITALS_FAIL MP authoritative value")
 		quit(1)
 		return
 
 	shell._hp_label.free()
 	shell._mp_label.free()
+	shell._wp_label.free()
 	shell._level_label.free()
+	shell._exp_percent_label.free()
+	shell._status_value_label.free()
 	shell.free()
 	print("CLASSIC_WORLD_VITALS_PASS independent_hp_mp_readiness=true")
 	quit(0)

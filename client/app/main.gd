@@ -30,7 +30,7 @@ var _photo_backdrop := TextureRect.new()
 var _lobby_skin_pickers: Array[OptionButton] = []
 var _backdrop_material := ShaderMaterial.new()
 var _ui_stage_key := ""
-var _current_skin := "retro_terminal"
+var _current_skin := UiSkinCatalog.DEFAULT_SKIN
 var _help_label := Label.new()
 var cursor_manager := SharedGameCursor.new()
 var _cursor_sample_elapsed := 0.0
@@ -170,6 +170,9 @@ func _ready() -> void:
 	classic_auth.bind_session(session_panel,world_view.store)
 	recovered2_world.bind_session(session_panel)
 	classic_world.bind_session(session_panel)
+	# Alternative UI selection is intentionally not player-facing right now;
+	# --dev-ui can still expose the same live switch path without reconnecting.
+	classic_world.set_skin_switch_visible(dev_overlay_enabled)
 	recovered2_world.request_legacy_section.connect(_show_r2_legacy_group)
 	recovered2_world.skin_requested.connect(_select_recovered2_skin)
 	classic_world.skin_requested.connect(_select_recovered2_skin)
@@ -218,6 +221,11 @@ func _install_skin_selector(row: HBoxContainer) -> void:
 	# Only view styling changes; the existing SessionPanel and command
 	# callbacks survive a runtime skin switch without reconnecting.
 	var selected := UiSkinCatalog.load_selected()
+	# Player-facing builds are temporarily HK-only. Keep every alternative
+	# profile and the runtime switch machinery installed for developer use,
+	# but never let an old saved choice replace the HK product surface.
+	if not dev_overlay_enabled and UiSkinCatalog.valid(UiSkinCatalog.DEFAULT_SKIN):
+		selected = UiSkinCatalog.DEFAULT_SKIN
 	_current_skin = selected
 	for skin in UiSkinCatalog.available():
 		var index := skin_picker.item_count

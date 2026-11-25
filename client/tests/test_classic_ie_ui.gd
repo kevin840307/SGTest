@@ -37,6 +37,12 @@ func _run() -> void:
 	var app = Main.new()
 	app.auto_start = false
 	root.add_child(app)
+	if app._current_skin != "original_ie_hk2" or app.skin_picker.visible:
+		_fail("player-facing build must start HK-only with the generic skin picker hidden")
+		return
+	if app.classic_world._settings_picker.visible or app.classic_world._settings_skin_label.visible or app.classic_world._settings_hint.text != "介面：HK 原版":
+		_fail("HK system settings still expose alternative UI profiles")
+		return
 	var shell = app.classic_auth
 	app.session_panel.set_process(false)
 	app.session_panel.active = true
@@ -187,12 +193,54 @@ func _run() -> void:
 	app.session_panel._layout.show_page(Layout.Page.WORLD)
 	app._update_ui_stage(true)
 	var world = app.classic_world
+	var command_expected := {
+		"PlayerCommand":[Vector2(3,5),Vector2(24,23)],
+		"ItemCommand":[Vector2(3,32),Vector2(24,23)],
+		"SkillCommand":[Vector2(3,59),Vector2(24,23)],
+		"PartyCommand":[Vector2(2,86),Vector2(24,23)],
+		"GuildCommand":[Vector2(3,113),Vector2(24,23)],
+		"PlayerShopCommand":[Vector2(4,142),Vector2(21,19)],
+		"QuestCommand":[Vector2(2,169),Vector2(25,22)],
+		"GmCommand":[Vector2(2,196),Vector2(25,22)],
+		"SystemCommand":[Vector2(2,222),Vector2(24,23)],
+	}
+	if world.command_panel.position != Vector2(770,0) or world.command_panel.size != Vector2(30,249) or world.menu.visible:
+		_fail("HK 021_COMMAND global rail geometry drifted or obsolete bottom command bar became visible")
+		return
+	for control_name in command_expected:
+		var command_control := world.secondary_menu.get_node_or_null(control_name) as Control
+		var expected: Array = command_expected[control_name]
+		if command_control == null or command_control.position != expected[0] or command_control.size != expected[1]:
+			_fail("HK 021_COMMAND control rect drifted: "+str(control_name))
+			return
+	var hotkey_expected:=[
+		Rect2(4,18,12,12),Rect2(4,47,12,12),Rect2(4,72,12,12),Rect2(4,99,12,12),
+		Rect2(4,126,12,12),Rect2(4,153,12,12),Rect2(4,180,12,12),Rect2(4,207,12,12),
+		Rect2(4,234,12,12),Rect2(4,261,18,12),Rect2(4,288,18,12),Rect2(4,315,18,12)]
+	if world.hotkey_panel.position != Vector2(2,17) or world.hotkey_panel.size != Vector2(30,358):
+		_fail("HK 007_HOTKEY_Yl global geometry drifted")
+		return
+	for i in 12:
+		var label:=world.hotkey_panel.get_node_or_null("Hotkey%d"%i) as RichTextLabel
+		if label==null or label.position!=hotkey_expected[i].position or label.size!=hotkey_expected[i].size or label.text!="F%d"%(i+1):
+			_fail("HK 007_HOTKEY_Yl F-key text rect drifted at F%d"%(i+1))
+			return
+	if world.status_panel.position!=Vector2(1,518) or world.status_panel.size!=Vector2(128,90) or \
+		world._hud_hp_clip.position!=Vector2(24,20) or world._hud_hp_clip.size.y!=10 or \
+		world._hud_mp_clip.position!=Vector2(24,34) or world._hud_wp_clip.position!=Vector2(24,48) or \
+		world._hud_exp_clip.position!=Vector2(24,80):
+		_fail("HK 006_StatusLite progress/control geometry drifted")
+		return
+	if (world.dialog_window.get_node("BG_NPC_MESSAGEBackground") as TextureRect).texture==null or \
+		world._dialog_text.position!=Vector2(25,10) or world._dialog_text.size!=Vector2(345,80) or \
+		world._dialog_choices.position!=Vector2(26,108) or world._dialog_choices.size!=Vector2(345,58):
+		_fail("HK 047_NPC_message image/control geometry drifted")
+		return
 	if (
 		not world.visible or app.recovered2_world.visible or
-		world.menu.size != Vector2(145,28) or
 		world.inventory.size != Vector2(259,506) or
 		world.character.size != Vector2(263,397) or
-		world.skill_window.size != Vector2(223,506) or
+		world.skill_window.size != Vector2(223,288) or
 		world.party_window.size != Vector2(139,144) or
 		world.clan_window.size != Vector2(263,360) or
 		world.shop_window.size != Vector2(770,506) or
@@ -202,7 +250,7 @@ func _run() -> void:
 		world.bank_window.size != Vector2(399,172) or
 		world.repair_window.size != Vector2(223,506) or
 		world.trade_window.size != Vector2(770,506) or
-		world.dialog_window.size != Vector2(570,428) or
+		world.dialog_window.size != Vector2(399,172) or
 		world.settings_window.size != Vector2(291,207)
 	):
 		_fail("original SPR world geometry not applied by independent ClassicWorldShell")
@@ -308,7 +356,7 @@ func _run() -> void:
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_dialog.png"))
 	world.dialog_window.hide()
-	if world._hp_label.text != "75 / 100" or world._mp_label.text != "30 / 40" or world._level_label.text != "22":
+	if world._hp_label.text != "75/100" or world._mp_label.text != "30/40" or world._level_label.text != "22":
 		_fail("classic HPBAR did not bind authoritative Server values")
 		return
 	for spec in [
@@ -365,9 +413,9 @@ func _run() -> void:
 	world.apply_snapshot(fixture)
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_world.png"))
-		world.menu.get_node("Menu1").pressed.emit()
+		world.secondary_menu.get_node("PlayerCommand").pressed.emit()
 		await _capture(directory.path_join("classic_character_info.png"))
-		world.menu.get_node("Menu1").pressed.emit()
+		world.secondary_menu.get_node("PlayerCommand").pressed.emit()
 	if (
 		world._chat_history.text.find("你好") < 0 or
 		world._friend_rows.get_child_count() != 2 or
@@ -376,14 +424,14 @@ func _run() -> void:
 	):
 		_fail("classic persistent chat/friend panels did not bind authoritative friend presence")
 		return
-	world.menu.get_node("Menu2").pressed.emit()
+	world.secondary_menu.get_node("ItemCommand").pressed.emit()
 	if (
 		not world.inventory.visible or
 		world.inventory.get_node_or_null("BG_ITEMBackground") == null or
 		world._inventory_tab_buttons.size() != 5 or
-		world._inventory_rows.get_child_count() != 17
+		world._inventory_rows.get_child_count() != 16
 	):
-		_fail("original inventory window did not bind multi-item rows/tabs on BG_ITEM")
+		_fail("original inventory window did not bind 16 HK item rows/tabs on BG_ITEM")
 		return
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_inventory.png"))
@@ -404,7 +452,7 @@ func _run() -> void:
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_mecha.png"))
 	world._change_inventory_tab(0)
-	world.menu.get_node("Menu0").pressed.emit()
+	world.secondary_menu.get_node("GuildCommand").pressed.emit()
 	if not world.clan_window.visible or world._clan_rows.get_child_count() != 2:
 		_fail("classic BG_CLUB did not bind clan members")
 		return
@@ -412,11 +460,11 @@ func _run() -> void:
 	if not world.quest_window.visible or world._quest_title.text != "失落的星鑰" or world._quest_choices.get_child_count() != 2:
 		_fail("classic BG_QUEST_LIST did not bind quest choices")
 		return
-	world.menu.get_node("Menu3").pressed.emit()
+	world.secondary_menu.get_node("PlayerShopCommand").pressed.emit()
 	if not world.player_shop_window.visible or world._player_shop_rows.get_child_count() < 3 or world._player_shop_buy.disabled:
 		_fail("classic player-shop presentation is not backed by inventory/nearby/listing snapshot")
 		return
-	world.secondary_menu.get_node("StorageCommand").pressed.emit()
+	world._toggle(world.storage_window)
 	if (
 		not world.storage_window.visible or world._storage_rows.get_child_count() != 1 or
 		world._storage_inventory_rows.get_child_count() != 17 or
@@ -426,13 +474,19 @@ func _run() -> void:
 		return
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_storage.png"))
-	world.secondary_menu.get_node("BankCommand").pressed.emit()
+	world._toggle(world.bank_window)
 	if not world.bank_window.visible or world._bank_status.text.find("25000") < 0:
 		_fail("classic bank window did not bind authoritative balance")
 		return
-	world.secondary_menu.get_node("RepairCommand").pressed.emit()
+	world._toggle(world.repair_window)
 	if not world.repair_window.visible or world._repair_rows.get_child_count() != 1:
 		_fail("classic repair window did not bind repairable item")
+		return
+	# Alternative profiles stay installed and can be exposed explicitly for
+	# development; HK-only is a player-facing policy, not deletion of switching.
+	app.classic_world.set_skin_switch_visible(true)
+	if not app.classic_world._settings_picker.visible or app.classic_world._settings_picker.item_count < 2:
+		_fail("runtime UI switch capability was removed instead of hidden")
 		return
 	app._recovered2_local_ready = app.recovered2_auth.attach(app.session_panel)
 	app._current_skin = "recovered2_local"
@@ -444,5 +498,5 @@ func _run() -> void:
 	app._update_ui_stage(true)
 	app.queue_free()
 	await process_frame
-	print("CLASSIC_IE_UI_PASS 800x600_original_spr=true main_session_shared=true login_select_create_world=true inventory_equipment_mecha_storage_dialog=true lazy_large_windows=true runtime_switch=true")
+	print("CLASSIC_IE_UI_PASS 800x600_original_spr=true hk_only_player_surface=true alternative_picker_hidden=true main_session_shared=true login_select_create_world=true inventory_equipment_mecha_storage_dialog=true lazy_large_windows=true runtime_switch_retained=true")
 	quit(0)
