@@ -2,12 +2,21 @@ extends SceneTree
 
 const WireCodec=preload("res://network/wire_codec.gd")
 const WorldState=preload("res://world/world_state.gd")
+const ClientSession=preload("res://session/client_session.gd")
+
+class CapturingTransport:
+	extends RefCounted
+	var sent:Array[PackedByteArray]=[]
+	func send_frame(frame:PackedByteArray)->bool:
+		sent.append(frame.duplicate())
+		return true
 const COMMAND_HEX:="2400000001005C0003000000000000000900000000020C00E99984E8BF91E6B8ACE8A9A6"
 const DELIVERY_HEX:="3A00000001005D0003000000000000000B00000000000000050000000000000009000000000204000C004865726FE99984E8BF91E6B8ACE8A9A6"
 const WHISPER_COMMAND_HEX:="2B0000000100620003000000000000000A0000001600000000000000030C00E8B7A8E59C96E7A781E8A88A"
 const WHISPER_NAME_COMMAND_HEX:="370000000100620003000000000000000B0000000000000000000000020C00E68C89E5908DE7A781E8A88A0A005461726765744865726F"
 const WHISPER_RESULT_HEX:="330000000100630003000000000000000A00000000160000000000000007000000000000000C004D756C74694865726F4F6E65"
 const WHISPER_DELIVERY_HEX:="3A00000001005D0003000000000000000B0000000000000005000000000000000A000000040304000C004865726FE8B7A8E59C96E7A781E8A88A"
+const FRIEND_MESSAGE_COMMAND_HEX:="3000000001008B0003000000000000000C00000016000000000000001200E5A5BDE58F8BE58DB3E69982E8A88AE681AF"
 const EMOTION_COMMAND_HEX:="150000000100890003000000000000000900000005"
 const EMOTION_VISUAL_HEX:="2500000001008A0003000000000000000B0000000000000005000000000000000900000005"
 
@@ -237,6 +246,113 @@ func _initialize()->void:
 		_fail("unresolved name whisper created optimistic history")
 		return
 
+	var friend_command:=WireCodec.encode_friend_message_command(
+		3,12,22,"好友即時訊息")
+	if friend_command.hex_encode().to_upper()!=FRIEND_MESSAGE_COMMAND_HEX:
+		_fail("friend message command cross-runtime golden")
+		return
+	if (
+		WireCodec.encode_friend_message_command(
+			3,13,22,"x".repeat(WireCodec.FRIEND_MESSAGE_MAX_MESSAGE_BYTES)).is_empty() or
+		not WireCodec.encode_friend_message_command(
+			3,14,22,"x".repeat(WireCodec.FRIEND_MESSAGE_MAX_MESSAGE_BYTES+1)).is_empty()
+	):
+		_fail("friend message original 0x65-byte bounds")
+		return
+
+	# Exercise the production ClientSession FIFO, not only the codec/state
+	# helpers: UI/API input must queue, emit the dedicated wire, then wait for
+	# the Server result before history is appended.
+	var session_world:=_base_world(11)
+	session_world.friends[22]={"actor_id":22,"name":"TargetHero","online":true}
+	var capture:=CapturingTransport.new()
+	var session:=ClientSession.new(capture)
+	session._world=session_world
+	session._published=session_world.snapshot()
+	session._running=true
+	if not session.send_friend_message(22," 好友即時訊息 "):
+		_fail("client session friend-message enqueue")
+		return
+	if session._intents.size()!=1 or str(session._intents[0].get("type",""))!="friend_message":
+		_fail("client session friend-message FIFO")
+		return
+	session._process_chat_intent(session._intents[0],"friend_message")
+	var expected_session_frame:=WireCodec.encode_friend_message_command(
+		3,1,22," 好友即時訊息 ")
+	if (
+		capture.sent.size()!=1 or capture.sent[0]!=expected_session_frame or
+		not session._intents.is_empty() or
+		int(session._world.snapshot().pending_whisper_sequence)!=1 or
+		not (session._world.snapshot().friend_messages as Array).is_empty()
+	):
+		_fail("client session friend-message wire/pending authority")
+		return
+
+	# Friend-message delivery is intentionally separate from ordinary whisper
+	# history. Channel 6 is accepted cross-map only for a current authoritative
+	# friend and duplicate generation/sequence delivery is stale.
+	var friend_observer:=_base_world(987654322)
+	friend_observer.friends[11]={"actor_id":11,"name":"Hero","online":true}
+	var friend_delivery:=WHISPER_DELIVERY_HEX.hex_decode()
+	friend_delivery[36]=6
+	friend_delivery[37]=0
+	if not friend_observer.apply_frame(friend_delivery):
+		_fail("friend message delivery "+friend_observer.protocol_error)
+		return
+	var friend_observer_snapshot:=friend_observer.snapshot()
+	if (
+		(friend_observer_snapshot.friend_messages as Array).size()!=1 or
+		not (friend_observer_snapshot.chat_messages as Array).is_empty() or
+		str(friend_observer_snapshot.friend_messages[0].direction)!="incoming" or
+		int(friend_observer_snapshot.friend_messages[0].peer_actor_id)!=11
+	):
+		_fail("friend message polluted normal chat or missed contact history")
+		return
+	if (
+		not friend_observer.apply_frame(friend_delivery) or
+		int(friend_observer.snapshot().stale_chat_deliveries)!=1
+	):
+		_fail("duplicate friend message delivery replay")
+		return
+
+	# Sender history is added only after the Server-authoritative Delivered
+	# result. The archive is per-character, matching Old ArchiveP2PHistory /
+	# RetrieveP2PHistory behavior across a relog.
+	var friend_sender:=_base_world(987654321)
+	friend_sender.friends[22]={"actor_id":22,"name":"TargetHero","online":true}
+	if not friend_sender.mark_friend_message_sent(10,22,"好友即時訊息"):
+		_fail("friend message sender admission")
+		return
+	if not (friend_sender.snapshot().friend_messages as Array).is_empty():
+		_fail("friend message was optimistically echoed before server result")
+		return
+	if not friend_sender.apply_frame(WHISPER_RESULT_HEX.hex_decode()):
+		_fail("friend message sender result "+friend_sender.protocol_error)
+		return
+	var friend_sender_snapshot:=friend_sender.snapshot()
+	if (
+		(friend_sender_snapshot.friend_messages as Array).size()!=1 or
+		not (friend_sender_snapshot.chat_messages as Array).is_empty() or
+		str(friend_sender_snapshot.friend_messages[0].direction)!="outgoing" or
+		int(friend_sender_snapshot.friend_messages[0].peer_actor_id)!=22 or
+		not str(friend_sender_snapshot.friend_messages[0].local_timestamp).begins_with("[ Y")
+	):
+		_fail("authoritative friend message sender history")
+		return
+	var reloaded:=WorldState.new()
+	reloaded.actor_id=987654321
+	reloaded._load_friend_message_history()
+	if (
+		(reloaded.snapshot().friend_messages as Array).size()!=1 or
+		str(reloaded.snapshot().friend_messages[0].message)!="好友即時訊息"
+	):
+		_fail("friend message relog archive retrieval")
+		return
+	DirAccess.remove_absolute(
+		ProjectSettings.globalize_path(friend_sender._friend_message_history_path()))
+	DirAccess.remove_absolute(
+		ProjectSettings.globalize_path(friend_observer._friend_message_history_path()))
+
 	var emotion_command:=WireCodec.encode_emotion_command(3,9,5)
 	if emotion_command.hex_encode().to_upper()!=EMOTION_COMMAND_HEX:
 		_fail("emotion command cross-runtime golden")
@@ -279,5 +395,5 @@ func _initialize()->void:
 		_fail("unsolicited self emotion visual was accepted")
 		return
 
-	print("CHAT_WIRE_PASS command=92 delivery=93 emotion_command=137 emotion_visual=138 whisper_command=98 whisper_result=99 utf8=true trusted_echo=true emotion_authoritative=true world_policy=SERVER_AUTHORITY visible_only_nearby=true whisper_crossmap=true replay=STALE unsolicited_self=FAIL_CLOSED")
+	print("CHAT_WIRE_PASS command=92 delivery=93 emotion_command=137 emotion_visual=138 whisper_command=98 whisper_result=99 friend_message_command=139 friend_message_channel=6 friend_message_max_bytes=101 friend_message_archive=true utf8=true trusted_echo=true emotion_authoritative=true world_policy=SERVER_AUTHORITY visible_only_nearby=true whisper_crossmap=true replay=STALE unsolicited_self=FAIL_CLOSED")
 	quit(0)

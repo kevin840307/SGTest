@@ -142,8 +142,9 @@ internal static class FriendChecks
                 var fromA=await store.GetFriendsAsync(a);
                 var fromB=await store.GetFriendsAsync(b);
                 Checks.Require(fromA.Count==1&&fromA[0].CharacterId==b&&
-                    fromB.Count==1&&fromB[0].CharacterId==a,
-                    "friend relation was not bilateral");
+                    fromB.Count==1&&fromB[0].CharacterId==a&&
+                    await store.IsFriendAsync(a,b)&&await store.IsFriendAsync(b,a),
+                    "friend relation was not bilateral or authority lookup missed it");
                 Checks.Require((await store.AddFriendAsync(a,b)).Status==
                     FriendStoreStatus.AlreadyFriends,
                     "duplicate friend relation was not rejected");

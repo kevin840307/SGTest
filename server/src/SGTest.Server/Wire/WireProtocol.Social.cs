@@ -608,6 +608,55 @@ public static partial class WireProtocol
         catch(DecoderFallbackException){return false;}
     }
 
+    public static byte[] EncodeFriendMessageCommand(FriendMessageCommandWire value)
+    {
+        byte[] message;
+        try { message=StrictUtf8.GetBytes(value.Message??string.Empty); }
+        catch(EncoderFallbackException)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value));
+        }
+        if(value.MapEpoch<=0||value.ChatSequence==0||value.TargetActorId<=0||
+           message.Length is <1 or >FriendMessageMaxMessageBytes||
+           string.IsNullOrEmpty(value.Message))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.FriendMessageCommand,
+            FriendMessageCommandHeaderBytes+message.Length);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.ChatSequence);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(20,8),value.TargetActorId);
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(28,2),(ushort)message.Length);
+        message.AsSpan().CopyTo(frame.AsSpan(FriendMessageCommandHeaderBytes));
+        return frame;
+    }
+
+    public static bool TryDecodeFriendMessageCommand(
+        ReadOnlySpan<byte> frame,out FriendMessageCommandWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||
+           h.Opcode!=WireOpcode.FriendMessageCommand||
+           frame.Length<FriendMessageCommandHeaderBytes+1)
+            return false;
+        long epoch=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        uint sequence=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4));
+        long target=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(20,8));
+        int messageLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(28,2));
+        if(epoch<=0||sequence==0||target<=0||
+           messageLength is <1 or >FriendMessageMaxMessageBytes||
+           frame.Length!=FriendMessageCommandHeaderBytes+messageLength)
+            return false;
+        try
+        {
+            string message=StrictUtf8.GetString(
+                frame.Slice(FriendMessageCommandHeaderBytes,messageLength));
+            if(string.IsNullOrEmpty(message))return false;
+            value=new(epoch,sequence,target,message);
+            return true;
+        }
+        catch(DecoderFallbackException){return false;}
+    }
+
     public static byte[] EncodeWhisperResult(WhisperResultWire value)
     {
         byte[] name;
@@ -939,9 +988,14 @@ public static partial class WireProtocol
         catch(EncoderFallbackException){throw new ArgumentOutOfRangeException(nameof(value));}
         if(value.ReceiverMapEpoch<=0||value.SenderActorId<=0||
            value.SenderConnectionEpoch<=0||value.ChatSequence==0||
-           (byte)value.Channel>4||value.BubbleType>5||
+           value.Channel==ChatChannel.Emotion||
+           (byte)value.Channel>(byte)ChatChannel.FriendMessage||
+           value.BubbleType>5||
+           (value.Channel==ChatChannel.FriendMessage&&value.BubbleType!=0)||
            name.Length is <1 or >ChatMaxSenderNameBytes||
-           message.Length is <1 or >ChatMaxMessageBytes||
+           message.Length<1||
+           message.Length>(value.Channel==ChatChannel.FriendMessage
+               ?FriendMessageMaxMessageBytes:ChatMaxMessageBytes)||
            string.IsNullOrWhiteSpace(value.SenderName)||string.IsNullOrWhiteSpace(value.Message))
             throw new ArgumentOutOfRangeException(nameof(value));
         var frame=NewFrame(WireOpcode.ChatDelivery,
@@ -971,14 +1025,21 @@ public static partial class WireProtocol
         int nameLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(38,2));
         int messageLength=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(40,2));
         if(receiver<=0||actor<=0||connection<=0||sequence==0||
-           (byte)channel>4||bubble>5||nameLength is <1 or >ChatMaxSenderNameBytes||
-           messageLength is <1 or >ChatMaxMessageBytes||
+           channel==ChatChannel.Emotion||
+           (byte)channel>(byte)ChatChannel.FriendMessage||bubble>5||
+           (channel==ChatChannel.FriendMessage&&bubble!=0)||
+           nameLength is <1 or >ChatMaxSenderNameBytes||messageLength<1||
+           messageLength>(channel==ChatChannel.FriendMessage
+               ?FriendMessageMaxMessageBytes:ChatMaxMessageBytes)||
            frame.Length!=ChatDeliveryHeaderBytes+nameLength+messageLength)return false;
         try
         {
             string name=StrictUtf8.GetString(frame.Slice(ChatDeliveryHeaderBytes,nameLength));
             string message=StrictUtf8.GetString(frame.Slice(ChatDeliveryHeaderBytes+nameLength,messageLength));
-            if(string.IsNullOrWhiteSpace(name)||string.IsNullOrWhiteSpace(message))return false;
+            if(string.IsNullOrWhiteSpace(name)||
+               (channel==ChatChannel.FriendMessage
+                   ?string.IsNullOrEmpty(message)
+                   :string.IsNullOrWhiteSpace(message)))return false;
             value=new(receiver,actor,connection,sequence,channel,bubble,name,message);
             return true;
         }

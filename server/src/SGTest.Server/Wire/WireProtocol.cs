@@ -203,6 +203,11 @@ public static partial class WireProtocol
     public const int WhisperResultHeaderBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8 + 2;
     public const int WhisperResultMaximumFrameBytes =
         WhisperResultHeaderBytes + ChatMaxSenderNameBytes;
+    // Old CUDPHandle::Message copies at most 0x65 bytes into the type-15 payload.
+    public const int FriendMessageMaxMessageBytes = 0x65;
+    public const int FriendMessageCommandHeaderBytes = HeaderBytes + 8 + 4 + 8 + 2;
+    public const int FriendMessageCommandMaximumFrameBytes =
+        FriendMessageCommandHeaderBytes + FriendMessageMaxMessageBytes;
     public const int PartyCommandFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 8;
     public const int PartyCommandMaximumFrameBytes =
         PartyCommandFrameBytes + PlayerIdentityMaxNameBytes;
@@ -711,6 +716,7 @@ public static partial class WireProtocol
             136 => WireOpcode.FriendInvite,
             137 => WireOpcode.EmotionCommand,
             138 => WireOpcode.EmotionVisual,
+            139 => WireOpcode.FriendMessageCommand,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -890,6 +896,9 @@ public static partial class WireProtocol
             WireOpcode.WhisperResult =>
                 advertised >= WhisperResultHeaderBytes &&
                 advertised <= WhisperResultMaximumFrameBytes,
+            WireOpcode.FriendMessageCommand =>
+                advertised >= FriendMessageCommandHeaderBytes+1 &&
+                advertised <= FriendMessageCommandMaximumFrameBytes,
             WireOpcode.PartyCommand =>
                 advertised >= PartyCommandFrameBytes &&
                 advertised <= PartyCommandMaximumFrameBytes,

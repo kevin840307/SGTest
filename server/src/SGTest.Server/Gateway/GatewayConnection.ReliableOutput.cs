@@ -484,12 +484,15 @@ public sealed partial class GatewayConnection
             if(_closed)return GatewaySendStatus.Closed;
             var bound=_binding;
             bool nameTarget=!string.IsNullOrEmpty(request.TargetName);
-            bool validSelector=request.TargetActorId>=0&&
-                ((request.TargetActorId>0)!=nameTarget);
+            bool friendMessage=request.Channel==ChatChannel.FriendMessage;
+            bool validSelector=friendMessage
+                ? request.TargetActorId>0&&!nameTarget
+                : request.TargetActorId>=0&&
+                    ((request.TargetActorId>0)!=nameTarget);
             bool targetMatches=nameTarget
                 ? result.TargetActorId>=0
                 : request.TargetActorId==result.TargetActorId;
-            if(request.Channel!=ChatChannel.Whisper||
+            if((request.Channel!=ChatChannel.Whisper&&!friendMessage)||
                request.ActorId!=bound.ActorId||
                request.ConnectionEpoch!=bound.ConnectionEpoch||
                request.RequestMapEpoch!=bound.MapEpoch||

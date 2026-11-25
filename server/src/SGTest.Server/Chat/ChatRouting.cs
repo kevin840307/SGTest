@@ -15,7 +15,8 @@ public static class ChatRouting
 {
     public static async Task RouteAsync(TrustedChatCommand request,
         WorldResultRouter router,PartyCoordinator? parties,
-        Func<long,long,Task<bool>>? isIgnored=null,ClanCoordinator? clans=null)
+        Func<long,long,Task<bool>>? isIgnored=null,ClanCoordinator? clans=null,
+        Func<long,long,Task<bool>>? isFriend=null)
     {
         var sender=new ConnectionBinding(
             request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
@@ -155,6 +156,75 @@ public static class ChatRouting
                     router.CloseCurrentBinding(recipient);
                 }
             }
+            return;
+        }
+
+        if(request.Channel==ChatChannel.FriendMessage)
+        {
+            if(request.TargetActorId<=0||!string.IsNullOrEmpty(request.TargetName)||
+               request.BubbleType!=0)
+                throw new InvalidOperationException(
+                    "Invalid trusted friend-message target reached routing");
+
+            ConnectionBinding friendTarget=default;
+            PlayerIdentityPresentation friendIdentity=default;
+            bool friendTargetFound=
+                router.TryGetCurrentBinding(request.TargetActorId,out friendTarget)&&
+                router.TryGetPlayerIdentity(
+                    friendTarget.ActorId,friendTarget.ConnectionEpoch,out friendIdentity);
+
+            WhisperResultWire friendResult;
+            if(friendTargetFound&&friendTarget.ActorId==request.ActorId)
+            {
+                friendResult=new(
+                    request.RequestMapEpoch,request.ChatSequence,
+                    WhisperResultStatus.SelfTarget,friendTarget.ActorId,
+                    0,string.Empty);
+            }
+            else if(!friendTargetFound)
+            {
+                friendResult=new(
+                    request.RequestMapEpoch,request.ChatSequence,
+                    WhisperResultStatus.TargetUnavailable,request.TargetActorId,
+                    0,string.Empty);
+            }
+            else if(isFriend is null||
+                    !await isFriend(request.ActorId,friendTarget.ActorId)
+                        .ConfigureAwait(false)||
+                    (isIgnored is not null&&(
+                        await isIgnored(friendTarget.ActorId,request.ActorId)
+                            .ConfigureAwait(false)||
+                        await isIgnored(request.ActorId,friendTarget.ActorId)
+                            .ConfigureAwait(false))))
+            {
+                friendResult=new(
+                    request.RequestMapEpoch,request.ChatSequence,
+                    WhisperResultStatus.TargetUnavailable,friendTarget.ActorId,
+                    0,string.Empty);
+            }
+            else
+            {
+                var delivery=new ChatDeliveryWire(
+                    friendTarget.MapEpoch,request.ActorId,request.ConnectionEpoch,
+                    request.ChatSequence,ChatChannel.FriendMessage,0,
+                    identity.DisplayName,request.Message);
+                var delivered=router.QueueChatDelivery(friendTarget,delivery);
+                friendResult=delivered==GatewaySendStatus.Enqueued
+                    ?new WhisperResultWire(
+                        request.RequestMapEpoch,request.ChatSequence,
+                        WhisperResultStatus.Delivered,friendTarget.ActorId,
+                        friendTarget.ConnectionEpoch,friendIdentity.DisplayName)
+                    :new WhisperResultWire(
+                        request.RequestMapEpoch,request.ChatSequence,
+                        WhisperResultStatus.TargetUnavailable,friendTarget.ActorId,
+                        0,string.Empty);
+            }
+
+            var friendResultQueued=router.QueueWhisperResult(request,friendResult);
+            if(friendResultQueued!=GatewaySendStatus.Enqueued)
+                throw new IOException(
+                    "Reliable friend-message sender result could not be queued: "+
+                    friendResultQueued);
             return;
         }
 

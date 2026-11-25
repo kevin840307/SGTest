@@ -148,10 +148,11 @@ public enum WireOpcode : ushort
     PlayerAttributeAllocate = 135,
     FriendInvite = 136,
     EmotionCommand = 137,
-    EmotionVisual = 138
+    EmotionVisual = 138,
+    FriendMessageCommand = 139
 }
 
-public enum ChatChannel : byte { Nearby = 0, World = 1, Warband = 2, Party = 3, Whisper = 4, Emotion = 5 }
+public enum ChatChannel : byte { Nearby = 0, World = 1, Warband = 2, Party = 3, Whisper = 4, Emotion = 5, FriendMessage = 6 }
 public enum WhisperResultStatus : byte
 {
     Delivered = 0,
@@ -710,6 +711,8 @@ public readonly record struct EmotionVisualWire(
 public readonly record struct WhisperCommandWire(
     long MapEpoch,uint ChatSequence,long TargetActorId,byte BubbleType,
     string Message,string TargetName = "");
+public readonly record struct FriendMessageCommandWire(
+    long MapEpoch,uint ChatSequence,long TargetActorId,string Message);
 public readonly record struct WhisperResultWire(
     long MapEpoch,uint ChatSequence,WhisperResultStatus Status,
     long TargetActorId,long TargetConnectionEpoch,string TargetName);

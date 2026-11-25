@@ -244,6 +244,23 @@ var _friend_action:Button
 var _friend_question:=Control.new()
 var _friend_question_text:=Label.new()
 var _friend_question_actor:=0
+var _friend_mail_buttons:Array[TextureButton]=[]
+var _friend_ordered_actors:Array[int]=[]
+var _friend_visible_message_actors:Array[int]=[0,0,0]
+var _friend_message_panel:=Control.new()
+var _friend_message_title:RichTextLabel
+var _friend_message_timestamp:RichTextLabel
+var _friend_message_counter:RichTextLabel
+var _friend_message_direction:RichTextLabel
+var _friend_message_history:RichTextLabel
+var _friend_message_input_aux:RichTextLabel
+var _friend_message_input:=SourceLineEdit.new()
+var _friend_message_up:TextureButton
+var _friend_message_down:TextureButton
+var _friend_message_actor:=0
+var _friend_message_index:=-1
+var _friend_message_auto_latest:=true
+var _friend_message_last_count:=0
 var _player_shop_rows:=VBoxContainer.new()
 var _player_shop_price:=SpinBox.new()
 var _player_shop_buy:=Button.new()
@@ -1014,10 +1031,33 @@ func _build_friend_panel()->void:
 	_friend_scroll.add_child(_friend_rows)
 	_friend_up=_texture_button(friend_panel,"FriendScrollUp","SCROLLUP_S",Vector2(180,36),Vector2(17,25),func():_friend_scroll.scroll_vertical-=17,"往上捲動")
 	_friend_down=_texture_button(friend_panel,"FriendScrollDown","SCROLLDOWN_S",Vector2(180,61),Vector2(17,25),func():_friend_scroll.scroll_vertical+=17,"往下捲動")
+	# 020_FRIENDlIST controls 2900/2901/2902 are one-frame B_GET_MAIL
+	# sprites at x=163 and y=36/53/70. Keep their hitboxes source-exact.
+	for slot in range(3):
+		var mail:=TextureButton.new()
+		mail.name="FriendMail%d"%slot
+		mail.position=Vector2(163,36+17*slot)
+		mail.size=Vector2(14,15)
+		mail.ignore_texture_size=true
+		mail.stretch_mode=TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+		mail.focus_mode=Control.FOCUS_NONE
+		mail.mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND
+		mail.texture_normal=_tex("B_GET_MAIL_0")
+		mail.texture_hover=mail.texture_normal
+		mail.texture_pressed=mail.texture_normal
+		mail.tooltip_text="好友訊息"
+		mail.pressed.connect(_open_friend_message_slot.bind(slot))
+		friend_panel.add_child(mail)
+		_friend_mail_buttons.append(mail)
 	var scrollbar:=_friend_scroll.get_v_scroll_bar()
-	scrollbar.value_changed.connect(func(_value):_update_friend_scroll_buttons())
-	scrollbar.changed.connect(_update_friend_scroll_buttons)
+	scrollbar.value_changed.connect(func(_value):
+		_update_friend_scroll_buttons()
+		_update_friend_mail_slots())
+	scrollbar.changed.connect(func():
+		_update_friend_scroll_buttons()
+		_update_friend_mail_slots())
 	_update_friend_scroll_buttons.call_deferred()
+	_update_friend_mail_slots.call_deferred()
 	# Keep real add/remove requests available without covering the original
 	# three contact rows with a fabricated inline edit box.
 	_friend_editor.name="FriendNameEditor"
@@ -1108,12 +1148,206 @@ func _build_friend_panel()->void:
 	_friend_question.add_child(_friend_question_text)
 	_texture_button(_friend_question,"QuestionYes","B_OK_BUTTON",Vector2(424,1),Vector2(16,16),_accept_friend_invite,"接受")
 	_texture_button(_friend_question,"QuestionNo","CLOSESCREEN",Vector2(444,1),Vector2(16,16),_reject_friend_invite,"拒絕")
+	_build_friend_message_panel()
+
+
+func _build_friend_message_panel()->void:
+	# 043_FRIEND_MSG local geometry comes from the HK ITF. Old Create accepts
+	# runtime x/y, so the file itself has no authoritative global screen origin;
+	# center it without claiming that center is original, and keep it movable.
+	_friend_message_panel.name="FriendMessagePanel"
+	_friend_message_panel.size=Vector2(256,175)
+	_friend_message_panel.position=(BASE_SIZE-_friend_message_panel.size)*0.5
+	_friend_message_panel.visible=false
+	_friend_message_panel.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_friend_message_panel)
+	_make_movable(_friend_message_panel)
+	_background(_friend_message_panel,"BG_FRIENDMSG_BOX",_friend_message_panel.size)
+	_texture_button(
+		_friend_message_panel,"FriendMessageClose","CLOSESCREEN",
+		Vector2(233,1),Vector2(16,16),_close_friend_message,"關閉")
+	_texture_button(
+		_friend_message_panel,"FriendMessageHelp","B_ONLINEHELP",
+		Vector2(216,1),Vector2(16,16),Callable(),"線上說明")
+	_friend_message_up=_texture_button(
+		_friend_message_panel,"FriendMessageUp","SCROLLUP_BUTTON",
+		Vector2(233,24),Vector2(17,36),func():_scroll_friend_message(-1),"上一則")
+	_friend_message_down=_texture_button(
+		_friend_message_panel,"FriendMessageDown","SCROLLDOWN_BUTTON",
+		Vector2(233,111),Vector2(17,36),func():_scroll_friend_message(1),"下一則")
+	_friend_message_title=_itf_text(
+		_friend_message_panel,"FriendMessageTitle",Rect2(12,4,200,13),9)
+	_friend_message_timestamp=_itf_text(
+		_friend_message_panel,"FriendMessageTimestamp",Rect2(12,28,218,13),9)
+	_friend_message_counter=_itf_text(
+		_friend_message_panel,"FriendMessageCounter",Rect2(129,28,100,13),9)
+	_friend_message_direction=_itf_text(
+		_friend_message_panel,"FriendMessageDirection",Rect2(12,50,218,13),9)
+	_friend_message_history=_itf_text(
+		_friend_message_panel,"FriendMessageHistory",Rect2(12,65,218,70),9)
+	# Control 2943 is a source message-area control, but its text semantics are
+	# still unproven. Preserve the rect and leave it blank instead of inventing.
+	_friend_message_input_aux=_itf_text(
+		_friend_message_panel,"FriendMessageInputAux",Rect2(227,155,18,15),9)
+	_friend_message_input.name="FriendMessageInput"
+	_friend_message_input.position=Vector2(9,155)
+	_friend_message_input.size=Vector2(215,15)
+	_friend_message_input.max_length=WireCodec.FRIEND_MESSAGE_MAX_MESSAGE_BYTES
+	_friend_message_input.display_font=_character_raster_font
+	_friend_message_input.display_font_size=12
+	_friend_message_input.baseline=11.0
+	_friend_message_input.text_changed.connect(_limit_friend_message_input)
+	_friend_message_input.text_submitted.connect(func(_value):_send_friend_message())
+	_friend_message_panel.add_child(_friend_message_input)
+
 
 func _update_friend_scroll_buttons()->void:
 	if _friend_up==null or _friend_down==null:return
 	var scrollbar:=_friend_scroll.get_v_scroll_bar()
 	_friend_up.disabled=scrollbar.value<=scrollbar.min_value
 	_friend_down.disabled=scrollbar.value>=maxf(scrollbar.min_value,scrollbar.max_value-scrollbar.page)-0.01
+
+
+func _update_friend_mail_slots()->void:
+	if _friend_mail_buttons.is_empty():
+		return
+	var small_friend_list:=not _friend_large and not _friend_show_ignored
+	var start:=0
+	if _friend_scroll!=null:
+		start=maxi(0,int(round(_friend_scroll.scroll_vertical/17.0)))
+	for slot in range(_friend_mail_buttons.size()):
+		var button:=_friend_mail_buttons[slot]
+		var index:=start+slot
+		var actor:=0
+		if small_friend_list and index<_friend_ordered_actors.size():
+			actor=int(_friend_ordered_actors[index])
+		_friend_visible_message_actors[slot]=actor
+		button.visible=actor>0
+		button.disabled=actor<=0
+		if actor>0:
+			var entry:Dictionary=_stats.get("friends",{}).get(actor,{})
+			button.tooltip_text="好友訊息｜%s"%str(entry.get("name",""))
+
+
+func _open_friend_message_slot(slot:int)->void:
+	if slot<0 or slot>=_friend_visible_message_actors.size():
+		return
+	var actor:=int(_friend_visible_message_actors[slot])
+	if actor>0:
+		_open_friend_message(actor)
+
+
+func _open_friend_message(actor_id:int)->void:
+	var friends:Dictionary=_stats.get("friends",{})
+	var ignored:Dictionary=_stats.get("ignored_friends",{})
+	if actor_id<=0 or not friends.has(actor_id) or ignored.has(actor_id):
+		return
+	_friend_message_actor=actor_id
+	_friend_message_auto_latest=true
+	_friend_message_index=-1
+	_friend_message_last_count=0
+	_refresh_friend_message()
+	_friend_message_panel.show()
+	_friend_message_panel.move_to_front()
+	_friend_message_input.focus_editor()
+
+
+func _close_friend_message()->void:
+	_friend_message_panel.hide()
+	_friend_message_actor=0
+	_friend_message_index=-1
+	_friend_message_auto_latest=true
+	_friend_message_last_count=0
+	_friend_message_input.text=""
+
+
+func _friend_messages_for_actor(actor_id:int)->Array[Dictionary]:
+	var rows:Array[Dictionary]=[]
+	var all:Array=_stats.get("friend_messages",[])
+	for raw in all:
+		var row:Dictionary=raw
+		if int(row.get("peer_actor_id",0))==actor_id:
+			rows.append(row)
+	return rows
+
+
+func _scroll_friend_message(delta:int)->void:
+	var rows:=_friend_messages_for_actor(_friend_message_actor)
+	if rows.is_empty():
+		return
+	_friend_message_index=clampi(_friend_message_index+delta,0,rows.size()-1)
+	_friend_message_auto_latest=_friend_message_index==rows.size()-1
+	_friend_message_last_count=rows.size()
+	_refresh_friend_message()
+
+
+func _refresh_friend_message()->void:
+	if _friend_message_title==null:
+		return
+	var friends:Dictionary=_stats.get("friends",{})
+	var ignored:Dictionary=_stats.get("ignored_friends",{})
+	if _friend_message_actor<=0:
+		return
+	if not friends.has(_friend_message_actor) or ignored.has(_friend_message_actor):
+		_close_friend_message()
+		return
+	var entry:Dictionary=friends[_friend_message_actor]
+	var peer_name:=str(entry.get("name",""))
+	var online_text:="在線" if bool(entry.get("online",false)) else "離線"
+	# Old UpdateInfo formats: "傳送訊息到．．．" + contact + " [在線/離線]".
+	_friend_message_title.text="傳送訊息到．．．%s [%s]"%[peer_name,online_text]
+
+	var rows:=_friend_messages_for_actor(_friend_message_actor)
+	if rows.size()!=_friend_message_last_count and _friend_message_auto_latest:
+		_friend_message_index=rows.size()-1
+	_friend_message_last_count=rows.size()
+	if rows.is_empty():
+		_friend_message_index=-1
+		_friend_message_timestamp.text=""
+		_friend_message_counter.text=""
+		_friend_message_direction.text=""
+		_friend_message_history.text=""
+		_friend_message_up.disabled=true
+		_friend_message_down.disabled=true
+		return
+	_friend_message_index=clampi(_friend_message_index,0,rows.size()-1)
+	var row:Dictionary=rows[_friend_message_index]
+	_friend_message_timestamp.text=str(row.get("local_timestamp",""))
+	_friend_message_counter.text="%d/%d"%[_friend_message_index+1,rows.size()]
+	if str(row.get("direction",""))=="outgoing":
+		var own_name:=str(_stats.get("character_name",""))
+		_friend_message_direction.text=own_name if not own_name.is_empty() else "->"
+	else:
+		_friend_message_direction.text=peer_name
+	_friend_message_history.text=str(row.get("message",""))
+	_friend_message_up.disabled=_friend_message_index<=0
+	_friend_message_down.disabled=_friend_message_index>=rows.size()-1
+
+
+func _limit_friend_message_input(value:String)->void:
+	if value.to_utf8_buffer().size()<=WireCodec.FRIEND_MESSAGE_MAX_MESSAGE_BYTES:
+		return
+	var clipped:=value
+	while (
+		not clipped.is_empty() and
+		clipped.to_utf8_buffer().size()>WireCodec.FRIEND_MESSAGE_MAX_MESSAGE_BYTES
+	):
+		clipped=clipped.left(clipped.length()-1)
+	var caret:=mini(_friend_message_input.caret_column,clipped.length())
+	_friend_message_input.text=clipped
+	_friend_message_input.caret_column=caret
+
+
+func _send_friend_message()->void:
+	if _panel==null or _panel.session==null or _friend_message_actor<=0:
+		return
+	var message:=_friend_message_input.text
+	if message.is_empty():
+		return
+	if _panel.session.send_friend_message(_friend_message_actor,message):
+		_friend_message_input.text=""
+		_friend_message_auto_latest=true
+
 
 func _set_friend_button_art(button:TextureButton,art:String)->void:
 	button.texture_normal=_tex(art+"_0")
@@ -1176,6 +1410,7 @@ func _toggle_friend_size()->void:
 	# the source viewport after rebuilding rows at the new 119/150px width.
 	_friend_scroll.size=Vector2(137,560) if _friend_large else Vector2(168,49)
 	_update_friend_scroll_buttons.call_deferred()
+	_update_friend_mail_slots.call_deferred()
 
 func _open_friend_editor()->void:
 	_friend_name_input.clear()
@@ -1780,6 +2015,11 @@ func set_world_active(active:bool)->void:
 		_inventory_render_signature.clear()
 		_social_render_signatures.clear()
 		_friend_editor.hide()
+		_friend_message_panel.hide()
+		_friend_message_actor=0
+		_friend_message_index=-1
+		_friend_message_auto_latest=true
+		_friend_message_last_count=0
 		_hide_windows()
 		_photos.clear()
 
@@ -1800,6 +2040,8 @@ func apply_snapshot(snapshot:Dictionary)->void:
 		_refresh_chat_history()
 	if _social_snapshot_changed("friends",["friends","ignored_friends","pending_friend_sequence","pending_friend_invite"]):
 		_refresh_friends()
+	if _social_snapshot_changed("friend_messages",["friend_messages"]):
+		_refresh_friend_message()
 	_refresh_player_shop()
 	_refresh_storage()
 	_refresh_bank()
@@ -2300,6 +2542,10 @@ func _refresh_friends()->void:
 			var ro:=bool(right.get("online",false))
 			if lo!=ro:return lo and not ro
 		return str(left.get("name",""))<str(right.get("name","")))
+	_friend_ordered_actors.clear()
+	if not _friend_show_ignored:
+		for raw_actor in ordered:
+			_friend_ordered_actors.append(int(raw_actor))
 	for raw_actor in ordered:
 		var actor_id:=int(raw_actor)
 		var entry:Dictionary=entries[raw_actor]
@@ -2312,7 +2558,9 @@ func _refresh_friends()->void:
 			_friend_rows,"黑名單為空" if _friend_show_ignored else "尚無好友",15.0))
 	_update_friend_action()
 	_sync_friend_question()
+	_refresh_friend_message()
 	_update_friend_scroll_buttons.call_deferred()
+	_update_friend_mail_slots()
 
 
 func _sync_friend_question()->void:

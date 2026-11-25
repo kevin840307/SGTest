@@ -14,6 +14,7 @@ internal static class ChatWireChecks
     {
         Checks.Run("nearby chat wire binds sender identity only at Gateway", Wire);
         Checks.Run("whisper wire binds sender and target in shared chat sequence", Whisper);
+        Checks.Run("friend message uses dedicated original type-15 semantics and server authority", FriendMessage);
         Checks.Run("chat gateway admits trusted World/Warband and rejects wrong opcode/replay", Gate);
         Checks.Run("trusted chat routing isolates nearby and cross-map whisper", Routing);
         Checks.Run("emotion command is authoritative and fans out only across mutual AOI", EmotionRouting);
@@ -487,6 +488,105 @@ internal static class ChatWireChecks
                 staleWhisper,_=>true,out var staleAccepted,postChat:_=>true)==
                 WireFeedStatus.ProtocolViolation&&staleAccepted==0,
             "whisper bypassed shared chat replay sequence");
+    }
+
+    private static void FriendMessage()
+    {
+        var command=new FriendMessageCommandWire(3,12,22,"好友即時訊息");
+        var frame=WireProtocol.EncodeFriendMessageCommand(command);
+        Checks.Require(
+            frame.Length==WireProtocol.FriendMessageCommandHeaderBytes+
+                System.Text.Encoding.UTF8.GetByteCount(command.Message)&&
+            WireProtocol.TryDecodeFriendMessageCommand(frame,out var decoded)&&
+            decoded==command,
+            "friend message command wire mismatch");
+        var spaced=new FriendMessageCommandWire(3,15,22," 好友 ");
+        Checks.Require(
+            WireProtocol.TryDecodeFriendMessageCommand(
+                WireProtocol.EncodeFriendMessageCommand(spaced),out var spacedBack)&&
+            spacedBack==spaced,
+            "friend message trimmed source text instead of preserving it");
+
+        var maximum=new string('x',WireProtocol.FriendMessageMaxMessageBytes);
+        Checks.Require(WireProtocol.TryDecodeFriendMessageCommand(
+                WireProtocol.EncodeFriendMessageCommand(new(3,13,22,maximum)),
+                out var maximumBack)&&maximumBack.Message==maximum,
+            "friend message rejected original 0x65-byte payload");
+        bool overLimitRejected=false;
+        try
+        {
+            _=WireProtocol.EncodeFriendMessageCommand(new(
+                3,14,22,new string('x',WireProtocol.FriendMessageMaxMessageBytes+1)));
+        }
+        catch(ArgumentOutOfRangeException){overLimitRejected=true;}
+        Checks.Require(overLimitRejected,
+            "friend message admitted payload beyond original 0x65-byte limit");
+
+        var sender=new GatewayConnection(
+            new ActorSnapshot(11,15,5,3,0,0,8,8,1,false),
+            displayName:"FriendSender",
+            pvpState:new CharacterPvpState(
+                11,PvpMode.ProtectedBlue,false,0,0,0));
+        TrustedChatCommand trusted=default;
+        Checks.Require(sender.FeedClientBytes(
+                frame,_=>true,out int accepted,
+                postChat:request=>{trusted=request;return true;})==
+                WireFeedStatus.Accepted&&accepted==1&&
+            trusted.ActorId==11&&trusted.ConnectionEpoch==5&&
+            trusted.RequestMapEpoch==3&&trusted.ChatSequence==12&&
+            trusted.Channel==ChatChannel.FriendMessage&&trusted.BubbleType==0&&
+            trusted.TargetActorId==22&&trusted.TargetName==string.Empty&&
+            trusted.Message=="好友即時訊息",
+            "friend message gateway did not bind authenticated sender/target");
+
+        var target=new GatewayConnection(
+            new ActorSnapshot(22,13,7,4,0,0,8,8,1,false),
+            displayName:"FriendTarget",
+            pvpState:new CharacterPvpState(
+                22,PvpMode.ProtectedBlue,false,0,0,0));
+        var router=new WorldResultRouter();
+        Checks.Require(router.TryAttach(sender)&&router.TryAttach(target),
+            "friend message routing fixture attach failed");
+
+        Task<bool> NotIgnored(long _,long __)=>Task.FromResult(false);
+        Task<bool> Friends(long left,long right)=>
+            Task.FromResult((left,right) is (11,22) or (22,11));
+        ChatRouting.RouteAsync(
+            trusted,router,null,NotIgnored,null,Friends).GetAwaiter().GetResult();
+        Checks.Require(
+            target.TryDequeueReliable(out var deliveredFrame)&&
+            WireProtocol.TryDecodeChatDelivery(deliveredFrame,out var delivery)&&
+            delivery.Channel==ChatChannel.FriendMessage&&
+            delivery.BubbleType==0&&delivery.SenderActorId==11&&
+            delivery.ReceiverMapEpoch==4&&delivery.Message=="好友即時訊息"&&
+            sender.TryDequeueReliable(out var resultFrame)&&
+            WireProtocol.TryDecodeWhisperResult(resultFrame,out var result)&&
+            result.Status==WhisperResultStatus.Delivered&&
+            result.TargetActorId==22&&result.TargetName=="FriendTarget",
+            "friend message missed authoritative friend-only delivery/result");
+
+        ChatRouting.RouteAsync(
+            trusted with { ChatSequence=13,Message="非好友不得送達" },
+            router,null,NotIgnored,null,
+            (_,_)=>Task.FromResult(false)).GetAwaiter().GetResult();
+        Checks.Require(
+            !target.TryDequeueReliable(out _)&&
+            sender.TryDequeueReliable(out var nonFriendFrame)&&
+            WireProtocol.TryDecodeWhisperResult(nonFriendFrame,out var nonFriend)&&
+            nonFriend.Status==WhisperResultStatus.TargetUnavailable,
+            "non-friend received friend-message delivery");
+
+        Task<bool> TargetBlocksSender(long owner,long source)=>
+            Task.FromResult(owner==22&&source==11);
+        ChatRouting.RouteAsync(
+            trusted with { ChatSequence=14,Message="黑名單不得送達" },
+            router,null,TargetBlocksSender,null,Friends).GetAwaiter().GetResult();
+        Checks.Require(
+            !target.TryDequeueReliable(out _)&&
+            sender.TryDequeueReliable(out var ignoredFrame)&&
+            WireProtocol.TryDecodeWhisperResult(ignoredFrame,out var ignored)&&
+            ignored.Status==WhisperResultStatus.TargetUnavailable,
+            "friend message bypassed recipient ignore authority");
     }
 
     private static void Gate()

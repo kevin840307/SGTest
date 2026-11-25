@@ -255,6 +255,7 @@ var last_player_shop_sold_listing_id := 0
 var stale_player_shop_frames := 0
 var chat_sequence := 0
 var chat_messages: Array[Dictionary] = []
+var friend_messages: Array[Dictionary] = []
 var chat_sender_sequences := {}
 var stale_chat_deliveries := 0
 var emotion_events: Array[Dictionary] = []
@@ -265,6 +266,7 @@ var pending_whisper_target_actor_id := 0
 var pending_whisper_target_name := ""
 var pending_whisper_bubble_type := 0
 var pending_whisper_message := ""
+var pending_whisper_is_friend_message := false
 var last_whisper_result_sequence := 0
 var last_whisper_result_status := -1
 var last_whisper_result := {}
@@ -371,6 +373,8 @@ var pet_skill_visual_events: Array[Dictionary] = []
 var pet_skill_visual_sequences := {}
 var stale_pet_skill_visuals := 0
 const CHAT_BACKLOG_MAX := 100
+const FRIEND_MESSAGE_BACKLOG_MAX := 100
+const FRIEND_MESSAGE_HISTORY_PREFIX := "user://friend_message_history_"
 const EMOTION_EVENT_MAX := 64
 var quest_sequence := 0
 var pending_quest_sequence := 0
@@ -859,6 +863,31 @@ func mark_whisper_sent(
 	pending_whisper_target_name=clean_name
 	pending_whisper_bubble_type=bubble_type
 	pending_whisper_message=message
+	pending_whisper_is_friend_message=false
+	return true
+
+
+func mark_friend_message_sent(
+		sequence:int,target_actor_id:int,message:String)->bool:
+	var bytes:=message.to_utf8_buffer()
+	if (
+		state!=STATE_IN_WORLD or not world_ready or resync_pending or
+		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
+		last_world_ready_ack_epoch!=map_epoch or pending_whisper_sequence!=0 or
+		sequence<=chat_sequence or sequence>0xffffffff or target_actor_id<=0 or
+		target_actor_id==actor_id or not friends.has(target_actor_id) or
+		ignored_friends.has(target_actor_id) or bytes.size()<1 or
+		bytes.size()>WireCodec.FRIEND_MESSAGE_MAX_MESSAGE_BYTES or
+		message.is_empty()
+	):
+		return false
+	chat_sequence=sequence
+	pending_whisper_sequence=sequence
+	pending_whisper_target_actor_id=target_actor_id
+	pending_whisper_target_name=""
+	pending_whisper_bubble_type=0
+	pending_whisper_message=message
+	pending_whisper_is_friend_message=true
 	return true
 
 
@@ -868,6 +897,7 @@ func _clear_pending_whisper()->void:
 	pending_whisper_target_name=""
 	pending_whisper_bubble_type=0
 	pending_whisper_message=""
+	pending_whisper_is_friend_message=false
 
 
 func mark_party_sent(
@@ -1645,6 +1675,7 @@ func snapshot() -> Dictionary:
 		"stale_player_shop_frames": stale_player_shop_frames,
 		"chat_sequence": chat_sequence,
 		"chat_messages": chat_messages.duplicate(true),
+		"friend_messages": friend_messages.duplicate(true),
 		"stale_chat_deliveries": stale_chat_deliveries,
 		"emotion_events": emotion_events.duplicate(true),
 		"stale_emotion_visuals": stale_emotion_visuals,
@@ -1943,6 +1974,7 @@ func _apply_choose(frame: PackedByteArray) -> bool:
 		state = STATE_FAILED
 		return true
 	actor_id = int(decoded.character_id)
+	_load_friend_message_history()
 	# Creation choices can contain 4096 tuples; do not deep-copy that menu
 	# into every subsequent world/AOI publication after entering the game.
 	character_creation_appearances.clear()
@@ -4368,6 +4400,21 @@ func _apply_chat_delivery(frame:PackedByteArray)->bool:
 	var sender := int(value.sender_actor_id)
 	var connection := int(value.sender_connection_epoch)
 	var sequence := int(value.chat_sequence)
+	if channel==6:
+		if sender==actor_id or not friends.has(sender) or ignored_friends.has(sender):
+			return fail("friend_message_from_non_friend")
+		var friend_key:="%d/%d" % [sender,connection]
+		var friend_previous:=int(chat_sender_sequences.get(friend_key,0))
+		if sequence<=friend_previous:
+			stale_chat_deliveries+=1
+			return true
+		chat_sender_sequences[friend_key]=sequence
+		var friend_row:Dictionary=value.duplicate(true)
+		friend_row["direction"]="incoming"
+		friend_row["peer_actor_id"]=sender
+		friend_row["peer_name"]=str(value.sender_name)
+		_append_friend_message(friend_row)
+		return true
 	var decision := ChatDeliveryPolicy.check_sender(
 		value, actor_id, chat_sequence, entities, clan_id, clan_members,
 		party_id, party_members)
@@ -4393,6 +4440,58 @@ func _append_chat_message(message: Dictionary) -> void:
 	chat_messages.append(message)
 	while chat_messages.size() > CHAT_BACKLOG_MAX:
 		chat_messages.pop_front()
+
+
+func _friend_message_history_path()->String:
+	return FRIEND_MESSAGE_HISTORY_PREFIX+str(actor_id)+".cfg"
+
+
+func _load_friend_message_history()->void:
+	friend_messages.clear()
+	if actor_id<=0:
+		return
+	var config:=ConfigFile.new()
+	if config.load(_friend_message_history_path())!=OK:
+		return
+	var stored:Variant=config.get_value("history","messages",[])
+	if not stored is Array:
+		return
+	for raw in stored:
+		if not raw is Dictionary:
+			continue
+		var row:Dictionary=(raw as Dictionary).duplicate(true)
+		var peer:=int(row.get("peer_actor_id",0))
+		var message:=str(row.get("message",""))
+		var direction:=str(row.get("direction",""))
+		if (
+			peer<=0 or message.is_empty() or
+			message.to_utf8_buffer().size()>WireCodec.FRIEND_MESSAGE_MAX_MESSAGE_BYTES or
+			direction not in ["incoming","outgoing"]
+		):
+			continue
+		friend_messages.append(row)
+		while friend_messages.size()>FRIEND_MESSAGE_BACKLOG_MAX:
+			friend_messages.pop_front()
+
+
+func _save_friend_message_history()->void:
+	if actor_id<=0:
+		return
+	var config:=ConfigFile.new()
+	config.set_value("history","messages",friend_messages)
+	config.save(_friend_message_history_path())
+
+
+func _append_friend_message(message: Dictionary) -> void:
+	if not message.has("local_timestamp"):
+		var now:=Time.get_datetime_dict_from_system()
+		message["local_timestamp"]="[ Y%04d/M%02d/D%02d %02d:%02d:%02d ]"%[
+			int(now.year),int(now.month),int(now.day),
+			int(now.hour),int(now.minute),int(now.second)]
+	friend_messages.append(message)
+	while friend_messages.size() > FRIEND_MESSAGE_BACKLOG_MAX:
+		friend_messages.pop_front()
+	_save_friend_message_history()
 
 
 func _apply_emotion_visual(frame:PackedByteArray)->bool:
@@ -4464,20 +4563,38 @@ func _apply_whisper_result(frame:PackedByteArray)->bool:
 			str(value.target_name).strip_edges().is_empty()
 		):
 			return fail("whisper_delivered_without_target_identity")
-		_append_chat_message({
-			"receiver_map_epoch":map_epoch,
-			"sender_actor_id":actor_id,
-			"sender_connection_epoch":0,
-			"chat_sequence":sequence,
-			"channel":4,
-			"bubble_type":pending_whisper_bubble_type,
-			"sender_name":"",
-			"message":pending_whisper_message,
-			"direction":"outgoing",
-			"target_actor_id":response_target,
-			"target_connection_epoch":int(value.target_connection_epoch),
-			"target_name":str(value.target_name)
-		})
+		if pending_whisper_is_friend_message:
+			_append_friend_message({
+				"receiver_map_epoch":map_epoch,
+				"sender_actor_id":actor_id,
+				"sender_connection_epoch":0,
+				"chat_sequence":sequence,
+				"channel":6,
+				"bubble_type":0,
+				"sender_name":"",
+				"message":pending_whisper_message,
+				"direction":"outgoing",
+				"peer_actor_id":response_target,
+				"peer_name":str(value.target_name),
+				"target_actor_id":response_target,
+				"target_connection_epoch":int(value.target_connection_epoch),
+				"target_name":str(value.target_name)
+			})
+		else:
+			_append_chat_message({
+				"receiver_map_epoch":map_epoch,
+				"sender_actor_id":actor_id,
+				"sender_connection_epoch":0,
+				"chat_sequence":sequence,
+				"channel":4,
+				"bubble_type":pending_whisper_bubble_type,
+				"sender_name":"",
+				"message":pending_whisper_message,
+				"direction":"outgoing",
+				"target_actor_id":response_target,
+				"target_connection_epoch":int(value.target_connection_epoch),
+				"target_name":str(value.target_name)
+			})
 	elif status==2:
 		if response_target<=0:
 			return fail("whisper_self_target_without_resolved_actor")

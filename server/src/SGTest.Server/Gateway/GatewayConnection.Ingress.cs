@@ -515,6 +515,23 @@ public sealed partial class GatewayConnection
             return WireFrameDisposition.Accepted;
         }
 
+        if(header.Opcode==WireOpcode.FriendMessageCommand &&
+            postChat is not null &&
+            WireProtocol.TryDecodeFriendMessageCommand(frame,out var friendMessage))
+        {
+            if(!GameplayReady(bound)||friendMessage.MapEpoch!=bound.MapEpoch||
+               friendMessage.ChatSequence<=_lastChatSequence)
+                return WireFrameDisposition.ProtocolViolation;
+            var request=new TrustedChatCommand(
+                bound.ActorId,bound.ConnectionEpoch,friendMessage.MapEpoch,
+                friendMessage.ChatSequence,ChatChannel.FriendMessage,0,
+                friendMessage.Message,friendMessage.TargetActorId);
+            if(!postChat(request))
+                return WireFrameDisposition.Backpressured;
+            _lastChatSequence=friendMessage.ChatSequence;
+            return WireFrameDisposition.Accepted;
+        }
+
         if(header.Opcode==WireOpcode.PartyCommand &&
             postParty is not null &&
             WireProtocol.TryDecodePartyCommand(frame,out var party))

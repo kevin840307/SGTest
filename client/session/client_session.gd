@@ -438,6 +438,33 @@ func send_whisper_name(
 	return _queue_whisper_intent(0,target_name,message,bubble_type)
 
 
+func send_friend_message(target_actor_id:int,message:String)->bool:
+	var clean:=message
+	var bytes:=clean.to_utf8_buffer()
+	var current:=snapshot()
+	var friends:Dictionary=current.get("friends",{})
+	var ignored:Dictionary=current.get("ignored_friends",{})
+	if (
+		target_actor_id<=0 or target_actor_id==int(current.get("actor_id",0)) or
+		not friends.has(target_actor_id) or ignored.has(target_actor_id) or
+		clean.is_empty() or bytes.size()>WireCodec.FRIEND_MESSAGE_MAX_MESSAGE_BYTES or
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_whisper_sequence",0))!=0
+	):
+		return false
+	return _queue_intent({
+		"type":"friend_message","target_actor_id":target_actor_id,
+		"message":clean,"bubble_type":0,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
+
 func _queue_whisper_intent(
 		target_actor_id:int,target_name:String,message:String,bubble_type:int)->bool:
 	var clean:=message.strip_edges()
@@ -1633,7 +1660,7 @@ func _process_first_intent() -> void:
 	elif kind=="emotion":
 		_process_emotion_intent(intent)
 
-	elif kind in ["nearby_chat","world_chat","warband_chat","party_chat","whisper"]:
+	elif kind in ["nearby_chat","world_chat","warband_chat","party_chat","whisper","friend_message"]:
 		_process_chat_intent(intent, kind)
 
 
@@ -1962,6 +1989,19 @@ func _process_chat_intent(intent: Dictionary, kind: String) -> void:
 			_publish()
 		return
 	var target:=int(intent.get("target_actor_id",0))
+	if kind=="friend_message":
+		frame=WireCodec.encode_friend_message_command(
+			int(current.get("map_epoch",0)),sequence,target,message)
+		if frame.is_empty():
+			_pop_intent()
+			return
+		if (
+			_transport.send_frame(frame) and
+			_world.mark_friend_message_sent(sequence,target,message)
+		):
+			_pop_intent()
+			_publish()
+		return
 	var target_name:=str(intent.get("target_name",""))
 	var by_name:=not target_name.is_empty()
 	if (

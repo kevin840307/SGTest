@@ -6,6 +6,19 @@ const Layout = preload("res://ui/session_layout.gd")
 const State = preload("res://world/world_state.gd")
 const Skins = preload("res://ui/ui_skin_catalog.gd")
 
+class FriendMessageSession:
+	extends RefCounted
+	var sends:=0
+	var target:=0
+	var message:=""
+	func send_friend_message(target_actor_id:int,value:String)->bool:
+		if target_actor_id<=0 or value.strip_edges().is_empty():
+			return false
+		sends+=1
+		target=target_actor_id
+		message=value
+		return true
+
 func _fail(reason: String) -> void:
 	push_error("CLASSIC_IE_UI_FAIL "+reason)
 	quit(1)
@@ -434,6 +447,12 @@ func _run() -> void:
 			45:{"actor_id":45,"name":"黑名單玩家","online":false,"ignored":true},
 		},
 		"pending_friend_sequence":0,
+		"friend_messages":[
+			{"channel":6,"peer_actor_id":43,"peer_name":"附近玩家","direction":"incoming",
+			 "message":"第一則","local_timestamp":"[ Y2026/M11/D26 06:00:00 ]"},
+			{"channel":6,"peer_actor_id":43,"peer_name":"附近玩家","direction":"outgoing",
+			 "message":"回覆","local_timestamp":"[ Y2026/M11/D26 06:01:00 ]"},
+		],
 		"chat_messages":[
 			{"channel":0,"sender_actor_id":43,"sender_name":"附近玩家","message":"你好"},
 			{"channel":3,"sender_actor_id":44,"sender_name":"隊友","message":"出發吧"},
@@ -533,6 +552,83 @@ func _run() -> void:
 		not str(world._friend_rows.get_child(1).text).begins_with("○ ")
 	):
 		_fail("classic persistent chat/friend panels did not bind authoritative friend presence")
+		return
+	var mail0:=world.friend_panel.get_node("FriendMail0") as TextureButton
+	var mail1:=world.friend_panel.get_node("FriendMail1") as TextureButton
+	var mail2:=world.friend_panel.get_node("FriendMail2") as TextureButton
+	if (
+		mail0==null or mail0.get_rect()!=Rect2(163,36,14,15) or
+		mail1==null or mail1.get_rect()!=Rect2(163,53,14,15) or
+		mail2==null or mail2.get_rect()!=Rect2(163,70,14,15) or
+		mail0.texture_normal==null or not mail0.visible or not mail1.visible or mail2.visible
+	):
+		_fail("020_FRIENDLIST B_GET_MAIL source rects/art/contact mapping drifted r0=%s r1=%s r2=%s tex=%s vis=%s/%s/%s" % [
+			str(mail0.get_rect()) if mail0!=null else "null",
+			str(mail1.get_rect()) if mail1!=null else "null",
+			str(mail2.get_rect()) if mail2!=null else "null",
+			str(mail0.texture_normal!=null) if mail0!=null else "false",
+			str(mail0.visible) if mail0!=null else "false",
+			str(mail1.visible) if mail1!=null else "false",
+			str(mail2.visible) if mail2!=null else "false"])
+		return
+	mail0.pressed.emit()
+	if (
+		not world._friend_message_panel.visible or
+		world._friend_message_panel.size!=Vector2(256,175) or
+		world._friend_message_title.get_rect()!=Rect2(12,4,200,13) or
+		world._friend_message_timestamp.get_rect()!=Rect2(12,28,218,13) or
+		world._friend_message_counter.get_rect()!=Rect2(129,28,100,13) or
+		world._friend_message_direction.get_rect()!=Rect2(12,50,218,13) or
+		world._friend_message_history.get_rect()!=Rect2(12,65,218,70) or
+		world._friend_message_input.get_rect()!=Rect2(9,155,215,15) or
+		world._friend_message_input_aux.get_rect()!=Rect2(227,155,18,15) or
+		world._friend_message_up.get_rect()!=Rect2(233,24,17,36) or
+		world._friend_message_down.get_rect()!=Rect2(233,111,17,36) or
+		str(world._friend_message_title.text)!="傳送訊息到．．．附近玩家 [在線]" or
+		str(world._friend_message_timestamp.text)!="[ Y2026/M11/D26 06:01:00 ]" or
+		str(world._friend_message_counter.text)!="2/2" or
+		str(world._friend_message_direction.text)!="TestA" or
+		str(world._friend_message_history.text)!="回覆"
+	):
+		_fail("043_FRIEND_MSG source geometry/text/latest-message binding drifted")
+		return
+	world._friend_message_up.pressed.emit()
+	if (
+		str(world._friend_message_counter.text)!="1/2" or
+		str(world._friend_message_direction.text)!="附近玩家" or
+		str(world._friend_message_history.text)!="第一則" or
+		not world._friend_message_up.disabled or world._friend_message_down.disabled
+	):
+		_fail("043_FRIEND_MSG message-by-message history navigation drifted")
+		return
+	world._friend_message_down.pressed.emit()
+	if str(world._friend_message_counter.text)!="2/2" or not world._friend_message_down.disabled:
+		_fail("043_FRIEND_MSG next-message navigation did not return to latest")
+		return
+	world._friend_message_input.text="測".repeat(40)
+	world._limit_friend_message_input(world._friend_message_input.text)
+	if (
+		world._friend_message_input.text.to_utf8_buffer().size()>
+			world.WireCodec.FRIEND_MESSAGE_MAX_MESSAGE_BYTES or
+		world._friend_message_input.text.is_empty()
+	):
+		_fail("043_FRIEND_MSG did not enforce original 0x65-byte input bound")
+		return
+	var real_session=app.session_panel.session
+	var friend_send:=FriendMessageSession.new()
+	app.session_panel.session=friend_send
+	world._friend_message_input.text=" 由043送出 "
+	world._friend_message_input.text_submitted.emit(world._friend_message_input.text)
+	if (
+		friend_send.sends!=1 or friend_send.target!=43 or
+		friend_send.message!=" 由043送出 " or not world._friend_message_input.text.is_empty()
+	):
+		_fail("043_FRIEND_MSG Enter did not invoke friend-message session flow")
+		return
+	app.session_panel.session=real_session
+	world._close_friend_message()
+	if world._friend_message_panel.visible:
+		_fail("043_FRIEND_MSG close handler did not hide source panel")
 		return
 	var ignore_button:=world.friend_panel.get_node("FriendIgnore") as TextureButton
 	var ignore_list_button:=world.friend_panel.get_node("IgnoreList") as TextureButton

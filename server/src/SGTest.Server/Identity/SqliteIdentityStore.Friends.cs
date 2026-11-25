@@ -358,6 +358,27 @@ WHERE owner_character_id=$owner AND target_character_id=$target LIMIT 1;";
         },cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<bool> IsFriendAsync(
+        long characterId,long targetCharacterId,
+        CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        if(characterId<=0||targetCharacterId<=0||characterId==targetCharacterId)
+            return false;
+        return await Task.Run(()=>
+        {
+            using var connection=Open();
+            using var command=connection.CreateCommand();
+            long low=Math.Min(characterId,targetCharacterId);
+            long high=Math.Max(characterId,targetCharacterId);
+            command.CommandText=@"SELECT 1 FROM character_friendships
+WHERE character_low_id=$low AND character_high_id=$high LIMIT 1;";
+            command.Parameters.AddWithValue("$low",low);
+            command.Parameters.AddWithValue("$high",high);
+            return command.ExecuteScalar() is not null;
+        },cancellationToken).ConfigureAwait(false);
+    }
+
     private static bool FriendshipExists(
         SqliteConnection connection,SqliteTransaction tx,long characterId,long targetCharacterId)
     {
