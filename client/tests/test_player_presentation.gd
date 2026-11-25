@@ -62,6 +62,31 @@ func run() -> void:
 	remote.y=20.0
 	var snapshot := {"world_ready":true,"map_epoch":1,"map_id":15,"actor_id":1,"x":10.0,"y":10.0,"facing":6,"self_state":own,"entities":{2:remote},"last_aoi_tick":1}
 	players.apply_snapshot(snapshot,0)
+	# An older map's delayed AOI snapshot must not resurrect actors after a
+	# successful WorldReady for the new map. This must hold in presentation
+	# independently of the WorldState reducer's high-water gate.
+	var stale_map_probe := Players.new()
+	check(stale_map_probe.configure(assets)==OK,"stale-map probe configure")
+	var old_map: Dictionary = snapshot.duplicate(true)
+	var new_map: Dictionary = old_map.duplicate(true)
+	new_map.map_epoch = 2
+	new_map.map_id = 13
+	new_map.self_state.entity_map_epoch = 2
+	new_map.entities.clear()
+	new_map.last_aoi_tick = 2
+	stale_map_probe.apply_snapshot(old_map,0)
+	check(stale_map_probe._actors.has(2),"old-map peer baseline missing")
+	stale_map_probe.apply_snapshot(new_map,100000)
+	check(stale_map_probe._epoch==2 and stale_map_probe._map==13 and not stale_map_probe._actors.has(2),
+		"new-map WorldReady did not retire old peer")
+	stale_map_probe.apply_snapshot(old_map,200000)
+	check(stale_map_probe._epoch==2 and stale_map_probe._map==13 and not stale_map_probe._actors.has(2),
+		"late old-map AOI resurrected a departed peer")
+	stale_map_probe.clear()
+	check(stale_map_probe.configure(assets)==OK,"reconnected presentation configure")
+	stale_map_probe.apply_snapshot(old_map,300000)
+	check(stale_map_probe._epoch==1 and stale_map_probe._map==15 and stale_map_probe._actors.has(2),
+		"new session could not accept its own lower map epoch")
 	# The local avatar is presented from locally predicted position; remote
 	# avatars independently continue walking on their last known velocity.
 	var prediction_probe := Players.new()

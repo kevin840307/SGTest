@@ -233,6 +233,10 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 	if not snapshot.get("world_ready",false) or int(snapshot.get("map_epoch",0)) <= 0 or now_usec < 0:
 		return
 	var epoch := int(snapshot.map_epoch)
+	# WorldState ordinarily rejects delayed map snapshots, but presentation
+	# must not roll back to a previous map if a queued frame arrives late.
+	if _epoch > 0 and epoch < _epoch:
+		return
 	var map := int(snapshot.map_id)
 	_own_actor_id = int(snapshot.actor_id)
 	if epoch != _epoch or map != _map:
