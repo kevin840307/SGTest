@@ -18,6 +18,23 @@ func _run() -> void:
 		"chat_messages": [{"channel": 0, "sender_name": "Leader", "message": "hello"}]
 	}
 	shell.apply_snapshot(snapshot)
+	_expect(shell.friend_panel.size == Vector2(203, 90), "friend list starts in HK small geometry")
+	shell._select_friend(20, "Friend")
+	shell._toggle_friend_size()
+	_expect(shell._friend_large and shell.friend_panel.size == Vector2(173, 600),
+		"HK 042 large friend list uses source geometry")
+	_expect(shell.friend_panel.position == Vector2.ZERO, "large friend list uses original switch-panel origin")
+	_expect(shell._friend_scroll.position == Vector2(9, 36) and shell._friend_scroll.size == Vector2(137, 560),
+		"large friend list viewport matches HK controls got=%s/%s" % [shell._friend_scroll.position, shell._friend_scroll.size])
+	_expect((shell.friend_panel.get_node("FriendAdd") as TextureButton).position == Vector2(2, 6),
+		"large friend add control uses HK rect")
+	_expect(shell._friend_selected_actor == 20 and (shell._friend_rows.get_child(0) as Button).text.contains("Friend"),
+		"large mode preserves authoritative friend selection/state")
+	shell._toggle_friend_size()
+	_expect(not shell._friend_large and shell.friend_panel.size == Vector2(203, 90),
+		"collapse restores HK 020 small geometry")
+	_expect(shell.friend_panel.position == Vector2(597, 510), "collapse restores small friend position")
+	_expect(shell._friend_rows.custom_minimum_size.x == 150, "small friend row width restored")
 	var party_row := shell._party_rows.get_child(0)
 	var friend_row := shell._friend_rows.get_child(0)
 	var chat_text: String = shell._chat_history.text

@@ -221,6 +221,10 @@ var _chat_show_nearby:=true
 var _friend_scroll:ScrollContainer
 var _friend_up:TextureButton
 var _friend_down:TextureButton
+var _friend_background:TextureRect
+var _friend_expand:TextureButton
+var _friend_large:=false
+var _friend_small_position:=Vector2(597,510)
 var _friend_editor:=PopupPanel.new()
 var _friend_delete:TextureButton
 var _friend_ignore:TextureButton
@@ -970,16 +974,14 @@ func _build_friend_panel()->void:
 	friend_panel.size=Vector2(203,90)
 	hud.add_child(friend_panel)
 	_make_movable(friend_panel)
-	_background(friend_panel,"BG_FRIENDLIST_SMALL",friend_panel.size)
+	_friend_background=_background(friend_panel,"BG_FRIENDLIST_SMALL",friend_panel.size)
 	_texture_button(friend_panel,"FriendAdd","B_LIST_ADD",Vector2(5,7),Vector2(24,24),_open_friend_editor,"新增好友")
 	_friend_ignore=_texture_button(friend_panel,"FriendIgnore","B_LIST_TO_INGORE",Vector2(31,7),Vector2(24,24),_toggle_selected_friend_ignore,"移至黑名單")
 	_friend_delete=_texture_button(friend_panel,"FriendDelete","B_LIST_DEL",Vector2(71,7),Vector2(24,24),_delete_selected_friend,"移除選取的好友")
 	_friend_edit=_texture_button(friend_panel,"FriendEdit","B_LIST_EDIT",Vector2(97,7),Vector2(24,24),_open_friend_rename,"好友備註")
 	_friend_list_button=_texture_button(friend_panel,"FriendList","B_LIST_FRIENDLIST",Vector2(128,7),Vector2(24,24),_show_friend_list,"好友清單")
 	_friend_ignore_list_button=_texture_button(friend_panel,"IgnoreList","B_LIST_IGNORELIST",Vector2(154,7),Vector2(24,24),_show_ignore_list,"黑名單")
-	var friend_expand:=_texture_button(friend_panel,"FriendExpand","ZONESCREEN",Vector2(183,6),Vector2(17,17),Callable(),"大型好友清單尚未接通")
-	friend_expand.disabled=true
-	friend_expand.texture_disabled=_tex("ZONESCREEN_0")
+	_friend_expand=_texture_button(friend_panel,"FriendExpand","ZONESCREEN",Vector2(183,6),Vector2(17,17),_toggle_friend_size,"展開好友清單")
 	_friend_scroll=ScrollContainer.new()
 	_friend_scroll.name="FriendScroll"
 	_friend_scroll.position=Vector2(9,36)
@@ -1095,6 +1097,68 @@ func _update_friend_scroll_buttons()->void:
 	_friend_up.disabled=scrollbar.value<=scrollbar.min_value
 	_friend_down.disabled=scrollbar.value>=maxf(scrollbar.min_value,scrollbar.max_value-scrollbar.page)-0.01
 
+func _set_friend_button_art(button:TextureButton,art:String)->void:
+	button.texture_normal=_tex(art+"_0")
+	button.texture_hover=_tex(art+"_1")
+	button.texture_pressed=_tex(art+"_2")
+	button.texture_disabled=_tex(art+"_3")
+
+func _toggle_friend_size()->void:
+	_friend_large=not _friend_large
+	if _friend_large:
+		_friend_small_position=friend_panel.position
+		# Old CFriendSItf::OnSwitchPanel creates CFriendLItf with x=0,y=0.
+		friend_panel.position=Vector2.ZERO
+		friend_panel.size=Vector2(173,600)
+		_friend_background.texture=_tex("BG_FRIENDLIST_BIG")
+		_friend_background.size=friend_panel.size
+		(friend_panel.get_node("FriendAdd") as TextureButton).position=Vector2(2,6)
+		_friend_ignore.position=Vector2(27,6)
+		_friend_delete.position=Vector2(52,6)
+		_friend_edit.position=Vector2(77,6)
+		_friend_list_button.position=Vector2(104,6)
+		_friend_ignore_list_button.position=Vector2(129,6)
+		_friend_expand.position=Vector2(155,5)
+		_set_friend_button_art(_friend_expand,"MINISCREEN")
+		_friend_expand.tooltip_text="縮小好友清單"
+		_friend_scroll.position=Vector2(9,36)
+		_friend_scroll.size=Vector2(137,560)
+		_friend_rows.custom_minimum_size.x=119
+		_friend_up.position=Vector2(150,36)
+		_friend_up.size=Vector2(17,36)
+		_set_friend_button_art(_friend_up,"SCROLLUP_BUTTON")
+		_friend_down.position=Vector2(150,560)
+		_friend_down.size=Vector2(17,36)
+		_set_friend_button_art(_friend_down,"SCROLLDOWN_BUTTON")
+	else:
+		friend_panel.position=_friend_small_position
+		friend_panel.size=Vector2(203,90)
+		_friend_background.texture=_tex("BG_FRIENDLIST_SMALL")
+		_friend_background.size=friend_panel.size
+		(friend_panel.get_node("FriendAdd") as TextureButton).position=Vector2(5,7)
+		_friend_ignore.position=Vector2(31,7)
+		_friend_delete.position=Vector2(71,7)
+		_friend_edit.position=Vector2(97,7)
+		_friend_list_button.position=Vector2(128,7)
+		_friend_ignore_list_button.position=Vector2(154,7)
+		_friend_expand.position=Vector2(183,6)
+		_set_friend_button_art(_friend_expand,"ZONESCREEN")
+		_friend_expand.tooltip_text="展開好友清單"
+		_friend_scroll.position=Vector2(9,36)
+		_friend_scroll.size=Vector2(168,49)
+		_friend_rows.custom_minimum_size.x=150
+		_friend_up.position=Vector2(180,36)
+		_friend_up.size=Vector2(17,25)
+		_set_friend_button_art(_friend_up,"SCROLLUP_S")
+		_friend_down.position=Vector2(180,61)
+		_friend_down.size=Vector2(17,25)
+		_set_friend_button_art(_friend_down,"SCROLLDOWN_S")
+	_refresh_friends()
+	# ScrollContainer clamps assignments against the old child minimum. Re-apply
+	# the source viewport after rebuilding rows at the new 119/150px width.
+	_friend_scroll.size=Vector2(137,560) if _friend_large else Vector2(168,49)
+	_update_friend_scroll_buttons.call_deferred()
+
 func _open_friend_editor()->void:
 	_friend_name_input.clear()
 	_update_friend_action()
@@ -1176,7 +1240,7 @@ func _delete_selected_friend()->void:
 		_update_friend_action()
 
 func _style_friend_row(button:Button)->void:
-	button.custom_minimum_size=Vector2(150,15)
+	button.custom_minimum_size=Vector2(119 if _friend_large else 150,15)
 	button.clip_text=true
 	button.add_theme_font_override("font",_character_raster_font)
 	button.add_theme_font_size_override("font_size",12)
