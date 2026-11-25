@@ -2,6 +2,9 @@ extends Node2D
 ## Draw an already ordered presentation snapshot; texture references are shared.
 ## Indexed palette variants are baked off the main thread and cached per map.
 const PaletteHue = preload("res://player/palette_hue.gd")
+const UiTextureLoader = preload("res://ui/ui_texture_loader.gd")
+const HK_MISS_TEXTURE := "res://ui/private_ie_hk2/MISS.png"
+const HK_MISS_ORIGIN := Vector2(-7.0,0.0)
 
 var _commands: Array = []
 var _ground_markers: Array = []
@@ -170,11 +173,18 @@ func _draw() -> void:
 
 	# Reliable combat presentation is still rendered by this shared Canvas.
 	# No Label/Sprite Node is allocated per attack, so dense fights do not
-	# multiply scene-tree resources.
+	# multiply scene-tree resources. HK MISS is a source SPR, not text.
 	for label in _combat_labels:
 		var position: Vector2 = label.p
 		var alpha := clampf(float(label.alpha),0.0,1.0)
 		var text := str(label.text)
+		if bool(label.miss):
+			var miss_texture := UiTextureLoader.get_texture(HK_MISS_TEXTURE)
+			if miss_texture != null:
+				# Source frame is 45x35 with raw origin (-7,0). Match the same
+				# position-origin rule used by world_draw_list for original SPRs.
+				draw_texture(miss_texture,position-HK_MISS_ORIGIN,Color(1.0,1.0,1.0,alpha))
+				continue
 		var foreground := Color(1.0,0.92,0.25,alpha) if bool(label.miss) else Color(1.0,1.0,1.0,alpha)
 		var shadow := Color(0.0,0.0,0.0,0.9*alpha)
 		draw_string(font,position+Vector2(1,1),text,HORIZONTAL_ALIGNMENT_CENTER,-1,18,shadow)
