@@ -107,10 +107,16 @@ internal static class AesGameHost
             }
 
             var monsterRuntimes = new List<MonsterRuntime>();
+            string? monsterRuntimeRootOption =
+                options.GetValueOrDefault("--monster-runtime-root");
+            string? monsterRuntimeRoot = monsterRuntimeRootOption is null
+                ? null : Path.GetFullPath(monsterRuntimeRootOption);
             foreach (var map in maps)
             {
-                string populationPath = Path.Combine(
-                    root, "maps", map.MapId.ToString(), "population.json");
+                string populationPath = monsterRuntimeRoot is null
+                    ? Path.Combine(root, "maps", map.MapId.ToString(), "population.json")
+                    : Path.Combine(monsterRuntimeRoot, "maps", map.MapId.ToString(),
+                        "population.runtime.json");
                 if (!File.Exists(populationPath))
                     continue;
                 MonsterPopulation? population;
@@ -512,7 +518,8 @@ internal static class AesGameHost
                 "[--auth-failure-window-seconds 60] [--auth-lockout-seconds 30] " +
                 "[--account-registration disabled|enabled] " +
                 "[--registration-attempts-per-address 3] [--registration-window-seconds 600] " +
-                "[--position-checkpoint-ms 5000] [--loot-rules <VERIFIED_JSON>] " +
+                "[--position-checkpoint-ms 5000] [--monster-runtime-root <PRIVATE_ROOT>] " +
+                "[--loot-rules <VERIFIED_JSON>] " +
                 "[--experience-rules <VERIFIED_JSON>] " +
                 "[--recovery-rules <VERIFIED_JSON>] [--skill-rules <VERIFIED_JSON>] " +
                 "[--pet-combat-rules <VERIFIED_JSON>] [--pet-skill-rules <VERIFIED_JSON>] [--pet-growth-rules <VERIFIED_JSON>] " +
@@ -552,7 +559,7 @@ internal static class AesGameHost
                           "--account-registration",
                           "--registration-attempts-per-address",
                           "--registration-window-seconds",
-                          "--position-checkpoint-ms",
+                          "--position-checkpoint-ms", "--monster-runtime-root",
                           "--loot-rules", "--experience-rules",
                           "--recovery-rules", "--skill-rules",
                           "--pet-combat-rules", "--pet-skill-rules", "--pet-growth-rules",

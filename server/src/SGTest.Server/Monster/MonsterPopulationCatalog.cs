@@ -16,7 +16,8 @@ public sealed record MonsterCombatStats(
     int AttackCooldownTicks,
     int RespawnTicks,
     double WanderRadius,
-    int WanderIntervalTicks);
+    int WanderIntervalTicks,
+    bool AiEnabled = true);
 
 public sealed record MonsterDefinition(
     int Id,
@@ -109,15 +110,27 @@ public static class MonsterPopulationCatalog
             }
             return null;
         }
-        if (root.ValueKind != JsonValueKind.Object ||
-            ReadInt(root, "version") != 4 ||
-            ReadInt(root, "map_id") != expectedMapId ||
-            !ReadBool(root, "stats_verified") ||
-            !ReadBool(root, "gameplay_ready") ||
-            !string.Equals(ReadString(root, "kind"), "verified_monster_runtime",
-                StringComparison.Ordinal))
+        bool targetOnly =
+            root.ValueKind == JsonValueKind.Object &&
+            ReadInt(root, "version") == 5 &&
+            ReadInt(root, "map_id") == expectedMapId &&
+            ReadBool(root, "stats_verified") &&
+            ReadBool(root, "target_combat_ready") &&
+            Require(root, "ai_ready", JsonValueKind.False).ValueKind ==
+                JsonValueKind.False &&
+            string.Equals(ReadString(root, "kind"),
+                "verified_monster_target_runtime", StringComparison.Ordinal);
+        bool fullRuntime =
+            root.ValueKind == JsonValueKind.Object &&
+            ReadInt(root, "version") == 4 &&
+            ReadInt(root, "map_id") == expectedMapId &&
+            ReadBool(root, "stats_verified") &&
+            ReadBool(root, "gameplay_ready") &&
+            string.Equals(ReadString(root, "kind"), "verified_monster_runtime",
+                StringComparison.Ordinal);
+        if (!targetOnly && !fullRuntime)
             throw new InvalidDataException(
-                "Monster population is not an explicitly verified v4 gameplay document");
+                "Monster population is neither verified full AI nor verified target-combat content");
 
         var definitionsElement = Require(root, "definitions", JsonValueKind.Array);
         if (definitionsElement.GetArrayLength() is < 1 or > 4096)
@@ -129,27 +142,34 @@ public static class MonsterPopulationCatalog
             if (item.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException("Monster definition must be an object");
             int id = ReadInt(item, "id");
-            string name = ReadString(item, "name").Trim();
             string sprite = ReadString(item, "sprite").Trim().ToUpperInvariant();
+            string name = targetOnly ? sprite : ReadString(item, "name").Trim();
             string atlas = ReadString(item, "atlas").Trim().Replace('\\', '/');
             if (id <= 0 || id > 10_000_000 || string.IsNullOrWhiteSpace(name) ||
                 name.Length > 128 || !SafeSprite(sprite) || !SafeRelativePath(atlas))
                 throw new InvalidDataException($"Invalid monster definition {id}");
 
             var statsElement = Require(item, "stats", JsonValueKind.Object);
-            var stats = new MonsterCombatStats(
-                ReadInt(statsElement, "level"),
-                ReadInt(statsElement, "max_hp"),
-                ReadInt(statsElement, "attack_damage"),
-                ReadDouble(statsElement, "move_step"),
-                ReadDouble(statsElement, "aggro_radius"),
-                ReadDouble(statsElement, "lose_target_radius"),
-                ReadDouble(statsElement, "leash_radius"),
-                ReadDouble(statsElement, "attack_range"),
-                ReadInt(statsElement, "attack_cooldown_ticks"),
-                ReadInt(statsElement, "respawn_ticks"),
-                ReadDouble(statsElement, "wander_radius"),
-                ReadInt(statsElement, "wander_interval_ticks"));
+            var stats = targetOnly
+                ? new MonsterCombatStats(
+                    ReadInt(statsElement, "level"),
+                    ReadInt(statsElement, "max_hp"),
+                    0, 0, 0, 0, 0, 0, 0,
+                    ReadInt(statsElement, "respawn_ticks"),
+                    0, 0, AiEnabled: false)
+                : new MonsterCombatStats(
+                    ReadInt(statsElement, "level"),
+                    ReadInt(statsElement, "max_hp"),
+                    ReadInt(statsElement, "attack_damage"),
+                    ReadDouble(statsElement, "move_step"),
+                    ReadDouble(statsElement, "aggro_radius"),
+                    ReadDouble(statsElement, "lose_target_radius"),
+                    ReadDouble(statsElement, "leash_radius"),
+                    ReadDouble(statsElement, "attack_range"),
+                    ReadInt(statsElement, "attack_cooldown_ticks"),
+                    ReadInt(statsElement, "respawn_ticks"),
+                    ReadDouble(statsElement, "wander_radius"),
+                    ReadInt(statsElement, "wander_interval_ticks"));
             ValidateStats(stats, id);
 
             if (!definitions.TryAdd(id, new(id, name, sprite, atlas, stats)))
@@ -190,17 +210,31 @@ public static class MonsterPopulationCatalog
     {
         if (stats.Level is < 1 or > 255 ||
             stats.MaxHp is < 1 or > 2_000_000_000 ||
-            stats.AttackDamage is < 1 or > 100_000_000 ||
+            stats.RespawnTicks is < 1 or > 108_000)
+            throw new InvalidDataException($"Unsafe monster target stats for definition {id}");
+
+        if (!stats.AiEnabled)
+        {
+            if (stats.AttackDamage != 0 || stats.MoveStep != 0 ||
+                stats.AggroRadius != 0 || stats.LoseTargetRadius != 0 ||
+                stats.LeashRadius != 0 || stats.AttackRange != 0 ||
+                stats.AttackCooldownTicks != 0 || stats.WanderRadius != 0 ||
+                stats.WanderIntervalTicks != 0)
+                throw new InvalidDataException(
+                    $"Target-only monster {id} contains unverified AI values");
+            return;
+        }
+
+        if (stats.AttackDamage is < 1 or > 100_000_000 ||
             !FiniteRange(stats.MoveStep, 0.1, 64) ||
             !FiniteRange(stats.AggroRadius, 1, 2000) ||
             !FiniteRange(stats.LoseTargetRadius, stats.AggroRadius, 4000) ||
             !FiniteRange(stats.LeashRadius, stats.AggroRadius, 4000) ||
             !FiniteRange(stats.AttackRange, 1, 500) ||
             stats.AttackCooldownTicks is < 1 or > 3600 ||
-            stats.RespawnTicks is < 1 or > 108_000 ||
             !FiniteRange(stats.WanderRadius, 0, 2000) ||
             stats.WanderIntervalTicks is < 1 or > 108_000)
-            throw new InvalidDataException($"Unsafe monster combat stats for definition {id}");
+            throw new InvalidDataException($"Unsafe monster AI stats for definition {id}");
     }
 
     private static bool FiniteRange(double value, double min, double max) =>

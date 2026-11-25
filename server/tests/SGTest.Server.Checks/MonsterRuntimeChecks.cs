@@ -11,6 +11,8 @@ internal static class MonsterRuntimeChecks
     {
         Checks.Run("monster runtime rejects unverified content and blocked spawn",
             () => PopulationGate(root));
+        Checks.Run("source-backed target-only monsters can be damaged and respawn without invented AI",
+            () => TargetOnlyRuntime(root));
         Checks.Run("monster single-map authority chases around Blocking and attacks on bounded cadence",
             () => ChaseAndAttack(root));
         Checks.Run("monster loses live target when actor transfers to another map",
@@ -53,6 +55,52 @@ internal static class MonsterRuntimeChecks
         Checks.Require(population.MapId==211 && population.Spawns.Count==1 &&
             population.Definitions[1].Stats.MaxHp==100,
             "verified population not loaded exactly");
+    }
+
+    private static void TargetOnlyRuntime(string root)
+    {
+        string dir=Checks.Fixture(root,222,12,12,(_,_)=>0);
+        var grid=BlockingGrid.Load(dir,222);
+        string path=Path.Combine(dir,"population-target.json");
+        File.WriteAllText(path,JsonSerializer.Serialize(new
+        {
+            version=5,kind="verified_monster_target_runtime",map_id=222,
+            stats_verified=true,target_combat_ready=true,ai_ready=false,
+            definitions=new[]
+            {
+                new
+                {
+                    id=7,name="SourceEnemy",sprite="EN007A",
+                    atlas="Enemy/EN007A/atlas.json",
+                    stats=new {level=3,max_hp=120,respawn_ticks=4}
+                }
+            },
+            spawns=new[]{Spawn(0,7,24,24)}
+        }));
+        var population=MonsterPopulationCatalog.LoadVerified(path,222,grid);
+        var stats=population.Definitions[7].Stats;
+        Checks.Require(!stats.AiEnabled&&stats.MaxHp==120&&stats.AttackDamage==0&&
+                       stats.MoveStep==0&&stats.RespawnTicks==4,
+            "target-only source stats were expanded into unverified AI");
+        var runtime=new MonsterRuntime(grid,population,
+            new(AiIntervalTicks:1,MaxAiPerStep:8,MaxPathQueriesPerStep:2));
+        var entity=runtime.SnapshotAll().Single();
+        Checks.Require(runtime.Tick(1,[new MonsterCombatTarget(9,222,24,24,100)])
+                           .Count==0,
+            "target-only monster emitted invented AI events");
+        var hit=runtime.ApplyTrustedDamage(entity.EntityId,9,20,1);
+        Checks.Require(hit.Applied&&!hit.Killed&&hit.Monster.CurrentHp==100&&
+                       hit.Monster.TargetActorId==0&&hit.Monster.State==MonsterAiState.Idle,
+            "target-only monster damage invented aggro/AI state");
+        var kill=runtime.ApplyTrustedDamage(entity.EntityId,9,200,1);
+        Checks.Require(kill.Killed&&kill.Monster.State==MonsterAiState.Dead,
+            "target-only monster could not be killed");
+        Checks.Require(runtime.Tick(4,[]).Count==0,
+            "target-only monster respawned early");
+        var respawn=runtime.Tick(5,[]);
+        Checks.Require(respawn.Count==1&&respawn[0].Kind==MonsterWorldEventKind.Respawn&&
+                       respawn[0].Monster.CurrentHp==120,
+            "target-only monster did not respawn on source-backed deadline");
     }
 
     private static void ChaseAndAttack(string root)

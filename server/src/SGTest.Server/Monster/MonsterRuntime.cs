@@ -188,8 +188,9 @@ public sealed class MonsterRuntime
                 Y = spawn.Y,
                 CurrentHp = definition.Stats.MaxHp,
                 State = MonsterAiState.Idle,
-                NextWanderTick = 1 + PositiveModulo(entityId,
-                    definition.Stats.WanderIntervalTicks)
+                NextWanderTick = definition.Stats.AiEnabled
+                    ? 1 + PositiveModulo(entityId, definition.Stats.WanderIntervalTicks)
+                    : long.MaxValue
             });
         }
         _order = _monsters.Keys.OrderBy(x => x).ToArray();
@@ -335,7 +336,7 @@ public sealed class MonsterRuntime
             _respawns.Enqueue((monster.EntityId, monster.RespawnAtTick),
                 (monster.RespawnAtTick, monster.EntityId));
         }
-        else if (monster.TargetActorId == 0)
+        else if (monster.TargetActorId == 0 && monster.Definition.Stats.AiEnabled)
         {
             monster.TargetActorId = attackerActorId;
             monster.ReturningHome = false;
@@ -385,6 +386,8 @@ public sealed class MonsterRuntime
             monster.LastRespawnTick == tick)
             return;
         var stats = monster.Definition.Stats;
+        if (!stats.AiEnabled)
+            return;
 
         MonsterCombatTarget target = default;
         bool hasTarget = monster.TargetActorId > 0 &&
