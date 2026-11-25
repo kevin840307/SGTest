@@ -36,7 +36,8 @@ func run() -> void:
 		"definitions":[{
 			"id":1,"sprite":"EN001A","atlas":"Enemy/en001a/atlas.json",
 			# Deliberately bogus visual-document stats: renderer must ignore them.
-			"stats":{"damage":999999},"stats_verified":false
+			"stats":{"damage":999999},"stats_verified":false,
+			"source_combat_evidence":{"level":14,"source_columns":{"level":3}}
 		}]
 	}
 	var monsters := Monsters.new()
@@ -54,6 +55,8 @@ func run() -> void:
 	check(monsters.apply_snapshot(snapshot,0)==OK,"idle snapshot")
 	check(monsters.pick_living_at(Vector2(10,20),0)==1001,
 		"click at living monster did not choose target")
+	check(monsters.focused_health(1001) == {"current_hp":100,"max_hp":100,"enemy_level":14},
+		"UI-084 health/level must derive from validated AOI + source level")
 	check(monsters.pick_living_at(Vector2(500,500),0)==0 and
 		monsters.pick_living_at(Vector2.INF,0)==0,
 		"off-screen/invalid click selected a target")
@@ -135,6 +138,8 @@ func run() -> void:
 		"death did not hold verified D/ND terminal frame")
 	check(monsters.pick_living_at(Vector2(float(dead.x),float(dead.y)),1400000)==0,
 		"dead monster could still be selected for an attack")
+	check(monsters.focused_health(1001).is_empty(),
+		"UI-084 must clear authoritative dead monster HP")
 
 	# Respawn begins a clean idle state; past damage animation cannot leak.
 	var revived := dead.duplicate(true)

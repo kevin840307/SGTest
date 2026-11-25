@@ -17,6 +17,7 @@ const Npcs = preload("res://npc/npc_presentation.gd")
 const PvpNames = preload("res://pvp/pvp_name_presentation.gd")
 const Canvas = preload("res://world/world_canvas.gd")
 const MapNameDisplay = preload("res://ui/hk_mapname_display.gd")
+const EnemyHPDisplay = preload("res://ui/hk_enemy_hp_display.gd")
 var store := Store.new()
 var camera := Camera.new()
 var draw_list := DrawList.new()
@@ -29,6 +30,8 @@ var _palette: Array = []
 var _terrain := Terrain.new()
 var _canvas := Canvas.new()
 var map_name_display := MapNameDisplay.new()
+var enemy_hp_display := EnemyHPDisplay.new()
+var _focused_monster_id := 0
 var _started_at := 0
 var _last_update := -1
 var _last_rect := Rect2()
@@ -74,6 +77,7 @@ func _ready() -> void:
 	add_child(_terrain)
 	add_child(_canvas)
 	add_child(map_name_display)
+	add_child(enemy_hp_display)
 	store.asset_failed.connect(_asset_failed)
 
 
@@ -152,6 +156,8 @@ func clear_map(retain_cache: bool = false) -> void:
 	local_movement.clear()
 	_prediction_applied = false
 	monsters.clear()
+	_focused_monster_id = 0
+	enemy_hp_display.clear_target()
 	pets.clear()
 	_pending_pet_assets.clear()
 	_loaded_pet_assets.clear()
@@ -613,6 +619,26 @@ func present() -> void:
 			sprite_bounds[key] = (sprite_bounds[key] as Rect2).merge(bounds)
 		else:
 			sprite_bounds[key] = bounds
+	# UI-084 follows the selected monster's actual rendered SPR bounds, not a
+	# guessed fixed-height actor, and reads HP only from accepted Server AOI.
+	if _focused_monster_id > 0:
+		var focused: Dictionary = monsters.focused_health(_focused_monster_id)
+		var focused_key := "monster:" + str(_focused_monster_id)
+		if focused.is_empty():
+			_focused_monster_id = 0
+			enemy_hp_display.clear_target()
+		elif sprite_bounds.has(focused_key):
+			var source_bounds: Rect2 = sprite_bounds[focused_key]
+			var screen_anchor := camera.world_to_screen(Vector2(
+				source_bounds.get_center().x - EnemyHPDisplay.FRAME_SIZE.x * 0.5,
+				source_bounds.position.y - 36.0))
+			enemy_hp_display.show_health(screen_anchor,int(focused.current_hp),
+				int(focused.max_hp),int(focused.enemy_level),
+				int(_player_snapshot.get("player_level",0)))
+		else:
+			enemy_hp_display.clear_target()
+	else:
+		enemy_hp_display.clear_target()
 	var name_labels: Array = []
 	if show_players:
 		for raw_label in pvp_names.labels_at(now_usec):
@@ -686,6 +712,10 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 		var incoming_epoch: int = int(snapshot.map_epoch)
 		if incoming_epoch < previous_epoch:
 			return
+		if incoming_epoch != previous_epoch:
+			# A former target ID has no meaning after a MapEpoch change.
+			_focused_monster_id = 0
+			enemy_hp_display.clear_target()
 		if incoming_epoch == previous_epoch:
 			var previous_tick: int = int(_player_snapshot.get("last_aoi_tick",-1))
 			var incoming_tick: int = int(snapshot.get("last_aoi_tick",-1))
@@ -940,4 +970,12 @@ func monster_count() -> int:
 func pick_monster_at(world_point: Vector2) -> int:
 	if phase != "ready" or not show_players or _player_snapshot.is_empty():
 		return 0
-	return monsters.pick_living_at(world_point,Time.get_ticks_usec())
+	var selected := monsters.pick_living_at(world_point,Time.get_ticks_usec())
+	# main.gd also calls this for passive cursor hover. Only a real held
+	# left-button click may change target; hovering never selects an enemy.
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and selected != _focused_monster_id:
+		_focused_monster_id = selected
+		_players_dirty = true
+		if selected == 0:
+			enemy_hp_display.clear_target()
+	return selected

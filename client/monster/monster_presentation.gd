@@ -72,7 +72,17 @@ func configure(population: Dictionary, assets: Dictionary) -> Error:
 				per_definition[action+str(facing)] = {
 					"view":view,"timeline":timeline
 				}
-		_definitions[id] = {"sprite":sprite,"asset":asset_id}
+		# UI-084 level badge uses only the exact Enemy_Data.csv level column.
+		# Source combat evidence is display metadata, never combat authority.
+		var evidence: Variant = raw.get("source_combat_evidence",{})
+		var display_level := 0
+		if evidence is Dictionary:
+			var source_columns: Variant = evidence.get("source_columns",{})
+			var level_value: Variant = evidence.get("level",null)
+			if source_columns is Dictionary and int(source_columns.get("level",-1)) == 3 \
+					and level_value is int and int(level_value) > 0:
+				display_level = int(level_value)
+		_definitions[id] = {"sprite":sprite,"asset":asset_id,"display_level":display_level}
 		_views[id] = per_definition
 	return OK
 
@@ -214,6 +224,21 @@ func actors_at(now_usec: int) -> Array:
 
 func count() -> int:
 	return _monsters.size()
+
+func focused_health(entity_id: int) -> Dictionary:
+	# Values were atomically validated by apply_snapshot(). This accessor
+	# never supplies an attack rule or guessed HP after AOI despawn/death.
+	var monster: Dictionary = _monsters.get(entity_id,{})
+	if monster.is_empty():
+		return {}
+	var value: Dictionary = monster.value
+	var current_hp := int(value.current_hp)
+	var max_hp := int(value.max_hp)
+	if current_hp <= 0 or max_hp <= 0 or current_hp > max_hp or int(value.state) == STATE_DEAD:
+		return {}
+	var definition: Dictionary = _definitions.get(int(value.enemy_id),{})
+	return {"current_hp":current_hp,"max_hp":max_hp,
+		"enemy_level":int(definition.get("display_level",0))}
 
 ## Presentation-only click hit-test. The Server still validates attack range,
 ## target HP, wall collision, cooldown and all actual combat consequences.
