@@ -101,6 +101,16 @@ func _initialize()->void:
 		_fail("unsolicited self echo was accepted")
 		return
 
+	# World-channel level policy is source-backed Server authority (Old chat.cfg
+	# [WorldChannel] lvllimit=10). Client admission must still transmit a valid
+	# request even before/under that profile level; the Server decides delivery.
+	var low_level_world:=_base_world(12)
+	low_level_world.player_profile_ready=false
+	low_level_world.player_level=0
+	if not low_level_world.mark_chat_sent(1,1,0,"交由伺服器驗證"):
+		_fail("world channel was client-authorized instead of server-authorized")
+		return
+
 	var whisper_command:=WireCodec.encode_whisper_command(
 		3,10,22,3,"跨圖私訊")
 	if whisper_command.hex_encode().to_upper()!=WHISPER_COMMAND_HEX:
@@ -195,5 +205,5 @@ func _initialize()->void:
 		_fail("unresolved name whisper created optimistic history")
 		return
 
-	print("CHAT_WIRE_PASS command=92 delivery=93 whisper_command=98 whisper_result=99 utf8=true trusted_echo=true visible_only_nearby=true whisper_crossmap=true replay=STALE unsolicited_self=FAIL_CLOSED")
+	print("CHAT_WIRE_PASS command=92 delivery=93 whisper_command=98 whisper_result=99 utf8=true trusted_echo=true world_policy=SERVER_AUTHORITY visible_only_nearby=true whisper_crossmap=true replay=STALE unsolicited_self=FAIL_CLOSED")
 	quit(0)

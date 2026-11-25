@@ -3,6 +3,8 @@ extends SceneTree
 const Main = preload("res://app/main.gd")
 const MainScene = preload("res://app/main.tscn")
 const UiSkinCatalog = preload("res://ui/ui_skin_catalog.gd")
+const TRANSFER_CYCLES := 10
+const CHAT_E2E_TEXT := "主介面聊天 E2E"
 
 var _app: Main
 var _online_gate_role := ""
@@ -29,6 +31,8 @@ var _hold_targets: Array[Vector2] = [
 var _hold_index := 0
 var _hold_next_msec := 0
 var _hold_large_corrections_before := 0
+var _transfer_cycle := 0
+var _chat_proof_seen := false
 var _manual_input_required := false
 var _manual_click_seen := false
 var _manual_click_screen := Vector2.ZERO
@@ -70,7 +74,7 @@ func _start_online_gate() -> void:
 	_app.session_panel.username_input.text = username
 	_app.session_panel.password_input.text = password
 	password = ""
-	_online_gate_deadline = Time.get_ticks_msec() + (60000 if _manual_input_required else 25000)
+	_online_gate_deadline = Time.get_ticks_msec() + (120000 if _manual_input_required else 90000)
 	_online_gate_phase = 0
 	print("ONLINE_MAIN_GATE_START role=",_online_gate_role)
 	_app.session_panel.login()
@@ -214,7 +218,23 @@ func _online_gate_observer() -> void:
 				print("ONLINE_MAIN_GATE_DELTA role=observer actor=",_online_gate_remote_id)
 				_online_gate_phase = 3
 	elif _online_gate_phase == 3:
+		if not _chat_proof_seen and entities.has(_online_gate_remote_id):
+			var messages: Array = _app._last_snapshot.get("chat_messages",[])
+			var delivered := messages.any(func(entry):
+				return entry is Dictionary and int(entry.get("channel",-1))==0 and \
+					int(entry.get("sender_actor_id",0))==_online_gate_remote_id and \
+					str(entry.get("message",""))==CHAT_E2E_TEXT)
+			var history := _app.classic_world._chat_history.text.contains(CHAT_E2E_TEXT)
+			var bubble := _app.world_view._chat_balloons.any(func(entry):
+				return int(entry.get("actor_id",0))==_online_gate_remote_id and \
+					str(entry.get("text",""))==CHAT_E2E_TEXT)
+			if delivered and history and bubble:
+				_chat_proof_seen = true
+				print("ONLINE_MAIN_GATE_CHAT_UI_DELIVERY role=observer history=PASS bubble=PASS")
 		if not entities.has(_online_gate_remote_id):
+			if not _chat_proof_seen:
+				_online_gate_fail("chat_ui_delivery_missing_before_despawn")
+				return
 			print("ONLINE_MAIN_GATE_DESPAWN role=observer actor=",_online_gate_remote_id)
 			_online_gate_phase = 4
 	elif _online_gate_phase == 4 and entities.has(_online_gate_remote_id):
@@ -304,6 +324,28 @@ func _online_gate_actor() -> void:
 		var at := Vector2(float(_app._last_snapshot.get("x",0.0)),float(_app._last_snapshot.get("y",0.0)))
 		if at.distance_to(Vector2(952,808)) <= 1.0 and _online_gate_ready(15):
 			print("ONLINE_MAIN_GATE_MOVE_CAMERA role=actor")
+			if not _app.classic_world.visible:
+				_online_gate_fail("classic_world_not_visible_for_chat_ui")
+				return
+			_app.classic_world._chat_input.text=CHAT_E2E_TEXT
+			_app.classic_world._chat_input.text_submitted.emit(CHAT_E2E_TEXT)
+			if not _app.classic_world._chat_input.text.is_empty():
+				_online_gate_fail("chat_ui_submit_not_queued")
+				return
+			print("ONLINE_MAIN_GATE_CHAT_UI_SUBMIT role=actor input=PASS")
+			_online_gate_phase = 11
+	elif _online_gate_phase == 11:
+		var own_id := int(_app._last_snapshot.get("actor_id",0))
+		var messages: Array = _app._last_snapshot.get("chat_messages",[])
+		var echoed := messages.any(func(entry):
+			return entry is Dictionary and int(entry.get("channel",-1))==0 and \
+				int(entry.get("sender_actor_id",0))==own_id and \
+				str(entry.get("message",""))==CHAT_E2E_TEXT)
+		var history := _app.classic_world._chat_history.text.contains(CHAT_E2E_TEXT)
+		var bubble := _app.world_view._chat_balloons.any(func(entry):
+			return int(entry.get("actor_id",0))==own_id and str(entry.get("text",""))==CHAT_E2E_TEXT)
+		if echoed and history and bubble:
+			print("ONLINE_MAIN_GATE_CHAT_UI_ECHO role=actor authority=PASS history=PASS bubble=PASS")
 			_app._begin_ground_navigation(Vector2(808,808),Time.get_ticks_msec())
 			_online_gate_phase = 3
 	elif _online_gate_phase == 3:
@@ -370,7 +412,7 @@ func _online_gate_actor() -> void:
 			return
 		_online_gate_phase = 5
 	elif _online_gate_phase == 5 and _online_gate_ready(13):
-		print("ONLINE_MAIN_GATE_MAP13 role=actor")
+		print("ONLINE_MAIN_GATE_MAP13 role=actor cycle=",_transfer_cycle+1)
 		_online_gate_not_before = Time.get_ticks_msec() + 350
 		_online_gate_phase = 6
 	elif _online_gate_phase == 6 and Time.get_ticks_msec() >= _online_gate_not_before:
@@ -379,7 +421,7 @@ func _online_gate_actor() -> void:
 			return
 		_online_gate_phase = 7
 	elif _online_gate_phase == 7 and _online_gate_ready(15):
-		print("ONLINE_MAIN_GATE_RETURN_MAP15 role=actor")
+		print("ONLINE_MAIN_GATE_RETURN_MAP15 role=actor cycle=",_transfer_cycle+1)
 		# Leaving a map clears the old LocalMovement predictor. Verify a cached
 		# return still owns intact Blocking.dat and can bind the new generation by
 		# walking again and requiring the authoritative Server ACK.
@@ -399,8 +441,14 @@ func _online_gate_actor() -> void:
 		if at.distance_to(return_target) <= 1.0 and _online_gate_ready(15) and movement_sequence > 0 \
 				and int(_app._last_snapshot.get("last_receipt_sequence",0)) == movement_sequence \
 				and int(_app._last_snapshot.get("last_receipt_status",-1)) == 0:
-			print("ONLINE_MAIN_GATE_RETURN_MOVE_ACK role=actor")
-			_online_gate_finish(true,"")
+			_transfer_cycle += 1
+			print("ONLINE_MAIN_GATE_RETURN_MOVE_ACK role=actor cycle=",_transfer_cycle)
+			if _transfer_cycle >= TRANSFER_CYCLES:
+				print("ONLINE_MAIN_GATE_TRANSFER_STRESS_PASS role=actor cycles=",_transfer_cycle)
+				_online_gate_finish(true,"")
+			else:
+				_online_gate_not_before = Time.get_ticks_msec() + 350
+				_online_gate_phase = 4
 
 
 func _online_gate_finish(success: bool, reason: String) -> void:

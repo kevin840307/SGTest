@@ -222,16 +222,20 @@ def main() -> int:
                 "ONLINE_MAIN_GATE_MONSTER role=actor",
                 "ONLINE_MAIN_GATE_OBSTACLE_ROUTE role=actor",
                 "ONLINE_MAIN_GATE_MOVE_CAMERA role=actor",
+                "ONLINE_MAIN_GATE_CHAT_UI_SUBMIT role=actor input=PASS",
+                "ONLINE_MAIN_GATE_CHAT_UI_ECHO role=actor authority=PASS history=PASS bubble=PASS",
                 "ONLINE_MAIN_GATE_MOTION_SMOOTH role=actor",
                 "ONLINE_MAIN_GATE_LONG_HOLD_PASS role=actor",
                 "ONLINE_MAIN_GATE_MAP13 role=actor",
                 "ONLINE_MAIN_GATE_RETURN_MAP15 role=actor",
-                "ONLINE_MAIN_GATE_RETURN_MOVE_ACK role=actor",
+                "ONLINE_MAIN_GATE_RETURN_MOVE_ACK role=actor cycle=10",
+                "ONLINE_MAIN_GATE_TRANSFER_STRESS_PASS role=actor cycles=10",
             ]
             required_observer = [
                 "ONLINE_MAIN_GATE_MONSTER role=observer",
                 "ONLINE_MAIN_GATE_SPAWN role=observer",
                 "ONLINE_MAIN_GATE_DELTA role=observer",
+                "ONLINE_MAIN_GATE_CHAT_UI_DELIVERY role=observer history=PASS bubble=PASS",
                 "ONLINE_MAIN_GATE_DESPAWN role=observer",
                 "ONLINE_MAIN_GATE_RETURN_SPAWN role=observer",
             ]
@@ -249,7 +253,7 @@ def main() -> int:
                     print(line)
             print("ONLINE_MAIN_SCENE_FORMAL_HOST_GATE_PASS "
                   "formal_host=true main_scenes=2 aes_cbc=true provision_cli=true "
-                  "move=true aoi=true monster_state=true camera_follow=true map15_map13_return=true "
+                  "move=true aoi=true monster_state=true camera_follow=true chat_ui_authority=true chat_bubble=true map15_map13_return=true transfer_cycles=10 "
                   "resource_release=true synthetic_content=true private_original_content=false "
                   f"native_visible={str(args.native).lower()} manual_input={str(args.manual_input).lower()}")
             successful = True

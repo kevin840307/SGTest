@@ -359,8 +359,6 @@ func send_world_chat(message:String,bubble_type:int=0)->bool:
 	var bytes:=clean.to_utf8_buffer()
 	var current:=snapshot()
 	if (
-		not bool(current.get("player_profile_ready",false)) or
-		int(current.get("player_level",0))<10 or
 		clean.is_empty() or bytes.size()>WireCodec.CHAT_MAX_MESSAGE_BYTES or
 		bubble_type<0 or bubble_type>5 or
 		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or

@@ -615,7 +615,7 @@ func _build_chat_panel()->void:
 	_chat_up=_texture_button(chat_panel,"ChatScrollUp","SCROLLUP_S",Vector2.ZERO,Vector2(17,25),_scroll_chat.bind(-1),"往上捲動")
 	_chat_down=_texture_button(chat_panel,"ChatScrollDown","SCROLLDOWN_S",Vector2.ZERO,Vector2(17,25),_scroll_chat.bind(1),"往下捲動")
 	_chat_expand=_texture_button(chat_panel,"ChatExpand","ZONESCREEN",Vector2.ZERO,Vector2(17,17),_toggle_chat_size,"展開聊天")
-	_chat_channel=_texture_button(chat_panel,"ChatChannel","ICON_CHANNEL",Vector2.ZERO,Vector2(24,24),_toggle_chat_send_channel,"附近聊天；點擊切換隊伍")
+	_chat_channel=_texture_button(chat_panel,"ChatChannel","ICON_CHANNEL",Vector2.ZERO,Vector2(24,24),_toggle_chat_send_channel,"附近聊天；點擊切換世界")
 	_chat_channel.texture_normal=_tex("ICON_CHANNEL_3")
 	_chat_channel.texture_hover=_chat_channel.texture_normal
 	_chat_channel.texture_pressed=_chat_channel.texture_normal

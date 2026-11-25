@@ -806,7 +806,6 @@ func mark_chat_sent(sequence:int,channel:int,bubble_type:int,message:String)->bo
 		pending_world_ready_ack_epoch!=0 or last_world_ready_ack_epoch!=map_epoch or
 		pending_whisper_sequence!=0 or
 		sequence<=chat_sequence or sequence>0xffffffff or channel not in [0,1,3] or
-		(channel==1 and (not player_profile_ready or player_level<10)) or
 		(channel==3 and party_id<=0) or
 		bubble_type<0 or bubble_type>5 or bytes.size()<1 or
 		bytes.size()>WireCodec.CHAT_MAX_MESSAGE_BYTES or message.strip_edges().is_empty()
