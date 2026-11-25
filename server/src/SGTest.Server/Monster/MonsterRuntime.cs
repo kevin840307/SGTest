@@ -277,6 +277,17 @@ public sealed class MonsterRuntime
         return NormalAttackStatus.Applied;
     }
 
+    public bool TryGetCombatStats(long entityId,out MonsterCombatStats stats)
+    {
+        if(_monsters.TryGetValue(entityId,out var monster))
+        {
+            stats=monster.Definition.Stats;
+            return true;
+        }
+        stats=default!;
+        return false;
+    }
+
     /// <summary>
     /// Deterministic same-map area selection from authoritative actor position.
     /// Overflow rejects the whole selection instead of silently truncating a

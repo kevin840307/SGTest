@@ -37,6 +37,8 @@ internal static class Program
             return await RunReconnectAsync().ConfigureAwait(false);
         if (args is ["--combat"])
             return await RunCombatAsync().ConfigureAwait(false);
+        if (args is ["--target-combat"])
+            return await RunTargetCombatAsync().ConfigureAwait(false);
         if (args is ["--combat-observer"])
             return await RunCombatObserverAsync().ConfigureAwait(false);
         if (args is ["--skill-aoe"])
@@ -405,6 +407,151 @@ internal static class Program
         catch (Exception error)
         {
             Console.Error.WriteLine("COMBAT_FIXTURE_FAIL " + error);
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+
+    private static async Task<int> RunTargetCombatAsync()
+    {
+        string root = Path.Combine(Path.GetTempPath(),
+            "sgtest_target_combat_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var grid = BlockingGrid.Load(CreateMap(root, 15), 15);
+            string populationPath = Path.Combine(root, "target-combat-population.json");
+            File.WriteAllText(populationPath, JsonSerializer.Serialize(new
+            {
+                version = 5,
+                kind = "verified_monster_target_runtime",
+                map_id = 15,
+                stats_verified = true,
+                target_combat_ready = true,
+                ai_ready = false,
+                definitions = new[]
+                {
+                    new
+                    {
+                        id = 1,
+                        sprite = "EN001A",
+                        atlas = "Enemy/EN001A/atlas.json",
+                        stats = new
+                        {
+                            level = 3,
+                            max_hp = 100,
+                            defense_power = 20,
+                            magic_defense_power = 15,
+                            dodge_rate = 5,
+                            respawn_ticks = 300
+                        }
+                    }
+                },
+                spawns = new[]
+                {
+                    new { source_index = 0, source_flags = 7, definition = 1,
+                          p = new[] { 40, 24 } }
+                }
+            }));
+            var runtime = new MonsterRuntime(
+                grid, MonsterPopulationCatalog.LoadVerified(populationPath, 15, grid));
+            var coordinator = new MonsterWorldCoordinator(
+                [runtime],
+                normalAttackRoll: () => 0,
+                normalAttackDamageRoll: exclusiveMax => exclusiveMax == 20 ? 10 : 0);
+
+            await using var world = new ServerWorldHost(
+                [grid], options: new WorldHostOptions(PublishIdleTicks: true));
+            await world.StartAsync().ConfigureAwait(false);
+            using var store = new SqliteIdentityStore(Path.Combine(root, "identity.db"));
+            await store.InitializeAsync().ConfigureAwait(false);
+            long accountId = (await store.CreateAccountAsync(Username, Password)).AccountId;
+            long characterId = (await store.CreateCharacterAsync(
+                accountId, 0, "TargetCombatHero", new CharacterSpawn(15, 24, 24)))
+                .Character?.CharacterId
+                ?? throw new InvalidOperationException("target combat character create failed");
+            await store.SetCharacterCombatProfileAsync(characterId,
+                new CharacterCombatProfileData(
+                    CombatProfileTrust.SyntheticTest,
+                    "ci:v5-target-combat-aes",
+                    Race: 0, Career: 0, Strength: 5, Dexterity: 5,
+                    Constitution: 5, Wisdom: 5, Level: 3,
+                    CurrentHp: 100, MaxHp: 100,
+                    Attack: 60, Defense: 10, Hit: 10, Dodge: 3,
+                    AttackRange: 48, AttackCooldownTicks: 15,
+                    CurrentMp: 0, MaxMp: 0))
+                .ConfigureAwait(false);
+
+            var router = new WorldResultRouter(
+                new WorldResultRouterOptions(AttackRequestCapacity: 8));
+            var settlement = new PlayerCombatSettlement(
+                store, new(Capacity: 8), router.QueuePlayerDamage);
+            var pump = new WorldAoiPump(
+                router, monsters: coordinator, playerCombat: settlement);
+            var authorization = new IdentitySessionAuthorization(
+                store, world, combat: settlement);
+            var settings = AesCbcSettings.FromEnvironment();
+
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start(1);
+            using var stop = new CancellationTokenSource();
+            var routing = router.RunAsync(world.Results);
+            var pumping = pump.RunAsync(stop.Token);
+            var settling = settlement.RunAsync(stop.Token);
+            try
+            {
+                int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                Console.WriteLine(
+                    $"TARGET_COMBAT_FIXTURE_READY port={port} username={Username} " +
+                    $"character={characterId}");
+                Console.Out.Flush();
+
+                using var client = await listener.AcceptTcpClientAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                var ended = await authorization.RunAuthenticatedAesSocketAsync(
+                    client, settings, router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000))
+                    .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+
+                var monster = runtime.SnapshotAll().Single();
+                var player = await store.GetCharacterCombatProfileAsync(characterId)
+                    .ConfigureAwait(false);
+                if (monster.CurrentHp != 60 || monster.MaxHp != 100 ||
+                    player?.Data.CurrentHp != 100 || player.Data.MaxHp != 100 ||
+                    ended.CommandsAccepted < 1 ||
+                    settlement.Statistics.HitsCommitted != 0 ||
+                    settlement.Statistics.DamageCommitted != 0)
+                    throw new InvalidOperationException(
+                        $"target combat E2E mismatch monster={monster.CurrentHp}/{monster.MaxHp} " +
+                        $"player={player?.Data.CurrentHp}/{player?.Data.MaxHp} " +
+                        $"commands={ended.CommandsAccepted} " +
+                        $"player_hits={settlement.Statistics.HitsCommitted}");
+
+                Console.WriteLine(
+                    $"TARGET_COMBAT_FIXTURE_PASS aes=true target={monster.EntityId} " +
+                    $"monster_hp={monster.CurrentHp}/{monster.MaxHp} damage=40 " +
+                    "v5_target_combat=true experience_manifest=false ai=false " +
+                    $"commands={ended.CommandsAccepted}");
+                Console.Out.Flush();
+                return 0;
+            }
+            finally
+            {
+                listener.Stop();
+                stop.Cancel();
+                await Task.WhenAll(pumping, settling).ConfigureAwait(false);
+                await world.StopAsync().ConfigureAwait(false);
+                await routing.WaitAsync(TimeSpan.FromSeconds(3))
+                    .ConfigureAwait(false);
+            }
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine("TARGET_COMBAT_FIXTURE_FAIL " + error);
             return 1;
         }
         finally

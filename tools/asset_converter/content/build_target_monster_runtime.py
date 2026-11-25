@@ -1,9 +1,9 @@
 """Build private source-backed targetable monster runtime documents.
 
 This deliberately does not invent AI movement/attack rules. It publishes only
-identity/visuals/spawns plus Old Server level, HPMAX and RebornTime, allowing
-players/skills to target, damage, kill and observe respawn while unverified AI
-remains disabled.
+identity/visuals/spawns plus Old Server level, HPMAX, DP, MDP, DR and RebornTime,
+allowing players/skills to use source-backed target defense/evasion, damage, kill
+and observe respawn while unverified AI remains disabled.
 """
 
 from __future__ import annotations
@@ -78,6 +78,9 @@ def compile_target_runtime(
             raise ValueError(f"EnemyId {enemy_id} has no verified RebornTime")
         level = int(source["enemy_level"])
         max_hp = int(source["max_hp"])
+        defense_power = int(source["defense_power"])
+        magic_defense_power = int(source["magic_defense_power"])
+        dodge_rate = int(source["dodge_rate"])
         respawn_ticks = math.ceil(reborn_ms * TICK_RATE / 1000)
         base = definitions_by_id[enemy_id]
         definitions.append({
@@ -85,6 +88,9 @@ def compile_target_runtime(
             "stats": {
                 "level": level,
                 "max_hp": max_hp,
+                "defense_power": defense_power,
+                "magic_defense_power": magic_defense_power,
+                "dodge_rate": dodge_rate,
                 "respawn_ticks": respawn_ticks,
             },
             "source_evidence": {
@@ -126,7 +132,7 @@ def compile_target_runtime(
         "spawns": runtime_spawns,
         "audit": {
             "semantics": (
-                "Old Enemy_Data/EN_Att source owns enemy level/HPMAX; "
+                "Old Enemy_Data/EN_Att source owns enemy level/HPMAX/DP/MDP/DR; "
                 "Enemy_Data RebornTime is converted ms->30Hz ticks. "
                 "AI attack/movement/range/cadence remain disabled and zero."
             ),

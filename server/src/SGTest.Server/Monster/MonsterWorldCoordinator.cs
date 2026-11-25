@@ -51,6 +51,60 @@ public static class NormalAttackHitRules
 }
 
 /// <summary>
+/// Old SGOBattleSys physical normal-hit reduction. The recovered battle.cfg used by
+/// this source tree sets DamageDelta=10, MinHit=3 and MinHitDelta=4. CalHit applies
+/// the first +/- delta around attacker AP, subtracts target DP, then applies the
+/// 30-level falloff; CalHit_PerHit applies the second delta and the low-hit floor.
+/// One normal attack is one hit, so there is no multi-hit divisor here.
+/// </summary>
+public static class NormalAttackDamageRules
+{
+    public const int DamageDeltaPercent=10;
+    public const int MinHit=3;
+    public const int MinHitDelta=4;
+    public const int MaximumDamage=0xFFFD;
+
+    public static int CalculatePhysicalHit(
+        int attackerAttack,int attackerLevel,int enemyDefense,int enemyLevel,
+        Func<int,int> nextRoll)
+    {
+        ArgumentNullException.ThrowIfNull(nextRoll);
+        if(attackerAttack<0||attackerAttack>100_000_000||
+           attackerLevel is <1 or >ushort.MaxValue||
+           enemyDefense is <0 or >ushort.MaxValue||
+           enemyLevel is <1 or >ushort.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(attackerAttack));
+
+        long damage=ApplyVariance(attackerAttack,Next(nextRoll,DamageDeltaPercent*2));
+        damage=Math.Max(0,damage-enemyDefense);
+
+        int levelGap=enemyLevel-attackerLevel;
+        if(levelGap>=30)
+            damage=0;
+        else if(levelGap>0)
+            damage=damage*(30-levelGap)/30;
+
+        damage=ApplyVariance(damage,Next(nextRoll,DamageDeltaPercent*2));
+        if(damage<MinHit)
+            damage=Next(nextRoll,MinHitDelta)+1;
+
+        return (int)Math.Min(MaximumDamage,damage);
+    }
+
+    private static long ApplyVariance(long value,int roll) =>
+        checked(value+value*(DamageDeltaPercent-roll)/100);
+
+    private static int Next(Func<int,int> nextRoll,int exclusiveMax)
+    {
+        int value=nextRoll(exclusiveMax);
+        if(value<0||value>=exclusiveMax)
+            throw new InvalidOperationException(
+                $"Normal attack damage roll must be 0..{exclusiveMax-1}");
+        return value;
+    }
+}
+
+/// <summary>
 /// Single-consumer bridge from authoritative World batches to map-local MonsterRuntime.
 /// It keeps only player position/generation snapshots, performs no DB/socket work,
 /// and coalesces multiple same-tick AI events for one monster to one final snapshot.
@@ -93,6 +147,7 @@ public sealed class MonsterWorldCoordinator
     private readonly IReadOnlyDictionary<PetSkillRuleKey,VerifiedPetSkillRule> _petSkillRules;
     private readonly IReadOnlyDictionary<(int MapId,int EnemyId),CharacterExperienceRewardRule> _normalAttackHitRules;
     private readonly Func<int> _normalAttackRoll;
+    private readonly Func<int,int> _normalAttackDamageRoll;
     private readonly Dictionary<long, ActorSnapshot> _actors = [];
     private readonly Dictionary<long, AttackCursor> _attack = [];
     private readonly Dictionary<long, AttackCursor> _petAttack = [];
@@ -108,7 +163,8 @@ public sealed class MonsterWorldCoordinator
         IReadOnlyDictionary<PetCombatRuleKey,VerifiedPetCombatRule>? petRules = null,
         IReadOnlyDictionary<PetSkillRuleKey,VerifiedPetSkillRule>? petSkillRules = null,
         IEnumerable<CharacterExperienceRewardRule>? normalAttackHitRules = null,
-        Func<int>? normalAttackRoll = null)
+        Func<int>? normalAttackRoll = null,
+        Func<int,int>? normalAttackDamageRoll = null)
     {
         ArgumentNullException.ThrowIfNull(runtimes);
         _skillRules=skillRules is null
@@ -176,6 +232,8 @@ public sealed class MonsterWorldCoordinator
         }
         _normalAttackHitRules=hitRules;
         _normalAttackRoll=normalAttackRoll ?? (()=>Random.Shared.Next(100));
+        _normalAttackDamageRoll=normalAttackDamageRoll ??
+            (exclusiveMax=>Random.Shared.Next(exclusiveMax));
     }
 
     public long LastTick => _lastTick;
@@ -299,19 +357,40 @@ public sealed class MonsterWorldCoordinator
 
         if(profile.Level is <1 or >ushort.MaxValue||
            profile.Hit is <0 or >ushort.MaxValue||
-           !_normalAttackHitRules.TryGetValue((actor.MapId,target.EnemyId),out var hitRule))
+           !runtime.TryGetCombatStats(request.TargetEntityId,out var targetStats))
             return FromTarget(request,NormalAttackStatus.CombatUnavailable,target);
+
+        int enemyLevel;
+        int enemyDodge;
+        if(targetStats.TargetCombatVerified)
+        {
+            enemyLevel=targetStats.Level;
+            enemyDodge=targetStats.DodgeRate;
+        }
+        else if(_normalAttackHitRules.TryGetValue(
+                    (actor.MapId,target.EnemyId),out var hitRule))
+        {
+            enemyLevel=hitRule.EnemyLevel;
+            enemyDodge=hitRule.EnemyDodge;
+        }
+        else
+        {
+            return FromTarget(request,NormalAttackStatus.CombatUnavailable,target);
+        }
 
         int roll=_normalAttackRoll();
         if(roll is <0 or >99)
             throw new InvalidOperationException("Normal attack hit roll must be 0..99");
         cursor.LastAppliedTick = _lastTick;
         if(!NormalAttackHitRules.IsHit(
-               profile.Level,profile.Hit,hitRule.EnemyLevel,
-               hitRule.EnemyDodge,roll))
+               profile.Level,profile.Hit,enemyLevel,enemyDodge,roll))
             return FromTarget(request,NormalAttackStatus.Miss,target);
 
-        int damage = Math.Max(1, profile.Attack);
+        int damage=targetStats.TargetCombatVerified
+            ? NormalAttackDamageRules.CalculatePhysicalHit(
+                profile.Attack,profile.Level,targetStats.DefensePower,targetStats.Level,
+                _normalAttackDamageRoll)
+            : Math.Max(1,profile.Attack);
         var applied = runtime.ApplyTrustedDamage(
             request.TargetEntityId, request.ActorId, damage, _lastTick);
         if (!applied.Applied)

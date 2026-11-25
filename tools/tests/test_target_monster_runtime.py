@@ -59,6 +59,9 @@ class TargetMonsterRuntimeTests(unittest.TestCase):
             self.assertEqual(definition["stats"], {
                 "level": 3,
                 "max_hp": 222,
+                "defense_power": 0,
+                "magic_defense_power": 0,
+                "dodge_rate": 18,
                 "respawn_ticks": 450,
             })
             self.assertNotIn("attack_damage", definition["stats"])

@@ -17,6 +17,9 @@ internal static class NormalAttackChecks
         Checks.Run("normal attack wire has no client actor damage or range fields", WireRoundTrip);
         Checks.Run("normal attack gateway injects trusted actor and combat profile after Ready ACK", GatewayBoundary);
         Checks.Run("normal attack hit gate reproduces Old IsHit_PerHit",HitFormula);
+        Checks.Run("normal attack damage reproduces Old battle.cfg physical reduction",DamageFormula);
+        Checks.Run("source-backed target runtime DP reduces authoritative normal attack damage",
+            ()=>TargetOnlyDefenseAuthority(root));
         Checks.Run("normal attack MISS consumes cadence and preserves monster HP",()=>MissAuthority(root));
         Checks.Run("normal attack rejects range cadence dead and cross-map targets without damage",
             ()=>InvalidAttackAuthority(root));
@@ -86,6 +89,68 @@ internal static class NormalAttackChecks
         Require(NormalAttackHitRules.IsHit(1,0,20,100,30) &&
                 !NormalAttackHitRules.IsHit(1,0,20,100,31),
             "Old inclusive >= rand()%100 boundary drifted");
+    }
+
+    private static void DamageFormula()
+    {
+        static int NeutralRoll(int exclusiveMax)=>exclusiveMax==20?10:0;
+        Require(NormalAttackDamageRules.DamageDeltaPercent==10&&
+                NormalAttackDamageRules.MinHit==3&&
+                NormalAttackDamageRules.MinHitDelta==4,
+            "recovered battle.cfg damage constants drifted");
+        Require(NormalAttackDamageRules.CalculatePhysicalHit(
+                    60,3,20,3,NeutralRoll)==40,
+            "Old AP-DP physical damage reduction drifted");
+        Require(NormalAttackDamageRules.CalculatePhysicalHit(
+                    100,3,10,8,NeutralRoll)==75,
+            "Old 30-level physical damage falloff drifted");
+        Require(NormalAttackDamageRules.CalculatePhysicalHit(
+                    10,3,20,3,NeutralRoll)==1,
+            "Old MinHit/MinHitDelta floor drifted");
+        Require(NormalAttackDamageRules.CalculatePhysicalHit(
+                    100_000_000,3,0,3,NeutralRoll)==0xFFFD,
+            "Old per-hit damage cap drifted");
+    }
+
+    private static void TargetOnlyDefenseAuthority(string root)
+    {
+        const int mapId=223;
+        string folder=Checks.Fixture(root,mapId,12,12,(_,_)=>0);
+        var grid=BlockingGrid.Load(folder,mapId);
+        string populationPath=Path.Combine(folder,"population-target-defense.json");
+        File.WriteAllText(populationPath,JsonSerializer.Serialize(new
+        {
+            version=5,kind="verified_monster_target_runtime",map_id=mapId,
+            stats_verified=true,target_combat_ready=true,ai_ready=false,
+            definitions=new[] { new {
+                id=7,name="SourceDefenseFixture",sprite="EN007A",
+                atlas="Enemy/EN007A/atlas.json",
+                stats=new {
+                    level=3,max_hp=120,defense_power=20,
+                    magic_defense_power=15,dodge_rate=5,respawn_ticks=30
+                }}},
+            spawns=new[]{new{source_index=0,source_flags=7,
+                definition=7,p=new[]{40,24}}}
+        }));
+        var runtime=new MonsterRuntime(
+            grid,MonsterPopulationCatalog.LoadVerified(populationPath,mapId,grid));
+        var coordinator=new MonsterWorldCoordinator([runtime],
+            normalAttackRoll:()=>0,
+            normalAttackDamageRoll:exclusiveMax=>exclusiveMax==20?10:0);
+        var actor=new ActorSnapshot(87,mapId,2,1,0,0,24,24,1,false);
+        coordinator.Process(new WorldChangedBatch(1,[],
+            [new(ActorLifecycleKind.Joined,actor)]));
+        var target=runtime.SnapshotAll().Single();
+        var profile=new TrustedCombatProfile(
+            Attack:60,Defense:4,Hit:10,Dodge:3,
+            AttackRange:48,AttackCooldownTicks:3,Level:3);
+        var outcome=coordinator.ResolveNormalAttack(new(
+            actor.ActorId,actor.ConnectionEpoch,actor.MapEpoch,
+            1,target.EntityId,profile));
+        Checks.Require(outcome.Status==NormalAttackStatus.Applied&&
+                       outcome.Damage==40&&outcome.CurrentHp==80&&
+                       runtime.SnapshotAll().Single().CurrentHp==80,
+            "v5 target DP was not consumed by authoritative normal attack");
     }
 
     private static void MissAuthority(string root)
@@ -184,7 +249,8 @@ internal static class NormalAttackChecks
         };
         var coordinator=new MonsterWorldCoordinator(
             [runtimeA,runtimeB],normalAttackHitRules:hitRules,
-            normalAttackRoll:()=>0);
+            normalAttackRoll:()=>0,
+            normalAttackDamageRoll:exclusiveMax=>exclusiveMax==20?10:0);
         var actor=new ActorSnapshot(91,mapA,5,1,0,0,24,24,1,false);
         coordinator.Process(new WorldChangedBatch(1,[],
             [new(ActorLifecycleKind.Joined,actor)]));
@@ -287,7 +353,8 @@ internal static class NormalAttackChecks
             mapId,1,3,99,CharacterExperienceRewardTrust.SyntheticTest,
             "ci:enemy-dr-distinct-from-r-exp",EnemyDodge:5);
         var coordinator=new MonsterWorldCoordinator([runtime],
-            normalAttackHitRules:[hitRule],normalAttackRoll:()=>0);
+            normalAttackHitRules:[hitRule],normalAttackRoll:()=>0,
+            normalAttackDamageRoll:exclusiveMax=>exclusiveMax==20?10:0);
         using var lootStore=new SqliteIdentityStore(Path.Combine(root,
             "normal-attack-loot-"+Guid.NewGuid().ToString("N")+".db"));
         await lootStore.InitializeAsync();

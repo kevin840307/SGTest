@@ -17,7 +17,11 @@ public sealed record MonsterCombatStats(
     int RespawnTicks,
     double WanderRadius,
     int WanderIntervalTicks,
-    bool AiEnabled = true);
+    bool AiEnabled = true,
+    int DefensePower = 0,
+    int MagicDefensePower = 0,
+    int DodgeRate = 0,
+    bool TargetCombatVerified = false);
 
 public sealed record MonsterDefinition(
     int Id,
@@ -51,7 +55,8 @@ public sealed class MonsterPopulation
 
 /// <summary>
 /// Runtime monster content gate. Converter v3 visual data can share the map
-/// directory, but only explicitly verified v4 data can create monster actors.
+/// directory, but only explicitly verified v4 AI data or fail-closed v5
+/// source-backed target-combat data can create monster actors.
 /// </summary>
 public static class MonsterPopulationCatalog
 {
@@ -156,7 +161,11 @@ public static class MonsterPopulationCatalog
                     ReadInt(statsElement, "max_hp"),
                     0, 0, 0, 0, 0, 0, 0,
                     ReadInt(statsElement, "respawn_ticks"),
-                    0, 0, AiEnabled: false)
+                    0, 0, AiEnabled: false,
+                    DefensePower: ReadInt(statsElement, "defense_power"),
+                    MagicDefensePower: ReadInt(statsElement, "magic_defense_power"),
+                    DodgeRate: ReadInt(statsElement, "dodge_rate"),
+                    TargetCombatVerified: true)
                 : new MonsterCombatStats(
                     ReadInt(statsElement, "level"),
                     ReadInt(statsElement, "max_hp"),
@@ -210,7 +219,10 @@ public static class MonsterPopulationCatalog
     {
         if (stats.Level is < 1 or > 255 ||
             stats.MaxHp is < 1 or > 2_000_000_000 ||
-            stats.RespawnTicks is < 1 or > 108_000)
+            stats.RespawnTicks is < 1 or > 108_000 ||
+            stats.DefensePower is < 0 or > ushort.MaxValue ||
+            stats.MagicDefensePower is < 0 or > ushort.MaxValue ||
+            stats.DodgeRate is < 0 or > ushort.MaxValue)
             throw new InvalidDataException($"Unsafe monster target stats for definition {id}");
 
         if (!stats.AiEnabled)

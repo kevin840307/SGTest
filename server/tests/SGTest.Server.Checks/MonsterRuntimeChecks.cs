@@ -72,15 +72,22 @@ internal static class MonsterRuntimeChecks
                 {
                     id=7,name="SourceEnemy",sprite="EN007A",
                     atlas="Enemy/EN007A/atlas.json",
-                    stats=new {level=3,max_hp=120,respawn_ticks=4}
+                    stats=new
+                    {
+                        level=3,max_hp=120,defense_power=20,
+                        magic_defense_power=15,dodge_rate=5,respawn_ticks=4
+                    }
                 }
             },
             spawns=new[]{Spawn(0,7,24,24)}
         }));
         var population=MonsterPopulationCatalog.LoadVerified(path,222,grid);
         var stats=population.Definitions[7].Stats;
-        Checks.Require(!stats.AiEnabled&&stats.MaxHp==120&&stats.AttackDamage==0&&
-                       stats.MoveStep==0&&stats.RespawnTicks==4,
+        Checks.Require(!stats.AiEnabled&&stats.TargetCombatVerified&&
+                       stats.MaxHp==120&&stats.AttackDamage==0&&
+                       stats.MoveStep==0&&stats.DefensePower==20&&
+                       stats.MagicDefensePower==15&&stats.DodgeRate==5&&
+                       stats.RespawnTicks==4,
             "target-only source stats were expanded into unverified AI");
         var runtime=new MonsterRuntime(grid,population,
             new(AiIntervalTicks:1,MaxAiPerStep:8,MaxPathQueriesPerStep:2));
