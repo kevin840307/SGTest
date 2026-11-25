@@ -10,6 +10,7 @@ var _commands: Array = []
 var _ground_markers: Array = []
 var _combat_labels: Array = []
 var _player_labels: Array = []
+var _chat_bubbles: Array = []
 var _palette_textures: Dictionary = {}
 var _palette_jobs: Dictionary = {}
 var _palette_generation := 1
@@ -32,11 +33,13 @@ func _ready() -> void:
 
 func present(
 		commands: Array, ground_markers: Array = [],
-		combat_labels: Array = [], player_labels: Array = []) -> void:
+		combat_labels: Array = [], player_labels: Array = [],
+		chat_bubbles: Array = []) -> void:
 	_commands = commands
 	_ground_markers = ground_markers
 	_combat_labels = combat_labels
 	_player_labels = player_labels
+	_chat_bubbles = chat_bubbles
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	for command in _commands:
 		_request_palette(
@@ -49,6 +52,7 @@ func clear() -> void:
 	_ground_markers = []
 	_combat_labels = []
 	_player_labels = []
+	_chat_bubbles = []
 	_palette_generation += 1
 	_palette_textures.clear()
 	# Active WorkerThreadPool tasks cannot be cancelled. Keep stale jobs until
@@ -170,6 +174,36 @@ func _draw() -> void:
 		draw_string(font,at+Vector2(1,1),name_text,
 			HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color(0.0,0.0,0.0,0.92))
 		draw_string(font,at,name_text,HORIZONTAL_ALIGNMENT_LEFT,-1,16,name_color)
+
+	# Original speaking-balloon styles are private HK source sprites. They are
+	# drawn in the same world Canvas so they follow interpolation without adding
+	# a Label/Sprite node per chat delivery.
+	for bubble in _chat_bubbles:
+		var style:=clampi(int(bubble.get("style",1)),1,7)
+		var bubble_texture:=UiTextureLoader.get_texture(
+			"res://ui/private_ie_hk2/BG_BUBBLE_S%02d.png"%style)
+		if bubble_texture==null:
+			continue
+		var anchor:Vector2=bubble.p
+		var bubble_size:=Vector2(bubble_texture.get_width(),bubble_texture.get_height())
+		var top_left:=Vector2(anchor.x-bubble_size.x*0.5,anchor.y-bubble_size.y)
+		draw_texture(bubble_texture,top_left)
+		var remaining:=str(bubble.get("text",""))
+		var lines:Array[String]=[]
+		while not remaining.is_empty() and lines.size()<3:
+			var take:=mini(10,remaining.length())
+			lines.append(remaining.substr(0,take))
+			remaining=remaining.substr(take)
+		for line_index in lines.size():
+			var line:=lines[line_index]
+			var line_width:=font.get_string_size(line,HORIZONTAL_ALIGNMENT_LEFT,-1,12).x
+			var line_at:=Vector2(
+				top_left.x+(bubble_size.x-line_width)*0.5,
+				top_left.y+18.0+14.0*line_index)
+			draw_string(font,line_at+Vector2(1,1),line,
+				HORIZONTAL_ALIGNMENT_LEFT,-1,12,Color(1.0,1.0,1.0,0.75))
+			draw_string(font,line_at,line,
+				HORIZONTAL_ALIGNMENT_LEFT,-1,12,Color(0.22,0.12,0.06,1.0))
 
 	# Reliable combat presentation is still rendered by this shared Canvas.
 	# No Label/Sprite Node is allocated per attack, so dense fights do not

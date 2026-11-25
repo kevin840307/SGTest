@@ -64,6 +64,12 @@ var _combat_seen_next := 0
 const COMBAT_DEDUP_MAX := 32768
 var _combat_overlays: Array[Dictionary] = []
 const COMBAT_OVERLAY_LIFETIME_USEC := 900000
+# Old CSpeakingBalloonItf constructor stores 0x2710 milliseconds and closes
+# itself after that timer expires. Keep only the latest accepted sequence per
+# sender connection; the chat backlog may be published repeatedly at 30 Hz.
+const CHAT_BALLOON_LIFETIME_USEC := 10_000_000
+var _chat_balloon_seen: Dictionary = {}
+var _chat_balloons: Array[Dictionary] = []
 # Retain only reusable map/atlas textures across short MapEpoch transfers.
 # Actor, AOI, inventory and combat state are NEVER cached here.
 const MAX_PREVIOUS_MAP_CACHE_BYTES := 128 * 1024 * 1024
@@ -170,6 +176,8 @@ func clear_map(retain_cache: bool = false) -> void:
 	_combat_seen_ring.clear()
 	_combat_seen_next = 0
 	_combat_overlays.clear()
+	_chat_balloon_seen.clear()
+	_chat_balloons.clear()
 	camera.clear()
 	map_name_display.clear_notice()
 	_map = {}
@@ -666,12 +674,29 @@ func present() -> void:
 		var bound: Rect2 = sprite_bounds[key]
 		rendered["p"] = Vector2(bound.get_center().x,bound.position.y-6.0)
 		name_labels.append(rendered)
+	var chat_bubbles:Array=[]
+	var active_bubbles:Array[Dictionary]=[]
+	for bubble in _chat_balloons:
+		var age:=now_usec-int(bubble.started_usec)
+		if age<0 or age>CHAT_BALLOON_LIFETIME_USEC:
+			continue
+		active_bubbles.append(bubble)
+		var actor_key:=str(int(bubble.actor_id))
+		if not sprite_bounds.has(actor_key):
+			continue
+		var actor_bounds:Rect2=sprite_bounds[actor_key]
+		chat_bubbles.append({
+			"p":Vector2(actor_bounds.get_center().x,actor_bounds.position.y-8.0),
+			"style":clampi(int(bubble.bubble_type)+1,1,6),
+			"text":str(bubble.text),
+		})
+	_chat_balloons=active_bubbles
 	if (draw_list.skipped_actors>0 or draw_list.skipped_parts>0 or draw_list.skipped_frames>0) and Time.get_ticks_msec()>=_next_draw_warning_msec:
 		_next_draw_warning_msec = Time.get_ticks_msec()+5000
 		push_warning("WORLD_ACTOR_RENDER_SKIPPED map=%d actors=%d parts=%d frames=%d remaining=%d details=%s" % [
 			map_id,draw_list.skipped_actors,draw_list.skipped_parts,draw_list.skipped_frames,
 			draw_commands.size(),str(draw_list.invalid_actor_examples)])
-	_canvas.present(draw_commands,markers,combat_labels,name_labels)
+	_canvas.present(draw_commands,markers,combat_labels,name_labels,chat_bubbles)
 	_players_dirty = false
 	_last_rect = rect
 	_last_update = update
@@ -753,9 +778,45 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 		_consume_player_damage_visual_events(snapshot,now_usec)
 		_consume_pvp_combat_visual_events(snapshot,now_usec)
 		_consume_pvp_skill_visual_events(snapshot,now_usec)
+		_consume_chat_balloons(snapshot,now_usec)
 		# Camera is owned by present() on the render clock. Updating it here
 		# allowed every network packet to yank terrain back to the Server,
 		# then _process() yanked it back to local prediction next frame.
+
+
+func _consume_chat_balloons(snapshot:Dictionary,now_usec:int)->void:
+	var messages:Variant=snapshot.get("chat_messages",[])
+	if not messages is Array:
+		return
+	for raw in messages:
+		if not raw is Dictionary:
+			continue
+		var message:Dictionary=raw
+		var channel:=int(message.get("channel",-1))
+		# Original speaking balloons are attached to a map character. Private
+		# messages have no world balloon; nearby and same-map party chat do.
+		if channel not in [0,3]:
+			continue
+		var actor_id:=int(message.get("sender_actor_id",0))
+		var connection:=int(message.get("sender_connection_epoch",0))
+		var sequence:=int(message.get("chat_sequence",0))
+		var text:=str(message.get("message","")).strip_edges()
+		if actor_id<=0 or connection<=0 or sequence<=0 or text.is_empty():
+			continue
+		var sender_key:="%d/%d"%[actor_id,connection]
+		if sequence<=int(_chat_balloon_seen.get(sender_key,0)):
+			continue
+		_chat_balloon_seen[sender_key]=sequence
+		# CChatItf::AddBalloon truncates long balloon text at 0x14 characters.
+		var bubble_text:=text.substr(0,20)
+		if text.length()>20:
+			bubble_text+="…"
+		_chat_balloons.append({
+			"actor_id":actor_id,
+			"bubble_type":clampi(int(message.get("bubble_type",0)),0,5),
+			"text":bubble_text,
+			"started_usec":now_usec,
+		})
 
 
 func _consume_player_attack_events(snapshot: Dictionary,now_usec: int) -> void:

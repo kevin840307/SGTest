@@ -255,6 +255,56 @@ func _run() -> void:
 	):
 		_fail("original SPR world geometry not applied by independent ClassicWorldShell")
 		return
+	var system_controls := {
+		"CloseWindow":[Vector2(270,1),Vector2(16,16)],
+		"QualityDown":[Vector2(144,34),Vector2(17,17)],
+		"QualityUp":[Vector2(198,34),Vector2(16,16)],
+		"BgmDown":[Vector2(121,69),Vector2(17,17)],
+		"BgmUp":[Vector2(175,69),Vector2(16,16)],
+		"SfxDown":[Vector2(94,102),Vector2(17,17)],
+		"SfxUp":[Vector2(148,102),Vector2(16,16)],
+		"BackToServer":[Vector2(27,168),Vector2(85,21)],
+		"ExitGame":[Vector2(125,168),Vector2(85,21)],
+	}
+	for control_name in system_controls:
+		var control:=world.settings_window.get_node_or_null(control_name) as Control
+		var expected:Array=system_controls[control_name]
+		if control==null or control.position!=expected[0] or control.size!=expected[1]:
+			_fail("HK 029_SYSTEM control rect drifted: "+str(control_name))
+			return
+	if (
+		(world.settings_window.get_node("BgmLabel") as RichTextLabel).text!="背景音樂音量" or
+		(world.settings_window.get_node("SfxLabel") as RichTextLabel).text!="音效音量" or
+		(world.settings_window.get_node("QualityLabel") as RichTextLabel).text!="高畫質流暢度" or
+		(world.settings_window.get_node("BattleModeLabel") as RichTextLabel).text!="戰鬥模式" or
+		(world.settings_window.get_node("BackToServerText") as RichTextLabel).text!="回選擇伺服器" or
+		(world.settings_window.get_node("ExitGameText") as RichTextLabel).text!="離開遊戲"
+	):
+		_fail("HK 029_SYSTEM fixed labels drifted from original text")
+		return
+	app.world_view._chat_balloon_seen.clear()
+	app.world_view._chat_balloons.clear()
+	app.world_view._consume_chat_balloons({
+		"chat_messages":[
+			{"channel":0,"sender_actor_id":42,"sender_connection_epoch":3,"chat_sequence":1,
+			 "bubble_type":4,"message":"1234567890123456789012345"},
+			{"channel":4,"sender_actor_id":42,"sender_connection_epoch":3,"chat_sequence":2,
+			 "bubble_type":1,"message":"private"},
+		]
+	},1_000_000)
+	app.world_view._consume_chat_balloons({
+		"chat_messages":[
+			{"channel":0,"sender_actor_id":42,"sender_connection_epoch":3,"chat_sequence":1,
+			 "bubble_type":4,"message":"duplicate"}
+		]
+	},2_000_000)
+	if (
+		app.world_view._chat_balloons.size()!=1 or
+		str(app.world_view._chat_balloons[0].text)!="12345678901234567890…" or
+		int(app.world_view._chat_balloons[0].bubble_type)!=4
+	):
+		_fail("original speaking-balloon delivery/truncation/dedupe drifted")
+		return
 	if (
 		(world.shop_window.get_node("BG_SHOPBackground") as TextureRect).texture != null or
 		(world.storage_window.get_node("BG_BANKBackground") as TextureRect).texture != null or

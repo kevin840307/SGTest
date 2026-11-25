@@ -432,6 +432,32 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 			if return_result.is_empty() or int(return_result.last_npc_result_map_epoch) != int(returned.map_epoch):
 				_fail("Map13 NPC accepted return receipt missing %s" % session.snapshot(), session)
 				return
+		# Regression for the player's reported second-transfer freeze: a new
+		# MapEpoch is not usable until the WorldReady ACK barrier has cleared.
+		# Exercise a normal input immediately after the return transition.
+		if not session.move_target(40,8):
+			_fail("return Map15 immediate MoveTarget rejected %s" % session.snapshot(),session)
+			return
+		var return_move_ack:={}
+		deadline=Time.get_ticks_msec()+7000
+		while Time.get_ticks_msec()<deadline:
+			var value:Dictionary=session.snapshot()
+			if int(value.state)==WorldState.STATE_FAILED:
+				break
+			if (
+				int(value.map_id)==15 and
+				int(value.map_epoch)==int(returned.map_epoch) and
+				int(value.last_receipt_sequence)==1 and
+				int(value.last_receipt_status)==0
+			):
+				return_move_ack=value
+				break
+			OS.delay_msec(2)
+		if return_move_ack.is_empty():
+			_fail("return Map15 movement remained blocked after second transfer %s"%session.snapshot(),session)
+			return
+		print("CLIENT_%s_RETURN_MOVE_ACK role=actor epoch=%d"%[
+			"PORTAL" if portal else "CROSSMAP",int(returned.map_epoch)])
 		# The spectator must see re-entry before this actor logs out.
 		OS.delay_msec(700)
 		session.stop()

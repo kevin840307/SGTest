@@ -16,6 +16,7 @@ const HK_SHARED_FONT_HEIGHT := 12
 const HK_SHARED_FONT_WEIGHT := 500
 const HK_SHARED_FONT_BASELINE := 10.0
 const HK_SHARED_FONT_BITMAP := PRIVATE + "/HK_SHARED_UI_FONT.fnt"
+const LOCAL_SETTINGS_PATH := "user://sgtest_world_settings.cfg"
 
 class CharacterText extends Control:
 	var centered := false
@@ -74,6 +75,14 @@ var dialog_window: Control
 var settings_window: Control
 var _settings_skin_label: Label
 var _settings_hint: Label
+var _settings_bgm_value: RichTextLabel
+var _settings_sfx_value: RichTextLabel
+var _settings_quality_value: RichTextLabel
+var _settings_battle_value: RichTextLabel
+var _settings_bgm_level:=10
+var _settings_sfx_level:=10
+var _settings_high_fps:=true
+var _settings_battle_mode:=0
 var _skin_switch_visible:=false
 var _windows:Array[Control]=[]
 
@@ -736,6 +745,10 @@ func _build_friend_panel()->void:
 		var button:=_texture_button(friend_panel,item[0],item[1],item[2],Vector2(17,17) if item[0]=="FriendExpand" else Vector2(24,24),Callable(),item[3])
 		button.disabled=true
 		button.texture_disabled=_tex(item[1]+"_0")
+	var friend_list_button:=friend_panel.get_node("FriendList") as TextureButton
+	friend_list_button.disabled=false
+	friend_list_button.pressed.connect(_refresh_friend_server)
+	friend_list_button.tooltip_text="重新整理好友清單"
 	_friend_scroll=ScrollContainer.new()
 	_friend_scroll.name="FriendScroll"
 	_friend_scroll.position=Vector2(9,36)
@@ -787,6 +800,10 @@ func _open_friend_editor()->void:
 	_update_friend_action()
 	_friend_editor.popup_centered(Vector2i(230,40))
 	_friend_name_input.grab_focus()
+
+func _refresh_friend_server()->void:
+	if _panel!=null and _panel.session!=null:
+		_panel.session.friend_refresh()
 
 func _delete_selected_friend()->void:
 	if _friend_actor_for_name(_friend_name_input.text)>0:
@@ -1166,28 +1183,122 @@ func _build_dialog()->void:
 	dialog_window.hide()
 
 func _build_settings()->void:
+	# 029_SYSTEM.itf + Old CSystemMenuItf. The original stores independent
+	# 0..10 BGM/SFX levels and maps them to the engine's 0..255 mixer volume.
 	settings_window=_window("SettingsWindow","BG_SYSTEM",Vector2(291,207),Vector2(255,196))
-	_settings_skin_label=_classic_label(settings_window,"UiLabel",Rect2(9,35,102,20),10,false)
+	var close:=settings_window.get_node_or_null("CloseWindow") as TextureButton
+	if close!=null:
+		close.position=Vector2(270,1)
+		close.size=Vector2(16,16)
+	var help:=_texture_button(settings_window,"OnlineHelp","B_ONLINEHELP",Vector2(253,1),Vector2(16,16),Callable(),"線上說明")
+	help.disabled=true
+	help.texture_disabled=_tex("B_ONLINEHELP_0")
+	_itf_text(settings_window,"QualityLabel",Rect2(61,37,72,12),10).text="高畫質流暢度"
+	_settings_quality_value=_itf_text(settings_window,"QualityValue",Rect2(168,37,22,11),10,true)
+	_texture_button(settings_window,"QualityDown","MINISCREEN",Vector2(144,34),Vector2(17,17),_set_high_fps.bind(false),"25 FPS")
+	_texture_button(settings_window,"QualityUp","ADD_POINT",Vector2(198,34),Vector2(16,16),_set_high_fps.bind(true),"50 FPS")
+	_itf_text(settings_window,"BgmLabel",Rect2(37,71,72,12),10).text="背景音樂音量"
+	_settings_bgm_value=_itf_text(settings_window,"BgmValue",Rect2(145,71,22,11),10,true)
+	_texture_button(settings_window,"BgmDown","MINISCREEN",Vector2(121,69),Vector2(17,17),_change_bgm.bind(-1),"降低背景音樂")
+	_texture_button(settings_window,"BgmUp","ADD_POINT",Vector2(175,69),Vector2(16,16),_change_bgm.bind(1),"提高背景音樂")
+	_itf_text(settings_window,"SfxLabel",Rect2(35,105,72,12),10).text="音效音量"
+	_settings_sfx_value=_itf_text(settings_window,"SfxValue",Rect2(118,105,22,11),10,true)
+	_texture_button(settings_window,"SfxDown","MINISCREEN",Vector2(94,102),Vector2(17,17),_change_sfx.bind(-1),"降低音效")
+	_texture_button(settings_window,"SfxUp","ADD_POINT",Vector2(148,102),Vector2(16,16),_change_sfx.bind(1),"提高音效")
+	_itf_text(settings_window,"BattleModeLabel",Rect2(12,139,48,12),10).text="戰鬥模式"
+	_settings_battle_value=_itf_text(settings_window,"BattleModeValue",Rect2(91,139,79,11),10,true)
+	var battle_left:=_texture_button(settings_window,"BattleModeLeft","B_PVP_LEFT",Vector2(69,136),Vector2(17,17),Callable(),"戰鬥模式由伺服器規則決定")
+	var battle_right:=_texture_button(settings_window,"BattleModeRight","B_PVP_RIGHT",Vector2(177,137),Vector2(15,15),Callable(),"戰鬥模式由伺服器規則決定")
+	for button in [battle_left,battle_right]:
+		button.disabled=true
+		button.texture_disabled=button.texture_normal
+	_texture_button(settings_window,"BackToServer","YELLOW_BUTTON",Vector2(27,168),Vector2(85,21),_logout_to_login,"回選擇伺服器")
+	_texture_button(settings_window,"ExitGame","YELLOW_BUTTON",Vector2(125,168),Vector2(85,21),func():get_tree().quit(),"離開遊戲")
+	_itf_text(settings_window,"BackToServerText",Rect2(32,172,72,12),10,true).text="回選擇伺服器"
+	_itf_text(settings_window,"ExitGameText",Rect2(141,172,48,12),10,true).text="離開遊戲"
+	_settings_skin_label=_classic_label(settings_window,"UiLabel",Rect2(9,18,80,12),9,false)
 	_settings_skin_label.text="介面風格"
 	_settings_picker.name="UiProfilePickerSettings"
-	_settings_picker.position=Vector2(112,34)
-	_settings_picker.size=Vector2(154,23)
+	_settings_picker.position=Vector2(90,17)
+	_settings_picker.size=Vector2(120,20)
 	_settings_picker.item_selected.connect(func(index:int):
 		var id:=str(_settings_picker.get_item_metadata(index))
 		if not id.is_empty():skin_requested.emit(id))
 	settings_window.add_child(_settings_picker)
-	_settings_hint=_classic_label(settings_window,"SettingsHint",Rect2(10,42,268,146),10,false)
-	_settings_hint.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+	_settings_hint=_classic_label(settings_window,"SettingsHint",Rect2(212,17,70,20),8,false)
+	_load_system_settings()
+	_refresh_system_settings()
 	set_skin_switch_visible(false)
 
+func _ensure_audio_bus(bus_name:String)->int:
+	var index:=AudioServer.get_bus_index(bus_name)
+	if index>=0:return index
+	AudioServer.add_bus()
+	index=AudioServer.bus_count-1
+	AudioServer.set_bus_name(index,bus_name)
+	AudioServer.set_bus_send(index,"Master")
+	return index
+
+func _apply_audio_level(bus_name:String,level:int)->void:
+	var index:=_ensure_audio_bus(bus_name)
+	var normalized:=clampf(float(level)/10.0,0.0,1.0)
+	AudioServer.set_bus_mute(index,level<=0)
+	AudioServer.set_bus_volume_db(index,linear_to_db(maxf(normalized,0.0001)))
+
+func _load_system_settings()->void:
+	var config:=ConfigFile.new()
+	if config.load(LOCAL_SETTINGS_PATH)==OK:
+		_settings_bgm_level=clampi(int(config.get_value("audio","bgm",_settings_bgm_level)),0,10)
+		_settings_sfx_level=clampi(int(config.get_value("audio","sfx",_settings_sfx_level)),0,10)
+		_settings_high_fps=bool(config.get_value("display","high_fps",_settings_high_fps))
+	_apply_audio_level("BGM",_settings_bgm_level)
+	_apply_audio_level("SFX",_settings_sfx_level)
+	Engine.max_fps=50 if _settings_high_fps else 25
+
+func _save_system_settings()->void:
+	var config:=ConfigFile.new()
+	config.set_value("audio","bgm",_settings_bgm_level)
+	config.set_value("audio","sfx",_settings_sfx_level)
+	config.set_value("display","high_fps",_settings_high_fps)
+	config.save(LOCAL_SETTINGS_PATH)
+
+func _refresh_system_settings()->void:
+	if _settings_bgm_value!=null:_settings_bgm_value.text=str(_settings_bgm_level)
+	if _settings_sfx_value!=null:_settings_sfx_value.text=str(_settings_sfx_level)
+	if _settings_quality_value!=null:_settings_quality_value.text="ON" if _settings_high_fps else "OFF"
+	if _settings_battle_value!=null:_settings_battle_value.text="一般模式"
+
+func _change_bgm(delta:int)->void:
+	_settings_bgm_level=clampi(_settings_bgm_level+delta,0,10)
+	_apply_audio_level("BGM",_settings_bgm_level)
+	_refresh_system_settings()
+	_save_system_settings()
+
+func _change_sfx(delta:int)->void:
+	_settings_sfx_level=clampi(_settings_sfx_level+delta,0,10)
+	_apply_audio_level("SFX",_settings_sfx_level)
+	_refresh_system_settings()
+	_save_system_settings()
+
+func _set_high_fps(enabled:bool)->void:
+	_settings_high_fps=enabled
+	Engine.max_fps=50 if enabled else 25
+	_refresh_system_settings()
+	_save_system_settings()
+
+func _logout_to_login()->void:
+	settings_window.hide()
+	if _panel!=null:_panel.disconnect_session()
+
 func set_skin_switch_visible(enabled:bool)->void:
+	# Developer-only profile switching must never move or cover the decoded
+	# 029_SYSTEM controls in the normal player layout.
 	_skin_switch_visible=enabled
 	if _settings_skin_label!=null:_settings_skin_label.visible=enabled
 	if _settings_picker!=null:_settings_picker.visible=enabled
 	if _settings_hint!=null:
-		_settings_hint.position=Vector2(10,70) if enabled else Vector2(10,42)
-		_settings_hint.size=Vector2(268,118) if enabled else Vector2(268,146)
-		_settings_hint.text="畫面與介面設定共用 SGTest 系統設定。\n切換 UI 不會重新登入或重載地圖。" if enabled else "介面：HK 原版"
+		_settings_hint.visible=enabled
+		_settings_hint.text="DEV UI" if enabled else "介面：HK 原版"
 
 func bind_session(panel)->void:
 	_panel=panel
