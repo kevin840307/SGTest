@@ -76,6 +76,17 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 			_fail("observer did not receive authoritative World chat %s" %
 				session.snapshot(),session)
 			return
+		if _wait_clan_members(session,2,7000).is_empty():
+			_fail("observer did not receive authoritative clan snapshot %s" %
+				session.snapshot(),session)
+			return
+		var warband_chat := _wait_warband_chat(
+			session,remote_id,"MultiHeroTwo","戰團 E2E 測試",7000)
+		if warband_chat.is_empty() or int(warband_chat.get("chat_sequence",0))!=3 or \
+				int(warband_chat.get("channel",-1))!=2 or int(warband_chat.get("bubble_type",-1))!=3:
+			_fail("observer did not receive authoritative Warband chat %s" %
+				session.snapshot(),session)
+			return
 	var crossmap_chat_stale_before := -1
 	if crossmap and not portal:
 		if not session.party_invite_name("MultiHeroTwo"):
@@ -222,7 +233,7 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 		quit(0)
 		return
 	session.stop()
-	print("CLIENT_MULTI_PASS role=observer world_ready=PASS spawn=PASS nearby_chat=PASS world_chat=PASS delta=PASS despawn=PASS other_actor=%d" % remote_id)
+	print("CLIENT_MULTI_PASS role=observer world_ready=PASS spawn=PASS nearby_chat=PASS world_chat=PASS warband=PASS delta=PASS despawn=PASS other_actor=%d" % remote_id)
 	quit(0)
 
 func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) -> void:
@@ -260,6 +271,20 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 		if world_echo.is_empty() or int(world_echo.get("chat_sequence",0))!=2 or \
 				int(world_echo.get("channel",-1))!=1 or int(world_echo.get("bubble_type",-1))!=4:
 			_fail("actor did not receive authoritative World chat echo %s" %
+				session.snapshot(),session)
+			return
+		if _wait_clan_members(session,2,7000).is_empty():
+			_fail("actor did not receive authoritative clan snapshot %s" %
+				session.snapshot(),session)
+			return
+		if not session.send_warband_chat("戰團 E2E 測試",3):
+			_fail("actor Warband chat intent rejected",session)
+			return
+		var warband_echo := _wait_warband_chat(
+			session,self_id,"MultiHeroTwo","戰團 E2E 測試",7000)
+		if warband_echo.is_empty() or int(warband_echo.get("chat_sequence",0))!=3 or \
+				int(warband_echo.get("channel",-1))!=2 or int(warband_echo.get("bubble_type",-1))!=3:
+			_fail("actor did not receive authoritative Warband chat echo %s" %
 				session.snapshot(),session)
 			return
 	elif not portal:
@@ -489,7 +514,7 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 	# independent of the headless test's render cadence.
 	OS.delay_msec(180)
 	session.stop()
-	print("CLIENT_MULTI_PASS role=actor world_ready=PASS spawn=PASS nearby_chat=PASS world_chat=PASS move_ack=PASS")
+	print("CLIENT_MULTI_PASS role=actor world_ready=PASS spawn=PASS nearby_chat=PASS world_chat=PASS warband=PASS move_ack=PASS")
 	quit(0)
 
 
@@ -561,6 +586,42 @@ func _wait_world_chat(
 				str(row.get("message",""))==message
 			):
 				return row
+		OS.delay_msec(2)
+	return {}
+
+
+func _wait_warband_chat(
+		session,sender_id:int,sender_name:String,message:String,
+		timeout_ms:int)->Dictionary:
+	var deadline:=Time.get_ticks_msec()+timeout_ms
+	while Time.get_ticks_msec()<deadline:
+		var value:Dictionary=session.snapshot()
+		if int(value.state)==WorldState.STATE_FAILED:
+			break
+		for raw in value.get("chat_messages",[]):
+			var row:Dictionary=raw
+			if (
+				int(row.get("channel",-1))==2 and
+				int(row.get("sender_actor_id",0))==sender_id and
+				str(row.get("sender_name",""))==sender_name and
+				str(row.get("message",""))==message
+			):
+				return row
+		OS.delay_msec(2)
+	return {}
+
+
+func _wait_clan_members(session,count:int,timeout_ms:int)->Dictionary:
+	var deadline:=Time.get_ticks_msec()+timeout_ms
+	while Time.get_ticks_msec()<deadline:
+		var value:Dictionary=session.snapshot()
+		if int(value.state)==WorldState.STATE_FAILED:
+			break
+		if (
+			int(value.get("clan_id",0))>0 and
+			(value.get("clan_members",{}) as Dictionary).size()==count
+		):
+			return value
 		OS.delay_msec(2)
 	return {}
 

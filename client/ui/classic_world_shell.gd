@@ -151,6 +151,7 @@ var _chat_small_position:=Vector2(128,510)
 var _chat_send_channel:=0
 var _chat_bubble_type:=0
 var _chat_show_world:=true
+var _chat_show_warband:=true
 var _chat_show_party:=true
 var _chat_show_private:=true
 var _friend_scroll:ScrollContainer
@@ -625,8 +626,8 @@ func _build_chat_panel()->void:
 		# Source/reference default checked artwork is frame 2.
 		button.texture_normal=_tex(arts[index]+"_2")
 		button.texture_pressed=_tex(arts[index]+"_0")
-		button.tooltip_text=["私訊顯示","世界頻道顯示","戰團頻道（尚未接通）","隊伍顯示","系統頻道（尚未接通）"][index]
-		if index not in [0,1,3]:
+		button.tooltip_text=["私訊顯示","世界頻道顯示","戰團頻道顯示","隊伍顯示","系統頻道（尚未接通）"][index]
+		if index not in [0,1,2,3]:
 			button.disabled=true
 			button.texture_disabled=button.texture_normal
 		_chat_tabs.append(button)
@@ -728,6 +729,9 @@ func _toggle_chat_filter(index:int)->void:
 	elif index==1:
 		_chat_show_world=not _chat_show_world
 		_chat_tabs[1].texture_normal=_tex("B_CHANNEL_CA_2" if _chat_show_world else "B_CHANNEL_CA_0")
+	elif index==2:
+		_chat_show_warband=not _chat_show_warband
+		_chat_tabs[2].texture_normal=_tex("B_CHANNEL_CC_2" if _chat_show_warband else "B_CHANNEL_CC_0")
 	elif index==3:
 		_chat_show_party=not _chat_show_party
 		_chat_tabs[3].texture_normal=_tex("B_CHANNEL_CD_2" if _chat_show_party else "B_CHANNEL_CD_0")
@@ -739,13 +743,17 @@ func _toggle_chat_send_channel()->void:
 	# proven from the HK draw path; do not invent a World-specific sprite frame.
 	match _chat_send_channel:
 		0: _chat_send_channel=1
-		1: _chat_send_channel=3
+		1: _chat_send_channel=2
+		2: _chat_send_channel=3
 		_: _chat_send_channel=0
+	# The HK draw-path mapping for a distinct Warband ICON_CHANNEL frame is not
+	# proven yet; preserve the known Nearby/World artwork instead of inventing one.
 	_chat_channel.texture_normal=_tex("ICON_CHANNEL_2" if _chat_send_channel==3 else "ICON_CHANNEL_3")
 	_chat_channel.texture_hover=_chat_channel.texture_normal
 	_chat_channel.texture_pressed=_chat_channel.texture_normal
 	match _chat_send_channel:
-		1: _chat_channel.tooltip_text="世界聊天（Lv10）；點擊切換隊伍"
+		1: _chat_channel.tooltip_text="世界聊天（Lv10）；點擊切換戰團"
+		2: _chat_channel.tooltip_text="戰團聊天；點擊切換隊伍"
 		3: _chat_channel.tooltip_text="隊伍聊天；點擊切換附近"
 		_: _chat_channel.tooltip_text="附近聊天；點擊切換世界"
 
@@ -1896,6 +1904,7 @@ func _send_chat()->void:
 	var queued:=false
 	match _chat_send_channel:
 		1: queued=_panel.session.send_world_chat(message,_chat_bubble_type)
+		2: queued=_panel.session.send_warband_chat(message,_chat_bubble_type)
 		3: queued=_panel.session.send_party_chat(message,_chat_bubble_type)
 		_: queued=_panel.session.send_nearby_chat(message,_chat_bubble_type)
 	if queued:
@@ -1921,6 +1930,8 @@ func _refresh_chat_history()->void:
 			0: rows.append("[附近] %s：%s"%[sender,str(entry.get("message",""))])
 			1:
 				if _chat_show_world:rows.append("[世界] %s：%s"%[sender,str(entry.get("message",""))])
+			2:
+				if _chat_show_warband:rows.append("[戰團] %s：%s"%[sender,str(entry.get("message",""))])
 			3:
 				if _chat_show_party:rows.append("[隊伍] %s：%s"%[sender,str(entry.get("message",""))])
 			4:

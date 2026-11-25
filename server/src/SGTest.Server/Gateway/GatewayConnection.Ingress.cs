@@ -467,7 +467,7 @@ public sealed partial class GatewayConnection
             WireProtocol.TryDecodeChatCommand(frame,out var chat))
         {
             if(!GameplayReady(bound)||chat.MapEpoch!=bound.MapEpoch||
-               chat.Channel is not (ChatChannel.Nearby or ChatChannel.World or ChatChannel.Party)||
+               chat.Channel is not (ChatChannel.Nearby or ChatChannel.World or ChatChannel.Warband or ChatChannel.Party)||
                chat.ChatSequence<=_lastChatSequence)
                 return WireFrameDisposition.ProtocolViolation;
             var request=new TrustedChatCommand(

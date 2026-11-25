@@ -1,5 +1,6 @@
 using SGTest.Server.Visibility;
 using SGTest.Server.Skill;
+using SGTest.Server.Clan;
 using SGTest.Server.Party;
 using SGTest.Server.Npc;
 using SGTest.Server.Monster;
@@ -1535,13 +1536,23 @@ internal static class Program
                     .ConfigureAwait(false);
                 await store.SetCharacterCombatProfileAsync(bId, worldChatProfile)
                     .ConfigureAwait(false);
+                var createdClan=await store.CreateClanAsync(aId,"星門先遣隊")
+                    .ConfigureAwait(false);
+                if(createdClan.Status!=ClanStoreStatus.Success||createdClan.Clan is null)
+                    throw new InvalidOperationException("multi fixture clan create failed");
+                var joinedClan=await store.JoinClanAsync(bId,createdClan.Clan.ClanId)
+                    .ConfigureAwait(false);
+                if(joinedClan.Status!=ClanStoreStatus.Success)
+                    throw new InvalidOperationException("multi fixture clan join failed");
             }
             var router = new WorldResultRouter();
             var auditedPortals = portals ? PortalCatalog.LoadNpcDocuments([
                 CreatePortalDocument(root, 15), CreatePortalDocument(root, 13)]) : null;
             var parties=new PartyCoordinator();
+            var clans=!crossmap&&!portals&&!reconnect
+                ?new ClanCoordinator(store):null;
             var authorization = new IdentitySessionAuthorization(
-                store, world, auditedPortals, parties:parties);
+                store, world, auditedPortals, parties:parties,clans:clans);
             var aoiPump = new WorldAoiPump(router);
             var routerTask = router.RunAsync(world.Results);
             using var aoiStop = new CancellationTokenSource();
@@ -1648,7 +1659,7 @@ internal static class Program
                 }
                 if (results[0].Reason != AesWireEndReason.CleanEof ||
                     results[1].Reason != AesWireEndReason.CleanEof ||
-                    results[1].CommandsAccepted != (portals ? 9 : crossmap ? 11 : 4) ||
+                    results[1].CommandsAccepted != (portals ? 9 : crossmap ? 11 : 5) ||
                     parties.PartyCount != 0 ||
                     router.Statistics.ActiveSessions != 0 ||
                     router.Statistics.ReceiptsQueued < (crossmap || portals ? 2 : 1) ||

@@ -296,7 +296,9 @@ func _run() -> void:
 			 "bubble_type":4,"message":"1234567890123456789012345"},
 			{"channel":1,"sender_actor_id":43,"sender_connection_epoch":7,"chat_sequence":2,
 			 "bubble_type":2,"message":"world"},
-			{"channel":4,"sender_actor_id":42,"sender_connection_epoch":3,"chat_sequence":3,
+			{"channel":2,"sender_actor_id":43,"sender_connection_epoch":7,"chat_sequence":3,
+			 "bubble_type":3,"message":"warband"},
+			{"channel":4,"sender_actor_id":42,"sender_connection_epoch":3,"chat_sequence":4,
 			 "bubble_type":1,"message":"private"},
 		]
 	},1_000_000)
@@ -307,11 +309,13 @@ func _run() -> void:
 		]
 	},2_000_000)
 	if (
-		app.world_view._chat_balloons.size()!=2 or
+		app.world_view._chat_balloons.size()!=3 or
 		str(app.world_view._chat_balloons[0].text)!="12345678901234567890…" or
 		int(app.world_view._chat_balloons[0].bubble_type)!=4 or
 		str(app.world_view._chat_balloons[1].text)!="world" or
-		int(app.world_view._chat_balloons[1].bubble_type)!=2
+		int(app.world_view._chat_balloons[1].bubble_type)!=2 or
+		str(app.world_view._chat_balloons[2].text)!="warband" or
+		int(app.world_view._chat_balloons[2].bubble_type)!=3
 	):
 		_fail("original speaking-balloon delivery/truncation/dedupe drifted")
 		return

@@ -1,4 +1,5 @@
 using SGTest.Server.Chat;
+using SGTest.Server.Clan;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
 using SGTest.Server.Pvp;
@@ -12,10 +13,11 @@ internal static class ChatWireChecks
     {
         Checks.Run("nearby chat wire binds sender identity only at Gateway", Wire);
         Checks.Run("whisper wire binds sender and target in shared chat sequence", Whisper);
-        Checks.Run("chat gateway admits trusted World and rejects unsupported channel/replay", Gate);
+        Checks.Run("chat gateway admits trusted World/Warband and rejects wrong opcode/replay", Gate);
         Checks.Run("trusted chat routing isolates nearby and cross-map whisper", Routing);
         Checks.Run("chat recipient ignore filters world and whisper delivery", IgnoreRouting);
         Checks.Run("trusted world chat enforces original level gate and crosses maps", WorldRouting);
+        Checks.Run("trusted warband chat reaches current clan members only",()=>WarbandRouting().GetAwaiter().GetResult());
         Checks.Run("trusted party chat reaches cross-map members only", PartyRouting);
     }
 
@@ -141,6 +143,86 @@ internal static class ChatWireChecks
             router,null).GetAwaiter().GetResult();
         Checks.Require(!sender.TryDequeueReliable(out _)&&!target.TryDequeueReliable(out _),
             "original WorldChannel lvllimit=10 was not enforced by authoritative routing");
+    }
+
+    private static async Task WarbandRouting()
+    {
+        string root=Path.Combine(Path.GetTempPath(),"sgtest_warband_chat_"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var store=new SqliteIdentityStore(Path.Combine(root,"identity.db"));
+            await store.InitializeAsync().ConfigureAwait(false);
+            long clanAccount=(await store.CreateAccountAsync(
+                "warband_a","Warband-Account-Secret-2026!")).AccountId;
+            long outsiderAccount=(await store.CreateAccountAsync(
+                "warband_b","Warband-Outsider-Secret-2026!")).AccountId;
+            long leaderId=(await store.CreateCharacterAsync(
+                clanAccount,0,"WarbandLeader",new(15,8,8))).Character!.CharacterId;
+            long memberId=(await store.CreateCharacterAsync(
+                clanAccount,1,"WarbandMember",new(13,8,8))).Character!.CharacterId;
+            long outsiderId=(await store.CreateCharacterAsync(
+                outsiderAccount,0,"WarbandOutsider",new(15,8,8))).Character!.CharacterId;
+            var created=await store.CreateClanAsync(leaderId,"星門先遣隊")
+                .ConfigureAwait(false);
+            Checks.Require(created.Status==ClanStoreStatus.Success&&created.Clan is not null,
+                "warband routing fixture clan create failed");
+            var joined=await store.JoinClanAsync(memberId,created.Clan!.ClanId)
+                .ConfigureAwait(false);
+            Checks.Require(joined.Status==ClanStoreStatus.Success,
+                "warband routing fixture member join failed");
+
+            var router=new WorldResultRouter();
+            var leader=new GatewayConnection(
+                new ActorSnapshot(leaderId,15,11,1,0,0,8,8,1,false),
+                displayName:"WarbandLeader",
+                pvpState:new CharacterPvpState(
+                    leaderId,PvpMode.ProtectedBlue,false,0,0,0));
+            var member=new GatewayConnection(
+                new ActorSnapshot(memberId,13,12,4,0,0,8,8,1,false),
+                displayName:"WarbandMember",
+                pvpState:new CharacterPvpState(
+                    memberId,PvpMode.ProtectedBlue,false,0,0,0));
+            var outsider=new GatewayConnection(
+                new ActorSnapshot(outsiderId,15,13,1,0,0,8,8,1,false),
+                displayName:"WarbandOutsider",
+                pvpState:new CharacterPvpState(
+                    outsiderId,PvpMode.ProtectedBlue,false,0,0,0));
+            Checks.Require(
+                router.TryAttach(leader)&&router.TryAttach(member)&&router.TryAttach(outsider),
+                "warband chat routing fixture attach failed");
+            var clans=new ClanCoordinator(store);
+
+            await ChatRouting.RouteAsync(
+                new(leaderId,11,1,1,ChatChannel.Warband,2,"戰團跨圖"),
+                router,null,null,clans).ConfigureAwait(false);
+            Checks.Require(
+                leader.TryDequeueReliable(out var leaderFrame)&&
+                WireProtocol.TryDecodeChatDelivery(leaderFrame,out var leaderBack)&&
+                leaderBack.Channel==ChatChannel.Warband&&
+                leaderBack.ReceiverMapEpoch==1&&
+                member.TryDequeueReliable(out var memberFrame)&&
+                WireProtocol.TryDecodeChatDelivery(memberFrame,out var memberBack)&&
+                memberBack.Channel==ChatChannel.Warband&&
+                memberBack.ReceiverMapEpoch==4&&
+                memberBack.Message=="戰團跨圖"&&
+                !outsider.TryDequeueReliable(out _)&&
+                !leader.TryDequeueReliable(out _)&&!member.TryDequeueReliable(out _),
+                "warband chat leaked outside clan or missed a current member");
+
+            await ChatRouting.RouteAsync(
+                new(outsiderId,13,1,1,ChatChannel.Warband,0,"不得廣播"),
+                router,null,null,clans).ConfigureAwait(false);
+            Checks.Require(
+                !leader.TryDequeueReliable(out _)&&
+                !member.TryDequeueReliable(out _)&&
+                !outsider.TryDequeueReliable(out _),
+                "non-member Warband chat produced authoritative delivery");
+        }
+        finally
+        {
+            Directory.Delete(root,true);
+        }
     }
 
     private static void PartyRouting()
@@ -367,14 +449,25 @@ internal static class ChatWireChecks
             trustedWorld.Channel==ChatChannel.World&&trustedWorld.PlayerLevel==10,
             "World chat did not bind the authoritative player level at Gateway");
 
-        var unsupportedGateway=new GatewayConnection(actor);
+        var warbandGateway=new GatewayConnection(actor);
+        TrustedChatCommand trustedWarband=default;
         var warband=WireProtocol.EncodeChatCommand(new(
-            3,1,ChatChannel.Warband,0,"not enabled"));
-        Checks.Require(unsupportedGateway.FeedClientBytes(
+            3,1,ChatChannel.Warband,0,"club"));
+        Checks.Require(warbandGateway.FeedClientBytes(
                 warband,_=>true,out int warbandAccepted,
+                postChat:request=>{trustedWarband=request;return true;})==
+                WireFeedStatus.Accepted&&warbandAccepted==1&&
+            trustedWarband.Channel==ChatChannel.Warband,
+            "source-backed Warband chat was not admitted");
+
+        var invalidGateway=new GatewayConnection(actor);
+        var wrongOpcode=WireProtocol.EncodeChatCommand(new(
+            3,1,ChatChannel.Whisper,0,"wrong opcode"));
+        Checks.Require(invalidGateway.FeedClientBytes(
+                wrongOpcode,_=>true,out int invalidAccepted,
                 postChat:_=>true)==WireFeedStatus.ProtocolViolation&&
-            warbandAccepted==0,
-            "unverified Warband chat was admitted");
+            invalidAccepted==0,
+            "Whisper channel bypassed its dedicated command opcode");
 
         var replayGateway=new GatewayConnection(actor);
         var first=WireProtocol.EncodeChatCommand(new(

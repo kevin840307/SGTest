@@ -111,6 +111,36 @@ func _initialize()->void:
 		_fail("world channel was client-authorized instead of server-authorized")
 		return
 
+	var warband_receive:=_base_world(22)
+	warband_receive.clan_id=44
+	warband_receive.clan_members={
+		11:{"actor_id":11,"name":"Hero"},
+		22:{"actor_id":22,"name":"Receiver"}
+	}
+	var warband_delivery:=DELIVERY_HEX.hex_decode()
+	warband_delivery[36]=2
+	if not warband_receive.apply_frame(warband_delivery):
+		_fail("authoritative Warband delivery "+warband_receive.protocol_error)
+		return
+	var warband_snapshot:=warband_receive.snapshot()
+	if (
+		(warband_snapshot.chat_messages as Array).size()!=1 or
+		int(warband_snapshot.chat_messages[0].channel)!=2 or
+		str(warband_snapshot.chat_messages[0].message)!="附近測試"
+	):
+		_fail("Warband delivery did not enter authoritative history")
+		return
+	var no_clan:=_base_world(11)
+	if no_clan.mark_chat_sent(1,2,0,"不得送出"):
+		_fail("Warband send admitted without clan snapshot")
+		return
+	var warband_self:=_base_world(11)
+	warband_self.clan_id=44
+	warband_self.clan_members={11:{"actor_id":11,"name":"Hero"}}
+	if not warband_self.mark_chat_sent(1,2,0,"戰團送出"):
+		_fail("Warband send rejected with authoritative clan snapshot")
+		return
+
 	var whisper_command:=WireCodec.encode_whisper_command(
 		3,10,22,3,"跨圖私訊")
 	if whisper_command.hex_encode().to_upper()!=WHISPER_COMMAND_HEX:

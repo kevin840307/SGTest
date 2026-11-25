@@ -1,3 +1,4 @@
+using SGTest.Server.Clan;
 using SGTest.Server.Gateway;
 using SGTest.Server.Party;
 using SGTest.Server.Visibility;
@@ -14,7 +15,7 @@ public static class ChatRouting
 {
     public static async Task RouteAsync(TrustedChatCommand request,
         WorldResultRouter router,PartyCoordinator? parties,
-        Func<long,long,Task<bool>>? isIgnored=null)
+        Func<long,long,Task<bool>>? isIgnored=null,ClanCoordinator? clans=null)
     {
         var sender=new ConnectionBinding(
             request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
@@ -71,6 +72,34 @@ public static class ChatRouting
                 if(self&&queued!=GatewaySendStatus.Enqueued)
                     throw new IOException(
                         "Reliable self nearby-chat delivery could not be queued: "+queued);
+            }
+            return;
+        }
+
+        if(request.Channel==ChatChannel.Warband)
+        {
+            if(clans is null)return;
+            var recipients=await clans.GetChatRecipientsAsync(sender,router)
+                .ConfigureAwait(false);
+            foreach(var recipient in recipients)
+            {
+                bool self=recipient.ActorId==request.ActorId&&
+                    recipient.ConnectionEpoch==request.ConnectionEpoch;
+                if(!self&&isIgnored is not null&&
+                   await isIgnored(recipient.ActorId,request.ActorId).ConfigureAwait(false))
+                    continue;
+                var delivery=new ChatDeliveryWire(
+                    recipient.MapEpoch,request.ActorId,request.ConnectionEpoch,
+                    request.ChatSequence,ChatChannel.Warband,request.BubbleType,
+                    identity.DisplayName,request.Message);
+                var queued=router.QueueChatDelivery(recipient,delivery);
+                if(queued!=GatewaySendStatus.Enqueued)
+                {
+                    if(self)
+                        throw new IOException(
+                            "Reliable self warband-chat delivery could not be queued: "+queued);
+                    router.CloseCurrentBinding(recipient);
+                }
             }
             return;
         }

@@ -7,7 +7,8 @@ const STALE := "stale"
 
 static func check_sender(
 	message: Dictionary, actor_id: int, sent_sequence: int,
-	entities: Dictionary, party_id: int, party_members: Dictionary
+	entities: Dictionary, clan_id: int, clan_members: Dictionary,
+	party_id: int, party_members: Dictionary
 ) -> String:
 	var sender := int(message.sender_actor_id)
 	var connection := int(message.sender_connection_epoch)
@@ -22,6 +23,14 @@ static func check_sender(
 			# need to exist in the receiver's AOI. Self echo is still sequence-bound.
 			if sender == actor_id:
 				return "world_chat_self_delivery_without_send" if sequence > sent_sequence else ""
+			return ""
+		2:
+			# Old CDChat::OnClubMsg resolves SGOClubSys before routing. The
+			# authoritative clan snapshot is therefore the local admission proof.
+			if clan_id <= 0 or not clan_members.has(sender):
+				return STALE
+			if sender == actor_id:
+				return "warband_chat_self_delivery_without_send" if sequence > sent_sequence else ""
 			return ""
 		3:
 			if party_id <= 0:

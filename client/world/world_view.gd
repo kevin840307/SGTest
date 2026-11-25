@@ -794,10 +794,10 @@ func _consume_chat_balloons(snapshot:Dictionary,now_usec:int)->void:
 		var message:Dictionary=raw
 		var channel:=int(message.get("channel",-1))
 		# Original speaking balloons are attached to a map character. Private
-		# messages have no world balloon; nearby/world/same-map party chat do.
-		# Cross-map World deliveries remain in history but have no sprite bounds,
+		# messages have no world balloon; nearby/world/warband/same-map party chat do.
+		# Cross-map World/Warband deliveries remain in history but have no sprite bounds,
 		# so presentation naturally skips them until the sender is actually visible.
-		if channel not in [0,1,3]:
+		if channel not in [0,1,2,3]:
 			continue
 		var actor_id:=int(message.get("sender_actor_id",0))
 		var connection:=int(message.get("sender_connection_epoch",0))

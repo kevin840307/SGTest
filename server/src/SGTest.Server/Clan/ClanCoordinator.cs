@@ -105,6 +105,30 @@ public sealed class ClanCoordinator
             BroadcastSnapshot(clan,router,request.ActorId);
     }
 
+    public async Task<ConnectionBinding[]> GetChatRecipientsAsync(
+        ConnectionBinding sender,WorldResultRouter router)
+    {
+        ArgumentNullException.ThrowIfNull(router);
+        if(!router.IsCurrentBinding(sender))
+            return [];
+
+        var clan=await _identity.GetClanForCharacterAsync(sender.ActorId)
+            .ConfigureAwait(false);
+        if(clan is null||!clan.Members.Any(x=>x.CharacterId==sender.ActorId))
+            return [];
+
+        var recipients=new List<ConnectionBinding>(clan.Members.Count);
+        foreach(var member in clan.Members)
+        {
+            if(router.TryGetCurrentBinding(member.CharacterId,out var current))
+                recipients.Add(current);
+        }
+
+        return recipients.Any(x=>x.ActorId==sender.ActorId&&
+                x.ConnectionEpoch==sender.ConnectionEpoch)
+            ?recipients.ToArray():[];
+    }
+
     private static void BroadcastSnapshot(
         ClanRecord clan,WorldResultRouter router,long alreadySentActorId=0)
     {
