@@ -11,6 +11,21 @@
 
 2026-11-22 shared appearance profile gate：`test_player_profiles.gd` 覆蓋 B/G/A 混合、髮型共享 metadata、固定走路／插值、各 profile AA/ND、換 race 中斷不支援 AA、失敗註冊原子性與未知外觀不 fallback；已加入 Client CI。Windows targeted tests 與 Python123 PASS。`python client/tests/run_world_view.py <Godot> --players --report reports/player_profiles_regression.json` 原 B GPU20張／91來源frame、超容差0、資源歸零 PASS。`Godot --path client --rendering-method gl_compatibility --script res://tests/test_recovered2_local_ui.gd -- <capture-dir> <private-22-asset-pack> profiles` 實際 B/G/A hair00/color0 預覽切換及9張畫面／scope釋放 PASS，來源 rules 是 fixture，不能推論全量原版合法集合或多人外觀。G/A 全方向逐像素及負載效能 NOT VERIFIED。
 
+## v15 三軌 Release Gate — HK UI / Gameplay / Multiplayer & Performance
+
+新增驗收目標，不是已達標的實測結果。保留既有歷史證據與 MVP008；依 AGENTS.md T0–T3，隔離 DB/port，保護 Session WIP。禁止以 synthetic/headless/僅登入代替實際玩家驗收。
+
+| 階段 | 驗收場景 |
+|---|---|
+| A | 2 真可見 Windows Godot + 正式 Server，真鍵鼠，Map15↔13；雙向 Spawn/Despawn、移動/Stop/Retarget、視野邊界、普攻/技能/MISS/Hit/死亡/EXP/掉落/撿取/交易/重登（按影響功能），錄影及權威資料核對 |
+| B | 20 連線（至少 2 真 Client，其餘標 Bot）/300 怪/500 Drop，密集與稀疏 AOI；主動走路、打怪/技能、撿取、換圖/重連及適用交易，暖機後至少 10 分鐘。每三個有效非緊急交付主題至少一次；重大共享核心修改驗受影響負載 |
+| C | 50→100→300→500 連線逐級容量探索；先 B 通過且硬體/隔離環境允許才升階，混合主動行為。記錄每級瓶頸與實測可達容量，不將目標人數宣稱已支援 |
+| D | Release/里程碑：B 或已確認目標容量至少 60 分鐘 soak、1/2/4 多開、AFK/Unfocus、至少 10 次跨圖/重登；8 開依 MULTI001 及硬體允許；觀察資源、queue、CPU/GC、恢復 |
+
+**初始效能目標（待真實硬體基準校準）**：正常畫質，60 FPS 模式 Frame P95 ≤16.7ms、P99 ≤33.3ms；30 FPS 模式 P95 ≤33.3ms、P99 ≤50ms。Server World Tick P99 ≤實際 tick budget（30Hz 約 33.3ms）；queue age 不持續成長、可靠事件零遺失/重複結算、無崩潰或持續記憶體成長。記錄 P50/P95/P99/max、長幀、input-to-render、ACK/RTT、AOI fanout/bytes/sec、CPU/GC/RSS/GPU/VRAM/draw calls、重連與載入時間。固定機器/OS/解析度/DPI/FPS/畫質/密度/seed/網路/時長/SHA，比 Before/After；不降畫質或節流權威/可靠收包。未達標記 FAIL 與可重現瓶頸，不擅自降低門檻。
+
+**同步與網路**：正常移動不順移、忽快忽慢或原地跑步；合法 teleport/reconciliation 例外有 trace；動畫速度不隨 FPS/封包變動，雙 Client 傷害/MISS/死亡/掉落/物品 UID/貨幣一致。本機基準及隔離 RTT 50/100/200ms、jitter 20ms、loss 1%（工具可用才測，記實際條件及恢復，不對正式網路注入）；區分 TCP 重傳延遲與應用事件遺失。所有適用 UI、Gameplay、Multiplayer、Performance、Persistence Gate 與原版 A/B/回歸通過才 Release；未驗為 NOT VERIFIED，N/A 說理由。
+
 ## MVP007-PVP-AUTHORITATIVE-COMBAT-CRIME-NAME-AOI — 玩家互打／罪名／名稱顏色（完成垂直切片）
 
 2026-11-19：已完成 Map13 玩家普通攻擊的 authenticated Server authority 閉環。Client 僅送 TargetActorId；Server 綁定 Actor/Connection/Profile，核對 MapEpoch、PK map、存活、距離、Blocking 直線與 cooldown，傷害採來源驗證的 `max(1, Attack - Defense/5)`，並透過唯一 `PlayerCombatSettlement` 寫入 durable HP。受害者 `PvpDamage(80)` 與 Monster damage 共用 damage sequence，攻擊者 `PvpAttackResult(79)` 只接受 committed receipt，重送不得造成第二次傷害。
