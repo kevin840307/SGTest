@@ -49,6 +49,7 @@ var hud:=Control.new()
 var status_panel:=Control.new()
 var minimap_panel:=Control.new()
 var hotkey_panel:=Control.new()
+var _hotkey_page:=0
 var command_panel:=Control.new()
 var menu:=Control.new() # retained as a non-visible compatibility handle
 var secondary_menu:=Control.new()
@@ -441,8 +442,9 @@ func _build_hud()->void:
 	hotkey.stretch_mode=TextureRect.STRETCH_SCALE
 	hotkey.mouse_filter=Control.MOUSE_FILTER_IGNORE
 	hotkey_panel.add_child(hotkey)
-	_texture_button(hotkey_panel,"HotkeyPage1","OFFON",Vector2(3,4),Vector2(11,11),func():pass,"快捷列頁 1")
-	_texture_button(hotkey_panel,"HotkeyPage2","OFFON",Vector2(16,4),Vector2(11,11),func():pass,"快捷列頁 2")
+	_texture_button(hotkey_panel,"HotkeyPage1","OFFON",Vector2(3,4),Vector2(11,11),func():_select_hotkey_page(0),"快捷列頁 1")
+	_texture_button(hotkey_panel,"HotkeyPage2","OFFON",Vector2(16,4),Vector2(11,11),func():_select_hotkey_page(1),"快捷列頁 2")
+	_select_hotkey_page(0)
 	var hotkey_rects:=[
 		Rect2(4,18,12,12),Rect2(4,47,12,12),Rect2(4,72,12,12),Rect2(4,99,12,12),
 		Rect2(4,126,12,12),Rect2(4,153,12,12),Rect2(4,180,12,12),Rect2(4,207,12,12),
@@ -450,7 +452,11 @@ func _build_hud()->void:
 	for i in 12:
 		var hotkey_label:=_itf_text(hotkey_panel,"Hotkey%d"%i,hotkey_rects[i],9,false)
 		hotkey_label.text="F%d"%(i+1)
-	_texture_button(hotkey_panel,"HotkeySizeToggle","HOTKEY_YS_B",Vector2(3,342),Vector2(24,13),_toggle_hotkey_size,"切換快捷列大小")
+	var size_button:=_texture_button(hotkey_panel,"HotkeySizeToggle","HOTKEY_YS_B",Vector2(3,342),Vector2(24,13),_toggle_hotkey_size,"切換快捷列大小")
+	# The HK expand/collapse SPR has two frames: normal and highlighted.
+	# Never request non-existent pressed/disabled frames 2 and 3.
+	size_button.texture_pressed=_tex("HOTKEY_YS_B_1")
+	size_button.texture_disabled=_tex("HOTKEY_YS_B_0")
 
 	# 021_COMMAND.itf: the right-side command strip is fixed/clickable, not draggable.
 	# Local control rects come from the decoded HK ITF; in particular the bag is
@@ -561,6 +567,19 @@ func _build_hud()->void:
 	_texture_button(menu,"Menu3","B_BASIC_PSHOP",Vector2(88,4),Vector2(24,23),_menu_action.bind(3),"小商店")
 	_texture_button(menu,"Menu4","B_BASIC_SYSTEM",Vector2(117,2),Vector2(24,23),_menu_action.bind(4),"系統")
 
+# OFFON.spr contains only two original 11x11 frames: off (0) and on (1).
+# Keep the page selector responsive without inventing skill/item assignments
+# or submitting Server actions before GP-028 has an authoritative binding.
+func _select_hotkey_page(index:int)->void:
+	if index<0 or index>1:return
+	_hotkey_page=index
+	for page in 2:
+		var button:=hotkey_panel.get_node("HotkeyPage%d"%(page+1)) as TextureButton
+		button.texture_normal=_tex("OFFON_1" if page==index else "OFFON_0")
+		button.texture_hover=_tex("OFFON_1")
+		button.texture_pressed=_tex("OFFON_1")
+		button.texture_disabled=_tex("OFFON_0")
+
 # The two HK ITFs are distinct complete layouts, not a scaled copy of the
 # long rail. Switch the original background, control rects and collapse icon
 # together; the six hidden keys cannot receive input in compact mode.
@@ -575,8 +594,8 @@ func _toggle_hotkey_size()->void:
 	var toggle_art:="HOTKEY_YL_B" if compact else "HOTKEY_YS_B"
 	toggle.texture_normal=_tex(toggle_art+"_0")
 	toggle.texture_hover=_tex(toggle_art+"_1")
-	toggle.texture_pressed=_tex(toggle_art+"_2")
-	toggle.texture_disabled=_tex(toggle_art+"_3")
+	toggle.texture_pressed=_tex(toggle_art+"_1")
+	toggle.texture_disabled=_tex(toggle_art+"_0")
 	var long_ys:=[18,47,72,99,126,153,180,207,234,261,288,315]
 	for i in 12:
 		var label:=hotkey_panel.get_node("Hotkey%d"%i) as Control
