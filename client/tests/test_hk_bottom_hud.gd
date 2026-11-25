@@ -45,6 +45,14 @@ func _run()->void:
 	_rect(shell._chat_channel,Rect2(440,7,24,24))
 	_rect(shell._chat_emotion,Rect2(440,35,24,24))
 	_rect(shell._chat_bubble,Rect2(440,61,24,24))
+	_expect(shell._chat_balloon_menu.size==Vector2(216,30),"019_TALKBUBBLE_BIG source size")
+	_expect(not shell._chat_balloon_menu.visible,"balloon menu starts closed")
+	_rect(shell._chat_balloon_menu.get_node("BalloonBack"),Rect2(3,3,14,24))
+	_rect(shell._chat_balloon_menu.get_node("BalloonNext"),Rect2(18,3,14,24))
+	_rect(shell._chat_balloon_menu.get_node("BalloonClose"),Rect2(195,6,16,16))
+	_expect((shell._chat_balloon_menu.get_node("BalloonBack") as TextureButton).disabled and (shell._chat_balloon_menu.get_node("BalloonNext") as TextureButton).disabled,"six-entry HK BalloonStyle.dat disables paging")
+	for index in 6:
+		_rect(shell._chat_balloon_choices[index],Rect2(34+index*27,3,24,24))
 	for index in 5:
 		_rect(shell._chat_tabs[index],Rect2(3,4+index*17,43,15))
 	_rect(shell._friend_scroll,Rect2(9,36,168,49))
@@ -108,6 +116,14 @@ func _run()->void:
 	_expect(shell._chat_send_channel==3,"channel control routes to party channel")
 	shell._chat_channel.pressed.emit()
 	_expect(shell._chat_send_channel==0,"return to nearby channel")
+	var old_bubble_type:=shell._chat_bubble_type
+	shell._chat_bubble.pressed.emit()
+	_expect(shell._chat_balloon_menu.visible,"bubble icon opens original selector")
+	(shell._chat_balloon_menu.get_node("BalloonClose") as TextureButton).pressed.emit()
+	_expect(not shell._chat_balloon_menu.visible and shell._chat_bubble_type==old_bubble_type,"close cancels without changing bubble type")
+	shell._chat_bubble.pressed.emit()
+	shell._chat_balloon_choices[4].pressed.emit()
+	_expect(shell._chat_bubble_type==4 and not shell._chat_balloon_menu.visible,"selecting style updates preview state and closes selector")
 	var args:=OS.get_cmdline_user_args()
 	if not args.is_empty():
 		# Native renderer only; capture the same 800x600 UI surface without

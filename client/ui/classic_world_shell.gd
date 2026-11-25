@@ -140,6 +140,8 @@ var _chat_down:TextureButton
 var _chat_expand:TextureButton
 var _chat_channel:TextureButton
 var _chat_bubble:TextureButton
+var _chat_balloon_menu:=Control.new()
+var _chat_balloon_choices:Array[TextureButton]=[]
 var _chat_tabs:Array[TextureButton]=[]
 var _chat_calendar:RichTextLabel
 var _chat_system:RichTextLabel
@@ -622,9 +624,9 @@ func _build_chat_panel()->void:
 	_chat_emotion=_texture_button(chat_panel,"ChatEmotion","B_EMOTETION",Vector2.ZERO,Vector2(24,24),Callable(),"表情選單尚未接通")
 	_chat_emotion.disabled=true
 	_chat_emotion.texture_disabled=_tex("B_EMOTETION_0")
-	_chat_bubble=_texture_button(chat_panel,"ChatBubble","ICON_BUBBLE",Vector2.ZERO,Vector2(24,24),_toggle_chat_bubble,"切換聊天氣泡")
-	_chat_bubble.texture_hover=_chat_bubble.texture_normal
-	_chat_bubble.texture_pressed=_chat_bubble.texture_normal
+	_chat_bubble=_texture_button(chat_panel,"ChatBubble","ICON_BUBBLE",Vector2.ZERO,Vector2(24,24),_open_chat_balloon_menu,"選擇聊天氣泡")
+	_set_chat_bubble_preview()
+	_build_chat_balloon_menu()
 	_layout_chat_panel()
 	_update_chat_scroll_buttons()
 
@@ -731,11 +733,67 @@ func _toggle_chat_send_channel()->void:
 		3: _chat_channel.tooltip_text="隊伍聊天；點擊切換附近"
 		_: _chat_channel.tooltip_text="附近聊天；點擊切換世界"
 
-func _toggle_chat_bubble()->void:
-	_chat_bubble_type=(_chat_bubble_type+1)%6
-	_chat_bubble.texture_normal=_tex("ICON_BUBBLE_%d"%(_chat_bubble_type*2))
-	_chat_bubble.texture_hover=_chat_bubble.texture_normal
-	_chat_bubble.texture_pressed=_chat_bubble.texture_normal
+func _set_chat_bubble_preview()->void:
+	if _chat_bubble==null:return
+	var normal:=_tex("ICON_BUBBLE_%d"%(_chat_bubble_type*2))
+	var active:=_tex("ICON_BUBBLE_%d"%(_chat_bubble_type*2+1))
+	_chat_bubble.texture_normal=normal
+	_chat_bubble.texture_hover=active if active!=null else normal
+	_chat_bubble.texture_pressed=active if active!=null else normal
+
+func _build_chat_balloon_menu()->void:
+	# Old CBalloonMenuItf::Create loads 019_TALKBUBBLE_BIG.itf. The HK
+	# BalloonStyle.dat contains exactly six player-selectable entries (s01-s06),
+	# so the original back/next controls are present but disabled for this build.
+	_chat_balloon_menu.name="ClassicBalloonMenu"
+	_chat_balloon_menu.size=Vector2(216,30)
+	_chat_balloon_menu.visible=false
+	hud.add_child(_chat_balloon_menu)
+	_background(_chat_balloon_menu,"BG_TALKBUBBLE",_chat_balloon_menu.size)
+	var back:=_texture_button(_chat_balloon_menu,"BalloonBack","B_BACK",Vector2(3,3),Vector2(14,24),Callable())
+	back.disabled=true
+	back.texture_disabled=_tex("B_BACK_0")
+	var next:=_texture_button(_chat_balloon_menu,"BalloonNext","B_NEXT",Vector2(18,3),Vector2(14,24),Callable())
+	next.disabled=true
+	next.texture_disabled=_tex("B_NEXT_0")
+	_chat_balloon_choices.clear()
+	for index in 6:
+		var choice:=TextureButton.new()
+		choice.name="BalloonChoice%d"%index
+		choice.position=Vector2(34+index*27,3)
+		choice.size=Vector2(24,24)
+		choice.ignore_texture_size=true
+		choice.stretch_mode=TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+		choice.focus_mode=Control.FOCUS_NONE
+		choice.mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND
+		choice.texture_normal=_tex("ICON_BUBBLE_%d"%(index*2))
+		choice.texture_hover=_tex("ICON_BUBBLE_%d"%(index*2+1))
+		choice.texture_pressed=choice.texture_hover
+		choice.pressed.connect(_select_chat_bubble.bind(index))
+		_chat_balloon_menu.add_child(choice)
+		_chat_balloon_choices.append(choice)
+	_texture_button(_chat_balloon_menu,"BalloonClose","CLOSESCREEN",Vector2(195,6),Vector2(16,16),_close_chat_balloon_menu)
+
+func _open_chat_balloon_menu()->void:
+	# The ITF provides exact local geometry but not a screen-space spawn point.
+	# Keep the popup attached to the invoking chat control and clamp it on-screen;
+	# native HK global placement remains a visual-verification item.
+	if _chat_balloon_menu.visible:return
+	var anchor:=chat_panel.position+_chat_bubble.position+Vector2(12,-15)
+	_chat_balloon_menu.position=Vector2(
+		clampf(anchor.x-_chat_balloon_menu.size.x*0.5,0,BASE_SIZE.x-_chat_balloon_menu.size.x),
+		clampf(anchor.y-_chat_balloon_menu.size.y,0,BASE_SIZE.y-_chat_balloon_menu.size.y))
+	_chat_balloon_menu.show()
+	_chat_balloon_menu.move_to_front()
+
+func _close_chat_balloon_menu()->void:
+	_chat_balloon_menu.hide()
+
+func _select_chat_bubble(index:int)->void:
+	if index<0 or index>=6:return
+	_chat_bubble_type=index
+	_set_chat_bubble_preview()
+	_close_chat_balloon_menu()
 
 # 020_FRIENDLIST: independent movable 203x90 interface, not Rightbox
 # (which is the context menu for player requests).
