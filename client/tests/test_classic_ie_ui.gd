@@ -288,6 +288,49 @@ func _run() -> void:
 	):
 		_fail("HK 029_SYSTEM fixed labels drifted from original text")
 		return
+	# 018_EMOTION_BIG.ITF is a 242x30 floating two-page picker. The 12
+	# selection icons are original 24x24 EMOTIONAL_ICON frames; no substitute art.
+	var emotion_bg:=world._chat_emotion_menu.get_node_or_null("BG_EMOTIONBackground") as TextureRect
+	var emotion_close:=world._chat_emotion_menu.get_node_or_null("EmotionClose") as Control
+	if (
+		world._chat_emotion.disabled or world._chat_emotion.pressed.get_connections().is_empty() or
+		world._chat_emotion_menu.size!=Vector2(242,30) or emotion_bg==null or emotion_bg.texture==null or
+		world._chat_emotion_back.position!=Vector2(3,3) or world._chat_emotion_back.size!=Vector2(14,24) or
+		world._chat_emotion_next.position!=Vector2(18,3) or world._chat_emotion_next.size!=Vector2(14,24) or
+		emotion_close==null or emotion_close.position!=Vector2(222,6) or emotion_close.size!=Vector2(16,16) or
+		world._chat_emotion_choices.size()!=7
+	):
+		_fail("018_EMOTION_BIG.ITF frame/navigation geometry or trigger wiring drifted")
+		return
+	for slot in 7:
+		var choice:TextureButton=world._chat_emotion_choices[slot]
+		if (
+			choice.position!=Vector2(33+slot*27,3) or choice.size!=Vector2(24,24) or
+			choice.texture_normal==null or choice.pressed.get_connections().is_empty()
+		):
+			_fail("018_EMOTION_BIG.ITF page-one slot drifted: %d"%slot)
+			return
+	world._open_chat_emotion_menu()
+	if not world._chat_emotion_menu.visible or world._chat_balloon_menu.visible:
+		_fail("emotion picker did not open exclusively from chat trigger")
+		return
+	world._change_chat_emotion_page(1)
+	if world._chat_emotion_page!=1 or world._chat_emotion_back.disabled or not world._chat_emotion_next.disabled:
+		_fail("emotion picker second-page navigation state drifted")
+		return
+	for slot in 7:
+		var expected_visible:=slot<5
+		if world._chat_emotion_choices[slot].visible!=expected_visible:
+			_fail("emotion picker second-page 8..12 visibility drifted at slot %d"%slot)
+			return
+	world._change_chat_emotion_page(-1)
+	if world._chat_emotion_page!=0 or not world._chat_emotion_back.disabled or world._chat_emotion_next.disabled:
+		_fail("emotion picker first-page navigation state drifted")
+		return
+	world._close_chat_emotion_menu()
+	if world._chat_emotion_menu.visible:
+		_fail("emotion picker close handler did not hide source panel")
+		return
 	app.world_view._chat_balloon_seen.clear()
 	app.world_view._chat_balloons.clear()
 	app.world_view._consume_chat_balloons({

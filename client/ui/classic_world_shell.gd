@@ -200,6 +200,11 @@ var _chat_channel:TextureButton
 var _chat_bubble:TextureButton
 var _chat_balloon_menu:=Control.new()
 var _chat_balloon_choices:Array[TextureButton]=[]
+var _chat_emotion_menu:=Control.new()
+var _chat_emotion_choices:Array[TextureButton]=[]
+var _chat_emotion_back:TextureButton
+var _chat_emotion_next:TextureButton
+var _chat_emotion_page:=0
 var _chat_tabs:Array[TextureButton]=[]
 var _chat_calendar:RichTextLabel
 var _chat_system:RichTextLabel
@@ -701,12 +706,11 @@ func _build_chat_panel()->void:
 	_chat_channel.texture_normal=_tex("ICON_CHANNEL_3")
 	_chat_channel.texture_hover=_chat_channel.texture_normal
 	_chat_channel.texture_pressed=_chat_channel.texture_normal
-	_chat_emotion=_texture_button(chat_panel,"ChatEmotion","B_EMOTETION",Vector2.ZERO,Vector2(24,24),Callable(),"表情選單尚未接通")
-	_chat_emotion.disabled=true
-	_chat_emotion.texture_disabled=_tex("B_EMOTETION_0")
+	_chat_emotion=_texture_button(chat_panel,"ChatEmotion","B_EMOTETION",Vector2.ZERO,Vector2(24,24),_open_chat_emotion_menu,"選擇表情")
 	_chat_bubble=_texture_button(chat_panel,"ChatBubble","ICON_BUBBLE",Vector2.ZERO,Vector2(24,24),_open_chat_balloon_menu,"選擇聊天氣泡")
 	_set_chat_bubble_preview()
 	_build_chat_balloon_menu()
+	_build_chat_emotion_menu()
 	_layout_chat_panel()
 	_update_chat_scroll_buttons()
 
@@ -862,6 +866,7 @@ func _build_chat_balloon_menu()->void:
 	_texture_button(_chat_balloon_menu,"BalloonClose","CLOSESCREEN",Vector2(195,6),Vector2(16,16),_close_chat_balloon_menu)
 
 func _open_chat_balloon_menu()->void:
+	_close_chat_emotion_menu()
 	# The ITF provides exact local geometry but not a screen-space spawn point.
 	# Keep the popup attached to the invoking chat control and clamp it on-screen;
 	# native HK global placement remains a visual-verification item.
@@ -881,6 +886,77 @@ func _select_chat_bubble(index:int)->void:
 	_chat_bubble_type=index
 	_set_chat_bubble_preview()
 	_close_chat_balloon_menu()
+
+# 018_EMOTION_BIG: exact 242x30 HK geometry. Paradise.exe pages seven
+# slots at a time and converts the selected slot to a 1-based emotion id.
+func _build_chat_emotion_menu()->void:
+	_chat_emotion_menu.name="ClassicEmotionMenu"
+	_chat_emotion_menu.size=Vector2(242,30)
+	_chat_emotion_menu.visible=false
+	hud.add_child(_chat_emotion_menu)
+	_background(_chat_emotion_menu,"BG_EMOTION",_chat_emotion_menu.size)
+	_chat_emotion_back=_texture_button(_chat_emotion_menu,"EmotionBack","B_BACK",Vector2(3,3),Vector2(14,24),_change_chat_emotion_page.bind(-1))
+	_chat_emotion_next=_texture_button(_chat_emotion_menu,"EmotionNext","B_NEXT",Vector2(18,3),Vector2(14,24),_change_chat_emotion_page.bind(1))
+	_chat_emotion_choices.clear()
+	for slot in 7:
+		var choice:=TextureButton.new()
+		choice.name="EmotionChoice%d"%slot
+		choice.position=Vector2(33+slot*27,3)
+		choice.size=Vector2(24,24)
+		choice.ignore_texture_size=true
+		choice.stretch_mode=TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+		choice.focus_mode=Control.FOCUS_NONE
+		choice.mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND
+		choice.pressed.connect(_select_chat_emotion.bind(slot))
+		_chat_emotion_menu.add_child(choice)
+		_chat_emotion_choices.append(choice)
+	_texture_button(_chat_emotion_menu,"EmotionClose","CLOSESCREEN",Vector2(222,6),Vector2(16,16),_close_chat_emotion_menu)
+	_refresh_chat_emotion_page()
+
+func _refresh_chat_emotion_page()->void:
+	_chat_emotion_page=clampi(_chat_emotion_page,0,1)
+	for slot in _chat_emotion_choices.size():
+		var emotion_id:=_chat_emotion_page*7+slot+1
+		var choice:=_chat_emotion_choices[slot]
+		var valid:=emotion_id<=12
+		choice.visible=valid
+		choice.disabled=not valid
+		if valid:
+			var icon:=_tex("EMOTIONAL_ICON_%d"%(emotion_id-1))
+			choice.texture_normal=icon
+			choice.texture_hover=icon
+			choice.texture_pressed=icon
+	if _chat_emotion_back!=null:
+		_chat_emotion_back.disabled=_chat_emotion_page==0
+		_chat_emotion_back.texture_disabled=_tex("B_BACK_0")
+	if _chat_emotion_next!=null:
+		_chat_emotion_next.disabled=_chat_emotion_page==1
+		_chat_emotion_next.texture_disabled=_tex("B_NEXT_0")
+
+func _change_chat_emotion_page(delta:int)->void:
+	var next:=clampi(_chat_emotion_page+delta,0,1)
+	if next==_chat_emotion_page:return
+	_chat_emotion_page=next
+	_refresh_chat_emotion_page()
+
+func _open_chat_emotion_menu()->void:
+	_close_chat_balloon_menu()
+	if _chat_emotion_menu.visible:return
+	var anchor:=chat_panel.position+_chat_emotion.position+Vector2(12,-15)
+	_chat_emotion_menu.position=Vector2(
+		clampf(anchor.x-_chat_emotion_menu.size.x*0.5,0,BASE_SIZE.x-_chat_emotion_menu.size.x),
+		clampf(anchor.y-_chat_emotion_menu.size.y,0,BASE_SIZE.y-_chat_emotion_menu.size.y))
+	_chat_emotion_menu.show()
+	_chat_emotion_menu.move_to_front()
+
+func _close_chat_emotion_menu()->void:
+	_chat_emotion_menu.hide()
+
+func _select_chat_emotion(slot:int)->void:
+	if slot<0 or slot>=7 or _panel==null or _panel.session==null:return
+	var emotion_id:=_chat_emotion_page*7+slot+1
+	if emotion_id<1 or emotion_id>12:return
+	_panel.session.send_emotion(emotion_id)
 
 # 020_FRIENDLIST: independent movable 203x90 interface, not Rightbox
 # (which is the context menu for player requests).

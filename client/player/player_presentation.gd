@@ -9,6 +9,8 @@ const PARTS = Profile.BASE_PARTS
 # delta, network tick, repath frequency, and Server correction magnitude.
 # Future mecha/mount renderers must consume this same fixed cadence contract.
 const WALK_FRAME_USEC := 125000
+# Paradise.exe _EMOTACTLIB selection order. Emotion IDs are 1-based on wire/UI.
+const EMOTION_BY_ID := ["ZH","ZK","ZI","ZJ","ZL","ZB","ZC","ZG","ZA","ZE","ZD","ZF"]
 # Peer walking remains visual-only. Keep playing through short AOI gaps
 # instead of waiting on every authoritative coordinate update.
 const REMOTE_MAX_PREDICTION_TICKS := 4.0
@@ -343,6 +345,10 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			elif profile.attack_available and _attack_active(old,now_usec):
 				action = "AA"
 				action_facing = int(old.action_facing)
+			elif (not bool(value.moving)) and str(old.action) in EMOTION_BY_ID and \
+					_one_shot_active(old,str(old.action),bool(profile.emotion_available.get(str(old.action),false)),now_usec):
+				action = str(old.action)
+				action_facing = 8
 			elif str(old.action) != base_action:
 				# A new MoveTarget sequence changes a destination, not the
 				# walking animation. Repeated long-hold repaths must not
@@ -378,6 +384,32 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 			actor.action_facing = int(event.get("facing",actor.value.facing))
 			actor.started = now_usec
 			_actors[attacker] = actor
+
+	var emotion_events = snapshot.get("emotion_events",[])
+	if emotion_events is Array:
+		for event in emotion_events:
+			if not event is Dictionary:
+				continue
+			var actor_id := int(event.get("actor_id",0))
+			var connection := int(event.get("connection_epoch",0))
+			var sequence := int(event.get("emotion_sequence",0))
+			var emotion_id := int(event.get("emotion_id",0))
+			if int(event.get("receiver_map_epoch",_epoch)) != _epoch or \
+					not _visual_actor_matches_generation(actor_id,connection) or \
+					emotion_id < 1 or emotion_id > EMOTION_BY_ID.size():
+				continue
+			var key := "%d:%d:%d" % [actor_id,connection,sequence]
+			if not _remember_visual_event("emotion",key):
+				continue
+			var actor: Dictionary = _actors[actor_id]
+			var emotion_action := str(EMOTION_BY_ID[emotion_id-1])
+			if bool(actor.get("dead_visual",false)) or bool(actor.value.moving) or \
+					not bool(actor.profile.emotion_available.get(emotion_action,false)):
+				continue
+			actor.action = emotion_action
+			actor.action_facing = 8
+			actor.started = now_usec
+			_actors[actor_id] = actor
 
 	var damage_events = snapshot.get("player_damage_visual_events",[])
 	if damage_events is Array:
@@ -530,11 +562,14 @@ func set_local_visual(own_actor: int, pos: Vector2, is_moving: bool, heading: in
 	var old_move := bool(actor.value.moving)
 	actor.value["moving"] = is_moving
 	actor.value["facing"] = heading
-	if str(actor.action) in ["NS","NR"]:
+	var current_action := str(actor.action)
+	if current_action in ["NS","NR"] or (is_moving and current_action in EMOTION_BY_ID):
 		if is_moving and not old_move:
 			actor.walk_started = now_usec
 		actor.action = "NR" if is_moving else "NS"
 		actor.action_facing = heading
+		if current_action in EMOTION_BY_ID:
+			actor.started = now_usec
 	_actors[own_actor] = actor
 
 func clear_local_visual() -> void:
@@ -574,7 +609,7 @@ func actors_at(now_usec: int) -> Array:
 		var action := str(actor.action)
 		var facing := int(actor.action_facing)
 		var elapsed := maxi(0,now_usec-int(actor.started))*50/1000000
-		if action in ["AA","NH"]:
+		if action in ["AA","NH"] or action in EMOTION_BY_ID:
 			var one_shot_body: Dictionary = profile.views.get(profile.body_prefix+"_"+action+str(facing),{})
 			if one_shot_body.is_empty() or one_shot_body.timeline.is_complete(elapsed):
 				action = "NR" if bool(value.moving) else "NS"

@@ -6,6 +6,7 @@ using SGTest.Server.Pvp;
 using SGTest.Server.Party;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
+using SGTest.Server.Visibility;
 
 internal static class ChatWireChecks
 {
@@ -15,6 +16,7 @@ internal static class ChatWireChecks
         Checks.Run("whisper wire binds sender and target in shared chat sequence", Whisper);
         Checks.Run("chat gateway admits trusted World/Warband and rejects wrong opcode/replay", Gate);
         Checks.Run("trusted chat routing isolates nearby and cross-map whisper", Routing);
+        Checks.Run("emotion command is authoritative and fans out only across mutual AOI", EmotionRouting);
         Checks.Run("chat recipient ignore filters world and whisper delivery", IgnoreRouting);
         Checks.Run("trusted world chat enforces original level gate and crosses maps", WorldRouting);
         Checks.Run("trusted warband chat reaches current clan members only",()=>WarbandRouting().GetAwaiter().GetResult());
@@ -72,6 +74,59 @@ internal static class ChatWireChecks
         Checks.Require(!sender.TryDequeueReliable(out _)&&
             !target.TryDequeueReliable(out _),
             "stale authenticated chat generation delivered a frame");
+    }
+
+    private static void EmotionRouting()
+    {
+        var senderActor=new ActorSnapshot(11,15,5,3,0,0,8,8,1,false);
+        var targetActor=new ActorSnapshot(22,15,7,3,1,0,8,8,1,false);
+        var outsiderActor=new ActorSnapshot(33,15,9,3,2,0,8,8,1,false);
+        var sender=new GatewayConnection(senderActor,displayName:"EmotionSender",
+            pvpState:new CharacterPvpState(11,PvpMode.ProtectedBlue,false,0,0,0));
+        var target=new GatewayConnection(targetActor,displayName:"EmotionTarget",
+            pvpState:new CharacterPvpState(22,PvpMode.ProtectedBlue,false,0,0,0));
+        var outsider=new GatewayConnection(outsiderActor,displayName:"EmotionOutsider",
+            pvpState:new CharacterPvpState(33,PvpMode.ProtectedBlue,false,0,0,0));
+        var router=new WorldResultRouter();
+        Checks.Require(router.TryAttach(sender)&&router.TryAttach(target)&&router.TryAttach(outsider),
+            "emotion routing fixture attach failed");
+
+        Checks.Require(
+            sender.QueueAoi(new(AoiEventKind.Spawn,1,3,targetActor))==GatewaySendStatus.Enqueued&&
+            target.QueueAoi(new(AoiEventKind.Spawn,1,3,senderActor))==GatewaySendStatus.Enqueued&&
+            sender.TryDequeueReliable(out _)&&target.TryDequeueReliable(out _),
+            "emotion routing mutual AOI fixture failed");
+
+        var command=new EmotionCommandWire(3,1,5);
+        byte[] frame=WireProtocol.EncodeEmotionCommand(command);
+        Checks.Require(frame.Length==WireProtocol.EmotionCommandFrameBytes&&
+            WireProtocol.TryDecodeEmotionCommand(frame,out var commandBack)&&commandBack==command,
+            "emotion command wire mismatch");
+        TrustedChatCommand trusted=default;
+        Checks.Require(sender.FeedClientBytes(
+                frame,_=>true,out int accepted,
+                postChat:request=>{trusted=request;return true;})==WireFeedStatus.Accepted&&accepted==1&&
+            trusted.ActorId==11&&trusted.ConnectionEpoch==5&&trusted.RequestMapEpoch==3&&
+            trusted.ChatSequence==1&&trusted.Channel==ChatChannel.Emotion&&
+            trusted.BubbleType==5&&trusted.Message==string.Empty,
+            "emotion gateway did not bind authenticated sender generation");
+
+        ChatRouting.RouteAsync(trusted,router,null).GetAwaiter().GetResult();
+        Checks.Require(
+            sender.TryDequeueReliable(out var selfFrame)&&
+            WireProtocol.TryDecodeEmotionVisual(selfFrame,out var selfVisual)&&
+            selfVisual==new EmotionVisualWire(3,11,5,1,5)&&
+            target.TryDequeueReliable(out var targetFrame)&&
+            WireProtocol.TryDecodeEmotionVisual(targetFrame,out var targetVisual)&&
+            targetVisual==new EmotionVisualWire(3,11,5,1,5)&&
+            !outsider.TryDequeueReliable(out _)&&
+            !sender.TryDequeueReliable(out _)&&!target.TryDequeueReliable(out _),
+            "emotion visual missed self/mutual AOI peer, leaked, or duplicated");
+
+        var malformed=frame.ToArray();
+        malformed[^1]=13;
+        Checks.Require(!WireProtocol.TryDecodeEmotionCommand(malformed,out _),
+            "emotion wire admitted id outside original 1..12 range");
     }
 
     private static void IgnoreRouting()

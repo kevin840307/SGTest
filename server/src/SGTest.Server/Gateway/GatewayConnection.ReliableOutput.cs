@@ -463,6 +463,19 @@ public sealed partial class GatewayConnection
         }
     }
 
+    public GatewaySendStatus QueueEmotionVisual(
+        ConnectionBinding expected,EmotionVisualWire visual)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||visual.ReceiverMapEpoch!=expected.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeEmotionVisual(visual))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueueWhisperResult(
         TrustedChatCommand request,WhisperResultWire result)
     {

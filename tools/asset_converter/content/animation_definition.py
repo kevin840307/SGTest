@@ -25,6 +25,28 @@ else:
 SCHEMA = 2
 CLIP_NAME = re.compile(r'^(.+)_([A-Z]{2})([1-8])$', re.I)
 ENEMY_ACTIONS = {'NS': ('S', 0), 'NW': ('W', 1), 'ND': ('D', 2), 'FA': ('A', 3), 'NH': ('H', 4)}
+CHARACTER_EMOTION_ACTIONS = ('ZA','ZB','ZC','ZD','ZE','ZF','ZG','ZH','ZI','ZJ','ZK','ZL')
+# HK CharDrawOrder.dat has no Z rows. These layer orders are the next-priority
+# recovered original-client mapping from Recovered2/scripts/paper_doll_engine.gd
+# RAW_ORDER_DATA, normalized to SGTest's verified +2 slot groups and with the
+# separate Shadow layer omitted because it is not part of character equipment.
+EMOTION_DRAW_ORDER = {
+    'ZA8':['Back','Leg+2','Body+2','R-Arm+2','L-Arm+2','R-Shoulder','L-Shoulder','Head','Hair','Bonnet'],
+    'ZB8':['Back','Leg+2','Body+2','R-Arm+2','L-Arm+2','R-Shoulder','L-Shoulder','Head','Hair','Bonnet'],
+    'ZC8':['Back','Leg+2','Body+2','Head','Hair','R-Arm+2','L-Arm+2','R-Shoulder','L-Shoulder','Bonnet'],
+    'ZD8':['Back','Leg+2','Body+2','R-Arm+2','L-Arm+2','R-Shoulder','L-Shoulder','Head','Hair','Bonnet'],
+    'ZE8':['Back','R-Arm+2','L-Arm+2','Leg+2','Body+2','R-Shoulder','L-Shoulder','Head','Hair','Bonnet'],
+    'ZF8':['Back','Leg+2','L-Arm+2','Body+2','R-Arm+2','R-Shoulder','L-Shoulder','Head','Hair','Bonnet'],
+    'ZG8':['Back','Leg+2','Body+2','R-Arm+2','L-Arm+2','R-Shoulder','L-Shoulder','Head','Hair','Bonnet'],
+    'ZH8':['Back','Leg+2','Body+2','R-Arm+2','L-Arm+2','R-Shoulder','L-Shoulder','Head','Hair','Bonnet'],
+    'ZI8':['Back','Leg+2','Body+2','L-Arm+2','R-Arm+2','L-Shoulder','R-Shoulder','Head','Hair','Bonnet'],
+    'ZJ8':['Back','Leg+2','Body+2','R-Arm+2','L-Arm+2','R-Shoulder','L-Shoulder','Head','Hair','Bonnet'],
+    'ZK8':['Back','Leg+2','Body+2','R-Arm+2','L-Arm+2','R-Shoulder','L-Shoulder','Head','Hair','Bonnet'],
+    'ZL8':['Back','Leg+2','Body+2','R-Arm+2','L-Arm+2','R-Shoulder','L-Shoulder','Head','Hair','Bonnet'],
+}
+ROBOT_EMOTION_DRAW_ORDER = {
+    'ZC8':['Back','Leg+2','Body+2','Head','Hair','Bonnet','R-Arm+2','L-Arm+2'],
+}
 
 
 def content_hash(value):
@@ -100,12 +122,24 @@ def compile_definition(entity, sources, root, kind, act_path, character_actions=
         raise ValueError('an entity definition must contain exactly one source prefix')
     prefix = next(iter(prefixes))
     available = sorted({CLIP_NAME.fullmatch(name)[2] for name in clips})
+    if kind == 'character_part':
+        robot = '/r/' in ('/'+entity.strip('/').casefold()+'/')
+        for code in CHARACTER_EMOTION_ACTIONS:
+            if code not in available:
+                continue
+            key = code+'8'
+            layers = ROBOT_EMOTION_DRAW_ORDER.get(key) if robot else None
+            if layers is None:
+                layers = EMOTION_DRAW_ORDER[key]
+            if key not in draw_order:
+                draw_order[key] = list(layers)
+                draw_slots[key] = expand_layers(layers)
     if requested_behaviors is not None:
         selected = sorted(set(requested_behaviors))
         if set(selected) - set(available):
             raise ValueError('requested behavior has no SPR source')
     elif kind == 'character_part':
-        selected = sorted(set(available).intersection(names[:13]))
+        selected = sorted(set(available).intersection(set(names[:13]).union(CHARACTER_EMOTION_ACTIONS)))
     else:
         selected = available
     if not selected:
@@ -123,10 +157,17 @@ def compile_definition(entity, sources, root, kind, act_path, character_actions=
             act_key, action_id = ENEMY_ACTIONS[code]
             mapping = lambda facing: map_enemy_direction(facing, action_id)
         elif kind == 'character_part':
-            if code not in names[:13]:
-                raise ValueError(f'unverified character action mapping: {code}')
-            act_key, action_id = code, names.index(code)
-            mapping = lambda facing: map_character_direction(facing, action_id)
+            if code in CHARACTER_EMOTION_ACTIONS:
+                # Paradise.exe: CSGOChar::SetEmotion stores the emotion index,
+                # forces facing 8 and starts legacy action 0x12. InitEmotionAction
+                # resolves that index through EMOTACTLIB to ZA..ZL.
+                act_key, action_id = code, 18
+                mapping = lambda facing: (8, False)
+            else:
+                if code not in names[:13]:
+                    raise ValueError(f'unverified character action mapping: {code}')
+                act_key, action_id = code, names.index(code)
+                mapping = lambda facing: map_character_direction(facing, action_id)
         else:
             act_key, action_id = code[-1], None
             mapping = lambda facing: (1, False)
@@ -157,13 +198,15 @@ def compile_definition(entity, sources, root, kind, act_path, character_actions=
         # Keep source events losslessly, without depending on uncommitted audit extensions.
         events = [{'step_index':event['at_frame_raw'], 'token':event['token'],
                    'raw_payload_hex':event['raw_payload_hex']} for event in action['events']]
+        one_shot_emotion = kind == 'character_part' and code in CHARACTER_EMOTION_ACTIONS
         behaviors[code] = {'legacy_action_id':action_id, 'act_key':act_key,
-                           'raw_loop_flag':action['raw_loop_flag'], 'loop':action['loops'],
+                           'raw_loop_flag':action['raw_loop_flag'],
+                           'loop':False if one_shot_emotion else action['loops'],
                            'timeline':timeline, 'events':events, 'facings':facings}
     document = {'schema':'sgtest.animation', 'version':SCHEMA, 'entity':entity, 'kind':kind,
                 'timing':{'fixed_hz':50, 'default_speed':25, 'numerator':40,
                           'independent_of_movement_and_render_fps':True},
-                'mapping_evidence':'reference_decompilation; HK2 visual parity NOT VERIFIED',
+                'mapping_evidence':'reference_decompilation; emotion action18+EMOTACTLIB+fixed-facing8; Recovered2 Z draw-order/one-shot recovery; HK2 visual parity NOT VERIFIED',
                 'act_source':act_relative, 'source_sha256':dict(sorted(inputs.items())),
                 'frames':frames, 'clips':clips, 'behaviors':behaviors, 'draw_order':draw_order,
                 'draw_slots':draw_slots,

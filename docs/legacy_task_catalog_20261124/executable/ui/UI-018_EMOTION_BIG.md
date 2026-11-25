@@ -1,6 +1,6 @@
 # UI-018_EMOTION_BIG — 表情選單（獨立執行規格）
 
-狀態：NOT VERIFIED；建議優先度：P2。這是可直接指派的實作任務，不代表 SGTest 現況缺少全部功能。
+狀態：TARGETED PASS（2026-11-26 headless + 真 C# AES 雙 Client authority 已驗；native visible HK A/B / OS hitbox 與原版 action-permit 連點節流仍 NOT VERIFIED）；建議優先度：P2。這是可直接指派的實作任務，不代表 SGTest 現況缺少全部功能。
 正式工作目錄：C:/SGO/SRC/SGTest；main。先遵守 [AGENTS.md](../../../../AGENTS.md)，讀 [既有任務證據](../../ui/UI-018_EMOTION_BIG.md) 及相關 TODO/FEATURE_MATRIX。只改本任務的最小垂直切片。
 
 

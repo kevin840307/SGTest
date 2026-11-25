@@ -467,6 +467,60 @@ public static partial class WireProtocol
         catch(DecoderFallbackException){return false;}
     }
 
+    public static byte[] EncodeEmotionCommand(EmotionCommandWire value)
+    {
+        if(value.MapEpoch<=0||value.EmotionSequence==0||value.EmotionId is <1 or >12)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.EmotionCommand,EmotionCommandFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.EmotionSequence);
+        frame[20]=value.EmotionId;
+        return frame;
+    }
+
+    public static bool TryDecodeEmotionCommand(ReadOnlySpan<byte> frame,out EmotionCommandWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.EmotionCommand||
+           frame.Length!=EmotionCommandFrameBytes)return false;
+        long epoch=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        uint sequence=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4));
+        byte emotion=frame[20];
+        if(epoch<=0||sequence==0||emotion is <1 or >12)return false;
+        value=new(epoch,sequence,emotion);
+        return true;
+    }
+
+    public static byte[] EncodeEmotionVisual(EmotionVisualWire value)
+    {
+        if(value.ReceiverMapEpoch<=0||value.ActorId<=0||value.ConnectionEpoch<=0||
+           value.EmotionSequence==0||value.EmotionId is <1 or >12)
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.EmotionVisual,EmotionVisualFrameBytes);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.ConnectionEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(32,4),value.EmotionSequence);
+        frame[36]=value.EmotionId;
+        return frame;
+    }
+
+    public static bool TryDecodeEmotionVisual(ReadOnlySpan<byte> frame,out EmotionVisualWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.EmotionVisual||
+           frame.Length!=EmotionVisualFrameBytes)return false;
+        long receiver=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        long actor=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8));
+        long connection=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8));
+        uint sequence=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(32,4));
+        byte emotion=frame[36];
+        if(receiver<=0||actor<=0||connection<=0||sequence==0||emotion is <1 or >12)
+            return false;
+        value=new(receiver,actor,connection,sequence,emotion);
+        return true;
+    }
+
     public static byte[] EncodeWhisperCommand(WhisperCommandWire value)
     {
         string targetNameText=value.TargetName??string.Empty;

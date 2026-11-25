@@ -462,6 +462,23 @@ public sealed partial class GatewayConnection
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
+        if(header.Opcode==WireOpcode.EmotionCommand &&
+            postChat is not null &&
+            WireProtocol.TryDecodeEmotionCommand(frame,out var emotion))
+        {
+            if(!GameplayReady(bound)||emotion.MapEpoch!=bound.MapEpoch||
+               emotion.EmotionSequence<=_lastChatSequence)
+                return WireFrameDisposition.ProtocolViolation;
+            var request=new TrustedChatCommand(
+                bound.ActorId,bound.ConnectionEpoch,emotion.MapEpoch,
+                emotion.EmotionSequence,ChatChannel.Emotion,emotion.EmotionId,string.Empty,
+                PlayerLevel:_combatProfile?.Level??0);
+            if(!postChat(request))
+                return WireFrameDisposition.Backpressured;
+            _lastChatSequence=emotion.EmotionSequence;
+            return WireFrameDisposition.Accepted;
+        }
+
         if(header.Opcode==WireOpcode.ChatCommand &&
             postChat is not null &&
             WireProtocol.TryDecodeChatCommand(frame,out var chat))

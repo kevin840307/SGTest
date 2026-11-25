@@ -99,6 +99,18 @@ public sealed partial class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueueEmotionVisual(
+        ConnectionBinding recipient,EmotionVisualWire visual)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(recipient.ActorId,out var connection)||
+               connection.IsClosed||connection.Binding!=recipient)
+                return GatewaySendStatus.Closed;
+            return connection.QueueEmotionVisual(recipient,visual);
+        }
+    }
+
     public GatewaySendStatus QueueWhisperResult(
         TrustedChatCommand request,WhisperResultWire result)
     {

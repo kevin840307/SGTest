@@ -8,6 +8,8 @@ const WHISPER_COMMAND_HEX:="2B0000000100620003000000000000000A000000160000000000
 const WHISPER_NAME_COMMAND_HEX:="370000000100620003000000000000000B0000000000000000000000020C00E68C89E5908DE7A781E8A88A0A005461726765744865726F"
 const WHISPER_RESULT_HEX:="330000000100630003000000000000000A00000000160000000000000007000000000000000C004D756C74694865726F4F6E65"
 const WHISPER_DELIVERY_HEX:="3A00000001005D0003000000000000000B0000000000000005000000000000000A000000040304000C004865726FE8B7A8E59C96E7A781E8A88A"
+const EMOTION_COMMAND_HEX:="150000000100890003000000000000000900000005"
+const EMOTION_VISUAL_HEX:="2500000001008A0003000000000000000B0000000000000005000000000000000900000005"
 
 func _fail(reason:String)->void:
 	push_error("CHAT_WIRE_FAIL "+reason)
@@ -235,5 +237,47 @@ func _initialize()->void:
 		_fail("unresolved name whisper created optimistic history")
 		return
 
-	print("CHAT_WIRE_PASS command=92 delivery=93 whisper_command=98 whisper_result=99 utf8=true trusted_echo=true world_policy=SERVER_AUTHORITY visible_only_nearby=true whisper_crossmap=true replay=STALE unsolicited_self=FAIL_CLOSED")
+	var emotion_command:=WireCodec.encode_emotion_command(3,9,5)
+	if emotion_command.hex_encode().to_upper()!=EMOTION_COMMAND_HEX:
+		_fail("emotion command cross-runtime golden")
+		return
+	if not WireCodec.encode_emotion_command(3,10,13).is_empty():
+		_fail("emotion command admitted id outside original 1..12")
+		return
+	var emotion_visual:=EMOTION_VISUAL_HEX.hex_decode()
+	var decoded_emotion:=WireCodec.decode_emotion_visual(emotion_visual)
+	if (
+		decoded_emotion.is_empty() or int(decoded_emotion.receiver_map_epoch)!=3 or
+		int(decoded_emotion.actor_id)!=11 or int(decoded_emotion.connection_epoch)!=5 or
+		int(decoded_emotion.emotion_sequence)!=9 or int(decoded_emotion.emotion_id)!=5
+	):
+		_fail("emotion visual cross-runtime golden")
+		return
+	var emotion_observer:=_base_world(22,11)
+	if not emotion_observer.apply_frame(emotion_visual):
+		_fail("visible emotion delivery "+emotion_observer.protocol_error)
+		return
+	var emotion_snapshot:=emotion_observer.snapshot()
+	if (
+		(emotion_snapshot.emotion_events as Array).size()!=1 or
+		not (emotion_snapshot.chat_messages as Array).is_empty()
+	):
+		_fail("emotion delivery polluted chat or missed event")
+		return
+	if not emotion_observer.apply_frame(emotion_visual) or int(emotion_observer.snapshot().stale_emotion_visuals)!=1:
+		_fail("duplicate emotion visual replay")
+		return
+	var emotion_self:=_base_world(11)
+	if not emotion_self.mark_emotion_sent(9,5) or not emotion_self.apply_frame(emotion_visual):
+		_fail("authoritative self emotion echo "+emotion_self.protocol_error)
+		return
+	if (emotion_self.snapshot().emotion_events as Array).size()!=1:
+		_fail("self emotion event missing")
+		return
+	var emotion_unsolicited:=_base_world(11)
+	if emotion_unsolicited.apply_frame(emotion_visual) or emotion_unsolicited.protocol_error!="future_self_emotion_visual":
+		_fail("unsolicited self emotion visual was accepted")
+		return
+
+	print("CHAT_WIRE_PASS command=92 delivery=93 emotion_command=137 emotion_visual=138 whisper_command=98 whisper_result=99 utf8=true trusted_echo=true emotion_authoritative=true world_policy=SERVER_AUTHORITY visible_only_nearby=true whisper_crossmap=true replay=STALE unsolicited_self=FAIL_CLOSED")
 	quit(0)

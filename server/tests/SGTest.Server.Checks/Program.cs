@@ -88,6 +88,12 @@ static class Checks
         Directory.CreateDirectory(root);
         try
         {
+            if (args is ["--chat-only"])
+            {
+                ChatWireChecks.Verify();
+                Console.WriteLine($"CHAT_CHECKS PASS total={_passes}");
+                return 0;
+            }
             if (args is ["--character-management-only"])
             {
                 CharacterManagementChecks.Verify();

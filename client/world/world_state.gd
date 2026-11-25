@@ -257,6 +257,9 @@ var chat_sequence := 0
 var chat_messages: Array[Dictionary] = []
 var chat_sender_sequences := {}
 var stale_chat_deliveries := 0
+var emotion_events: Array[Dictionary] = []
+var emotion_sender_sequences := {}
+var stale_emotion_visuals := 0
 var pending_whisper_sequence := 0
 var pending_whisper_target_actor_id := 0
 var pending_whisper_target_name := ""
@@ -368,6 +371,7 @@ var pet_skill_visual_events: Array[Dictionary] = []
 var pet_skill_visual_sequences := {}
 var stale_pet_skill_visuals := 0
 const CHAT_BACKLOG_MAX := 100
+const EMOTION_EVENT_MAX := 64
 var quest_sequence := 0
 var pending_quest_sequence := 0
 var pending_quest_kind := 0
@@ -817,6 +821,18 @@ func mark_chat_sent(sequence:int,channel:int,bubble_type:int,message:String)->bo
 		return false
 	chat_sequence=sequence
 	return true
+
+func mark_emotion_sent(sequence:int,emotion_id:int)->bool:
+	if (
+		state!=STATE_IN_WORLD or player_dead or not world_ready or resync_pending or
+		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
+		last_world_ready_ack_epoch!=map_epoch or pending_whisper_sequence!=0 or
+		sequence<=chat_sequence or sequence>0xffffffff or emotion_id<1 or emotion_id>12
+	):
+		return false
+	chat_sequence=sequence
+	return true
+
 
 func mark_whisper_sent(
 		sequence:int,target_actor_id:int,bubble_type:int,message:String,
@@ -1313,6 +1329,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_player_shop_snapshot(frame)
 		WireCodec.OPCODE_CHAT_DELIVERY:
 			return _apply_chat_delivery(frame)
+		WireCodec.OPCODE_EMOTION_VISUAL:
+			return _apply_emotion_visual(frame)
 		WireCodec.OPCODE_WHISPER_RESULT:
 			return _apply_whisper_result(frame)
 		WireCodec.OPCODE_PARTY_RESULT:
@@ -1628,6 +1646,8 @@ func snapshot() -> Dictionary:
 		"chat_sequence": chat_sequence,
 		"chat_messages": chat_messages.duplicate(true),
 		"stale_chat_deliveries": stale_chat_deliveries,
+		"emotion_events": emotion_events.duplicate(true),
+		"stale_emotion_visuals": stale_emotion_visuals,
 		"pending_whisper_sequence": pending_whisper_sequence,
 		"pending_whisper_target_actor_id": pending_whisper_target_actor_id,
 		"pending_whisper_target_name": pending_whisper_target_name,
@@ -1972,6 +1992,9 @@ func _reset_character_actions_and_combat() -> void:
 	player_respawn_visual_events.clear()
 	player_respawn_visual_sequences.clear()
 	stale_player_respawn_visuals = 0
+	emotion_events.clear()
+	emotion_sender_sequences.clear()
+	stale_emotion_visuals = 0
 	combat_available = false
 	player_current_hp = 0
 	player_max_hp = 0
@@ -2810,6 +2833,7 @@ func _apply_world_ready(frame: PackedByteArray) -> bool:
 	player_respawn_visual_events.clear()
 	pvp_combat_visual_events.clear()
 	pvp_skill_visual_events.clear()
+	emotion_events.clear()
 	last_aoi_tick = tick
 	pending_world_ready_ack_epoch = map_epoch
 	pending_world_ready_ack_tick = tick
@@ -2853,6 +2877,9 @@ func _reset_map_combat_and_item_commands() -> void:
 	player_respawn_visual_events.clear()
 	player_respawn_visual_sequences.clear()
 	stale_player_respawn_visuals = 0
+	emotion_events.clear()
+	emotion_sender_sequences.clear()
+	stale_emotion_visuals = 0
 	recovery_sequence = 0
 	pending_recovery_sequence = 0
 	pending_recovery_item_uid = 0
@@ -4366,6 +4393,44 @@ func _append_chat_message(message: Dictionary) -> void:
 	chat_messages.append(message)
 	while chat_messages.size() > CHAT_BACKLOG_MAX:
 		chat_messages.pop_front()
+
+
+func _apply_emotion_visual(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("emotion_visual_out_of_state")
+	var value:=WireCodec.decode_emotion_visual(frame)
+	if value.is_empty():
+		return fail("invalid_emotion_visual")
+	var epoch:=int(value.receiver_map_epoch)
+	if epoch<map_epoch:
+		stale_emotion_visuals+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_emotion_visual")
+	var sender:=int(value.actor_id)
+	var connection:=int(value.connection_epoch)
+	var sequence:=int(value.emotion_sequence)
+	if sender==actor_id:
+		if sequence>chat_sequence:
+			return fail("future_self_emotion_visual")
+	else:
+		if not entities.has(sender):
+			stale_emotion_visuals+=1
+			return true
+		var entity:Dictionary=entities[sender]
+		if int(entity.get("connection_epoch",0))!=connection:
+			stale_emotion_visuals+=1
+			return true
+	var key:="%d/%d" % [sender,connection]
+	var previous:=int(emotion_sender_sequences.get(key,0))
+	if sequence<=previous:
+		stale_emotion_visuals+=1
+		return true
+	emotion_sender_sequences[key]=sequence
+	emotion_events.append(value.duplicate(true))
+	while emotion_events.size()>EMOTION_EVENT_MAX:
+		emotion_events.pop_front()
+	return true
 
 
 func _apply_whisper_result(frame:PackedByteArray)->bool:

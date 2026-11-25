@@ -195,6 +195,8 @@ public static partial class WireProtocol
     public const int ChatCommandMaximumFrameBytes = ChatCommandHeaderBytes + ChatMaxMessageBytes;
     public const int ChatDeliveryMaximumFrameBytes =
         ChatDeliveryHeaderBytes + ChatMaxSenderNameBytes + ChatMaxMessageBytes;
+    public const int EmotionCommandFrameBytes = HeaderBytes + 8 + 4 + 1;
+    public const int EmotionVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 4 + 1;
     public const int WhisperCommandHeaderBytes = HeaderBytes + 8 + 4 + 8 + 1 + 2;
     public const int WhisperCommandMaximumFrameBytes =
         WhisperCommandHeaderBytes + ChatMaxMessageBytes + 2 + ChatMaxSenderNameBytes;
@@ -707,6 +709,8 @@ public static partial class WireProtocol
             134 => WireOpcode.PlayerCreationProfileState,
             135 => WireOpcode.PlayerAttributeAllocate,
             136 => WireOpcode.FriendInvite,
+            137 => WireOpcode.EmotionCommand,
+            138 => WireOpcode.EmotionVisual,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -878,6 +882,8 @@ public static partial class WireProtocol
                 (advertised-PlayerShopSnapshotHeaderBytes)%PlayerShopListingBytes==0,
             WireOpcode.ChatCommand => advertised >= ChatCommandHeaderBytes + 1 && advertised <= ChatCommandMaximumFrameBytes,
             WireOpcode.ChatDelivery => advertised >= ChatDeliveryHeaderBytes + 2 && advertised <= ChatDeliveryMaximumFrameBytes,
+            WireOpcode.EmotionCommand => advertised == EmotionCommandFrameBytes,
+            WireOpcode.EmotionVisual => advertised == EmotionVisualFrameBytes,
             WireOpcode.WhisperCommand =>
                 advertised >= WhisperCommandHeaderBytes+1 &&
                 advertised <= WhisperCommandMaximumFrameBytes,

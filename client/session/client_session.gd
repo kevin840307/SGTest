@@ -361,6 +361,26 @@ func send_nearby_chat(message:String,bubble_type:int=0)->bool:
 	})
 
 
+func send_emotion(emotion_id:int)->bool:
+	var current:=snapshot()
+	if (
+		emotion_id<1 or emotion_id>12 or bool(current.get("player_dead",false)) or
+		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
+		not bool(current.get("world_ready",false)) or
+		bool(current.get("resync_pending",false)) or
+		bool(current.get("waiting_for_new_map",false)) or
+		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
+		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
+		int(current.get("pending_whisper_sequence",0))!=0
+	):
+		return false
+	return _queue_intent({
+		"type":"emotion","emotion_id":emotion_id,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))
+	})
+
+
 func send_world_chat(message:String,bubble_type:int=0)->bool:
 	var clean:=message.strip_edges()
 	var bytes:=clean.to_utf8_buffer()
@@ -1610,6 +1630,9 @@ func _process_first_intent() -> void:
 		_process_quest_intent(intent, kind)
 
 
+	elif kind=="emotion":
+		_process_emotion_intent(intent)
+
 	elif kind in ["nearby_chat","world_chat","warband_chat","party_chat","whisper"]:
 		_process_chat_intent(intent, kind)
 
@@ -1869,6 +1892,25 @@ func _process_quest_intent(intent: Dictionary, kind: String) -> void:
 		_world.mark_quest_sent(
 			sequence,quest_kind,npc,quest_id,choice_id)
 	):
+		_pop_intent()
+		_publish()
+
+
+func _process_emotion_intent(intent: Dictionary) -> void:
+	var current:Dictionary=_world.snapshot()
+	if (
+		int(intent.get("actor_id",0))!=int(current.get("actor_id",0)) or
+		int(intent.get("map_epoch",0))!=int(current.get("map_epoch",0))
+	):
+		_pop_intent()
+		return
+	var sequence:=int(_world.chat_sequence)+1
+	var emotion_id:=int(intent.get("emotion_id",0))
+	var frame:=WireCodec.encode_emotion_command(int(_world.map_epoch),sequence,emotion_id)
+	if frame.is_empty():
+		_pop_intent()
+		return
+	if _transport.send_frame(frame) and _world.mark_emotion_sent(sequence,emotion_id):
 		_pop_intent()
 		_publish()
 

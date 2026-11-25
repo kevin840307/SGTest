@@ -24,6 +24,32 @@ public static class ChatRouting
                request.ActorId,request.ConnectionEpoch,out var identity))
             return;
 
+        if(request.Channel==ChatChannel.Emotion)
+        {
+            if(request.BubbleType is <1 or >12||!string.IsNullOrEmpty(request.Message))
+                throw new InvalidOperationException("Invalid trusted emotion command reached routing");
+            foreach(var recipient in router.SnapshotActiveBindings())
+            {
+                bool self=recipient==sender;
+                if(!self&&
+                   (!router.IsVisibleActor(sender,recipient)||
+                    !router.IsVisibleActor(recipient,sender)))
+                    continue;
+                var visual=new EmotionVisualWire(
+                    recipient.MapEpoch,request.ActorId,request.ConnectionEpoch,
+                    request.ChatSequence,request.BubbleType);
+                var queued=router.QueueEmotionVisual(recipient,visual);
+                if(queued!=GatewaySendStatus.Enqueued)
+                {
+                    if(self)
+                        throw new IOException(
+                            "Reliable self emotion visual could not be queued: "+queued);
+                    router.CloseCurrentBinding(recipient);
+                }
+            }
+            return;
+        }
+
         if(request.Channel==ChatChannel.World)
         {
             const int worldChannelMinimumLevel=10; // Old server chat.cfg: [WorldChannel] lvllimit=10

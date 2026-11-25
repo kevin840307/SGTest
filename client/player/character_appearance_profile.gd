@@ -17,6 +17,25 @@ const ROBOT_BASE_PARTS := {
 	2:["equipment/r/cloth/bonnet00","R-BONNET00"]}
 const BASE_PARTS := HUMANOID_BASE_PARTS
 const RACE_KEYS := ["b","g","a","r","y"]
+const EMOTION_ACTIONS := ["ZA","ZB","ZC","ZD","ZE","ZF","ZG","ZH","ZI","ZJ","ZK","ZL"]
+# Original A/B/G/R ACT files share these exact Z-action source frames/ticks.
+# `default_ticks` are the converter-normalized legacy raw times: 6->9,
+# 5->8 and 7->11. Each source frame appears twice in the ACT timeline.
+const EMOTION_SOURCE := {
+	"ZA":[5,9],"ZB":[5,9],"ZC":[5,9],"ZD":[5,9],"ZE":[5,9],"ZF":[5,9],
+	"ZG":[11,9],"ZH":[8,8],"ZI":[5,11],"ZJ":[5,8],"ZK":[9,8],"ZL":[5,8],
+}
+# HK CharDrawOrder has no Z rows. These are the recovered original-client Z
+# orders from Recovered2, normalized through the same +2 slot expansion as
+# asset_converter. Shadow is not a paper-doll equipment layer.
+const EMOTION_DRAW_SLOTS := {
+	"DEFAULT":[11,13,12,10,9,8,7,6,5,4,3,0,1,2],
+	"ZC":[11,13,12,10,9,0,1,8,7,6,5,4,3,2],
+	"ZE":[11,8,7,6,5,13,12,10,9,4,3,0,1,2],
+	"ZF":[11,13,12,6,5,10,9,8,7,4,3,0,1,2],
+	"ZI":[11,13,12,10,9,6,5,8,7,3,4,0,1,2],
+}
+const ROBOT_ZC_DRAW_SLOTS := [11,13,12,10,9,0,1,4,3,2,8,7,6,5]
 
 var key := ""
 var parts: Dictionary = {}
@@ -27,6 +46,7 @@ var views: Dictionary = {}
 var attack_available := false
 var hit_available := false
 var death_available := false
+var emotion_available: Dictionary = {}
 
 static func appearance_key(appearance: Dictionary = {}) -> String:
 	if appearance.is_empty():
@@ -156,14 +176,59 @@ func configure(assets: Dictionary, appearance: Dictionary, shared_views: Diction
 			"AA": attack_available = available == 1
 			"NH": hit_available = available == 1
 			"ND": death_available = available == 1
+	for action in EMOTION_ACTIONS:
+		var available := _load_action(assets,action,false,true,shared_views)
+		if available < 0:
+			return ERR_INVALID_DATA
+		emotion_available[action] = available == 1
 	return OK
+
+func _emotion_fallback_view(manifest:Dictionary,prefix:String,action:String)->Dictionary:
+	# Compatibility for stale generated manifests only. The formal atlas already
+	# contains the original Z SPR clips; newly rebuilt manifests supply these
+	# logical views directly and therefore never enter this path.
+	if action not in EMOTION_ACTIONS or not EMOTION_SOURCE.has(action):
+		return {}
+	var race_index:=int(key.get_slice(":",0)) if not key.is_empty() else -1
+	if race_index<0 or race_index>3:
+		return {}
+	var clip:=prefix+"_"+action+"8"
+	var clips:Dictionary=manifest.get("clips",{})
+	if not clips.has(clip) or not clips[clip] is Array:
+		return {}
+	var source:Array=EMOTION_SOURCE[action]
+	var frame_count:=int(source[0])
+	var ticks:=int(source[1])
+	if clips[clip].size()!=frame_count:
+		return {}
+	var timeline_ticks:Array=[]
+	for frame in frame_count:
+		timeline_ticks.append([frame,ticks])
+		timeline_ticks.append([frame,ticks])
+	var draw_slots:Array
+	if race_index==3 and action=="ZC":
+		draw_slots=ROBOT_ZC_DRAW_SLOTS.duplicate()
+	else:
+		draw_slots=(EMOTION_DRAW_SLOTS.get(action,EMOTION_DRAW_SLOTS.DEFAULT) as Array).duplicate()
+	return {
+		"clip":clip,"flip_h":false,"timeline_ticks":timeline_ticks,"loop":false,
+		"act_key":action,"draw_order_key":action+"8","draw_slots":draw_slots,
+	}
+
+func _resolved_view(manifest:Dictionary,prefix:String,action:String,facing:int)->Dictionary:
+	var view_key:=prefix+"_"+action+str(facing)
+	var authored:Dictionary=manifest.get("logical_views",{}).get(view_key,{})
+	if not authored.is_empty():
+		return authored
+	return _emotion_fallback_view(manifest,prefix,action)
 
 func _load_action(assets: Dictionary, action: String, required: bool, one_shot: bool, shared_views: Dictionary) -> int:
 	var all_parts: Array = parts.values()
 	all_parts.append_array(overlays.values())
 	var present := 0
 	for part in all_parts:
-		if assets[part[0]].manifest.get("logical_views",{}).has(str(part[1])+"_"+action+"1"):
+		var manifest:Dictionary=assets[part[0]].manifest
+		if not _resolved_view(manifest,str(part[1]),action,1).is_empty():
 			present += 1
 	if present == 0 and not required:
 		return 0
@@ -173,7 +238,7 @@ func _load_action(assets: Dictionary, action: String, required: bool, one_shot: 
 		var manifest: Dictionary = assets[part[0]].manifest
 		for facing in range(1,9):
 			var view_key := str(part[1])+"_"+action+str(facing)
-			var view: Dictionary = manifest.get("logical_views",{}).get(view_key,{})
+			var view: Dictionary = _resolved_view(manifest,str(part[1]),action,facing)
 			if not view.has_all(["clip","flip_h","timeline_ticks","loop","draw_slots"]) or not view.flip_h is bool or not view.loop is bool or (one_shot and view.loop) or not view.draw_slots is Array or not view.timeline_ticks is Array or not manifest.clips.has(view.clip):
 				return -1
 			var slots := {}
