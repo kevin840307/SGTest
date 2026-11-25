@@ -143,15 +143,22 @@ func delete_character(character_id: int, password: String) -> bool:
 		"old_password":password,"new_password":""})
 
 func move_target(target_x: int, target_y: int) -> bool:
-	if bool(snapshot().get("player_dead",false)):
+	var current := snapshot()
+	if bool(current.get("player_dead",false)):
 		return false
-	return _queue_intent({"type": "move", "x": target_x, "y": target_y})
+	# Navigation is map-local input. Bind it to the generation visible when the
+	# player clicked so a delayed FIFO entry can never execute after a portal.
+	return _queue_intent({"type":"move","x":target_x,"y":target_y,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))})
 
 func stop_movement() -> bool:
 	var current := snapshot()
 	if bool(current.get("player_dead",false)) or int(current.get("state",-1)) != WorldState.STATE_IN_WORLD:
 		return false
-	return _queue_intent({"type":"stop_move"})
+	return _queue_intent({"type":"stop_move",
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))})
 
 func use_recovery_item(item_uid: int) -> bool:
 	var current := snapshot()
@@ -1127,9 +1134,12 @@ func _queue_skill(skill_id: int, target: int) -> bool:
 		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
 
 func attack_monster(entity_id: int) -> bool:
-	if entity_id <= 0 or bool(snapshot().get("player_dead",false)):
+	var current := snapshot()
+	if entity_id <= 0 or bool(current.get("player_dead",false)):
 		return false
-	return _queue_intent({"type":"attack_monster","entity_id":entity_id})
+	return _queue_intent({"type":"attack_monster","entity_id":entity_id,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))})
 
 
 func pet_attack_monster(entity_id:int)->bool:
@@ -1165,9 +1175,12 @@ func pet_skill_monster(skill_id:int,entity_id:int)->bool:
 
 func npc_interact(spawn_id: int) -> bool:
 	# The client names only a map-local NPC; Server provides the destination.
-	if spawn_id <= 0 or spawn_id > 0x7fffffff or bool(snapshot().get("player_dead",false)):
+	var current := snapshot()
+	if spawn_id <= 0 or spawn_id > 0x7fffffff or bool(current.get("player_dead",false)):
 		return false
-	return _queue_intent({"type": "npc", "spawn_id": spawn_id})
+	return _queue_intent({"type":"npc","spawn_id":spawn_id,
+		"actor_id":int(current.get("actor_id",0)),
+		"map_epoch":int(current.get("map_epoch",0))})
 
 func snapshot() -> Dictionary:
 	_mutex.lock()
@@ -1641,11 +1654,20 @@ func _process_first_intent() -> void:
 	elif kind == "stop_move":
 		_process_stop_movement_intent(intent)
 	elif kind == "move":
-		var current: Dictionary = _world.snapshot()
-		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
-			return
+		# This is the sole WorldState logic thread; use scalar owner state directly.
+		# A click queued on the old map must be discarded before any readiness wait,
+		# otherwise it can wake up after WorldReady and move the player on a new map.
+		var current: RefCounted = _world
 		var token := int(intent.get("_token",0))
 		if not _first_intent_matches(token):
+			return
+		if (
+			(int(intent.get("actor_id",0)) > 0 and int(intent.get("actor_id",0)) != int(current.actor_id)) or
+			(int(intent.get("map_epoch",0)) > 0 and int(intent.get("map_epoch",0)) != int(current.map_epoch))
+		):
+			_pop_intent_token(token)
+			return
+		if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map):
 			return
 		var sequence := int(current.movement_sequence) + 1
 		var frame := WireCodec.encode_move_target(int(current.map_epoch), sequence, int(intent.x), int(intent.y))
@@ -1743,6 +1765,13 @@ func _process_character_choose_intent(intent: Dictionary) -> void:
 
 func _process_npc_intent(intent: Dictionary) -> void:
 	var current: Dictionary = _world.snapshot()
+	var token := int(intent.get("_token",0))
+	if (
+		(int(intent.get("actor_id",0)) > 0 and int(intent.get("actor_id",0)) != int(current.get("actor_id",0))) or
+		(int(intent.get("map_epoch",0)) > 0 and int(intent.get("map_epoch",0)) != int(current.get("map_epoch",0)))
+	):
+		_pop_intent_token(token)
+		return
 	if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or not bool(current.world_ready) or bool(current.resync_pending) or int(current.pending_world_ready_ack_epoch) != 0 or int(current.last_world_ready_ack_epoch) != int(current.map_epoch) or bool(current.waiting_for_new_map) or int(current.pending_npc_sequence) != 0:
 		return
 	var sequence := int(current.npc_interaction_sequence) + 1
@@ -2435,6 +2464,12 @@ func _process_stop_movement_intent(intent: Dictionary) -> void:
 	var token := int(intent.get("_token",0))
 	if token <= 0 or not _first_intent_matches(token):
 		return
+	if (
+		(int(intent.get("actor_id",0)) > 0 and int(intent.get("actor_id",0)) != int(current.actor_id)) or
+		(int(intent.get("map_epoch",0)) > 0 and int(intent.get("map_epoch",0)) != int(current.map_epoch))
+	):
+		_pop_intent_token(token)
+		return
 	if int(current.state) != WorldState.STATE_IN_WORLD or bool(current.player_dead) or bool(current.waiting_for_new_map):
 		_pop_intent_token(token)
 		return
@@ -2573,7 +2608,12 @@ func _cancel_attack_chase(token: int, intent: Dictionary) -> void:
 	# same FIFO slot with the existing Server-authoritative stop barrier so the
 	# player does not keep walking toward a stale monster position.
 	if str(intent.get("phase","")) == "await_move" and int(intent.get("move_sequence",0)) > 0:
-		if _replace_first_intent(token,{"type":"stop_move","phase":"send_stop"}):
+		var stop_intent := {
+			"type":"stop_move","phase":"send_stop",
+			"actor_id":int(intent.get("actor_id",0)),
+			"map_epoch":int(intent.get("map_epoch",0)),
+		}
+		if _replace_first_intent(token,stop_intent):
 			return
 	_pop_intent_token(token)
 
@@ -2583,6 +2623,12 @@ func _process_attack_monster_intent(intent: Dictionary) -> void:
 	var current: RefCounted = _world
 	var token := int(intent.get("_token",0))
 	if token <= 0 or not _first_intent_matches(token):
+		return
+	if (
+		(int(intent.get("actor_id",0)) > 0 and int(intent.get("actor_id",0)) != int(current.actor_id)) or
+		(int(intent.get("map_epoch",0)) > 0 and int(intent.get("map_epoch",0)) != int(current.map_epoch))
+	):
+		_pop_intent_token(token)
 		return
 	if int(current.state) != WorldState.STATE_IN_WORLD:
 		return
