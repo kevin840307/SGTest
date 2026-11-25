@@ -16,6 +16,7 @@ const PetVisualCatalog = preload("res://pet/pet_visual_catalog.gd")
 const Npcs = preload("res://npc/npc_presentation.gd")
 const PvpNames = preload("res://pvp/pvp_name_presentation.gd")
 const Canvas = preload("res://world/world_canvas.gd")
+const MapNameDisplay = preload("res://ui/hk_mapname_display.gd")
 var store := Store.new()
 var camera := Camera.new()
 var draw_list := DrawList.new()
@@ -27,6 +28,7 @@ var _map: Dictionary = {}
 var _palette: Array = []
 var _terrain := Terrain.new()
 var _canvas := Canvas.new()
+var map_name_display := MapNameDisplay.new()
 var _started_at := 0
 var _last_update := -1
 var _last_rect := Rect2()
@@ -71,6 +73,7 @@ var _cache_bytes := 0
 func _ready() -> void:
 	add_child(_terrain)
 	add_child(_canvas)
+	add_child(map_name_display)
 	store.asset_failed.connect(_asset_failed)
 
 
@@ -162,6 +165,7 @@ func clear_map(retain_cache: bool = false) -> void:
 	_combat_seen_next = 0
 	_combat_overlays.clear()
 	camera.clear()
+	map_name_display.clear_notice()
 	_map = {}
 	_palette = []
 	_last_update = -1
@@ -480,6 +484,7 @@ func _process(_delta: float) -> void:
 		if not _player_snapshot.is_empty() and _request_snapshot_pet_visuals(_player_snapshot) != OK:
 			_fail("寵物外觀素材載入失敗")
 			return
+		_show_hk_place_name()
 		status_changed.emit("地圖 " + str(map_id) + "｜地圖檢視・尚未連線")
 	if phase == "ready":
 		_advance_local_visual(_delta)
@@ -661,6 +666,18 @@ func _exit_tree() -> void:
 	clear_map()
 
 
+func _show_hk_place_name() -> void:
+	# Only a loaded source manifest and accepted authoritative WorldReady
+	# may open this banner. Offline map previews cannot masquerade as play.
+	if phase != "ready" or not show_players or _player_snapshot.is_empty():
+		return
+	var manifest: Dictionary = _map.get("manifest",{})
+	if int(manifest.get("map_id",0)) != map_id:
+		return
+	map_name_display.show_source_name(str(manifest.get("name","")),map_id,
+		int(_player_snapshot.get("map_epoch",0)))
+
+
 func set_player_snapshot(snapshot: Dictionary) -> void:
 	if not show_players or not snapshot.get("world_ready",false) or int(snapshot.map_id) != map_id:
 		return
@@ -679,6 +696,7 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 	_player_snapshot = snapshot
 	_players_dirty = true
 	if phase == "ready":
+		_show_hk_place_name()
 		if _request_snapshot_profiles(snapshot) != OK:
 			_fail("角色外觀素材載入失敗")
 			return
