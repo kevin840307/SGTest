@@ -426,10 +426,14 @@ public sealed class MonsterRuntime
             monster.ReturningHome = true;
             if (leashDistance > 1e-6)
             {
-                SetState(monster, MonsterAiState.Chase, tick, events);
                 if (TryStep(monster, monster.Spawn.X, monster.Spawn.Y, stats.MoveStep,
                             ref pathBudget, out var homeX, out var homeY))
+                {
+                    SetState(monster, MonsterAiState.Chase, tick, events);
                     Move(monster, homeX, homeY, tick, events);
+                }
+                else
+                    SetState(monster, MonsterAiState.Idle, tick, events);
             }
             if (Distance(monster.Spawn.X, monster.Spawn.Y,
                          monster.X, monster.Y) <= 1e-6)
@@ -448,7 +452,9 @@ public sealed class MonsterRuntime
                 target = value;
                 hasTarget = true;
                 monster.TargetActorId = value.ActorId;
-                monster.State = MonsterAiState.Chase;
+                // Acquiring a target is not itself movement. Only a legal step
+                // may transition to Chase, otherwise the client runs in place.
+                monster.State = MonsterAiState.Idle;
                 Bump(monster);
                 events.Add(new(MonsterWorldEventKind.TargetAcquired, tick,
                     monster.Snapshot(MapId), value.ActorId));
@@ -476,12 +482,14 @@ public sealed class MonsterRuntime
                 return;
             }
 
-            SetState(monster, MonsterAiState.Chase, tick, events);
             if (TryStep(monster, target.X, target.Y, stats.MoveStep,
                         ref pathBudget, out var nextX, out var nextY))
             {
+                SetState(monster, MonsterAiState.Chase, tick, events);
                 Move(monster, nextX, nextY, tick, events);
             }
+            else
+                SetState(monster, MonsterAiState.Idle, tick, events);
             return;
         }
 

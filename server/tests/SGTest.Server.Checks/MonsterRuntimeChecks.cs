@@ -17,6 +17,8 @@ internal static class MonsterRuntimeChecks
             () => TargetLostReturnsHome(root));
         Checks.Run("monster only publishes wandering animation when actually moving",
             () => WanderOnlyWhenMoving(root));
+        Checks.Run("monster only publishes chasing animation when a legal step moves it",
+            () => ChaseOnlyWhenMoving(root));
         Checks.Run("monster trusted damage owns death/respawn and AI budget is fair across 300 entities",
             () => DamageRespawnAndBudget(root));
         Checks.Run("monster respawn deadline is independent of AI cadence and budget",
@@ -192,6 +194,49 @@ internal static class MonsterRuntimeChecks
         Checks.Require(reacquire.Any(e => e.Kind == MonsterWorldEventKind.TargetAcquired &&
                                           e.TargetActorId == lure.ActorId),
             "monster did not resume normal aggro after reaching spawn");
+    }
+
+    private static void ChaseOnlyWhenMoving(string root)
+    {
+        string dir = Checks.Fixture(root, 220, 12, 12,
+            (x, y) => x == 4 && y != 6 ? (byte)7 : (byte)0);
+        var grid = BlockingGrid.Load(dir, 220);
+        string path = Path.Combine(dir, "population.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(Document(
+            220, true, [Spawn(0, 1, 24, 24)], [Definition(1,
+                moveStep: 12, aggro: 240, lose: 420, leash: 420,
+                attackRange: 28, wanderRadius: 0, wanderInterval: 100)])));
+        var runtime = new MonsterRuntime(grid,
+            MonsterPopulationCatalog.LoadVerified(path, 220, grid),
+            new(AiIntervalTicks: 1, MaxAiPerStep: 8,
+                MaxPathQueriesPerStep: 0));
+        var blockedTarget = new MonsterCombatTarget(42, 220, 136, 24, 100);
+        for (long tick = 1; tick <= 2; tick++)
+        {
+            var events = runtime.Tick(tick, [blockedTarget]);
+            var current = runtime.SnapshotAll()[0];
+            Checks.Require(current.TargetActorId == 42 &&
+                           current.X == 24 && current.Y == 24 &&
+                           current.State == MonsterAiState.Idle &&
+                           events.All(e => e.Kind != MonsterWorldEventKind.Move &&
+                                           !(e.Kind == MonsterWorldEventKind.State &&
+                                             e.Monster.State == MonsterAiState.Chase)) &&
+                           events.Where(e => e.Kind == MonsterWorldEventKind.TargetAcquired)
+                               .All(e => e.Monster.State == MonsterAiState.Idle),
+                "blocked chase made a stationary monster play a running animation");
+        }
+        var nearby = blockedTarget with { X = 56 };
+        var moved = runtime.Tick(3, [nearby]);
+        Checks.Require(moved.Any(e => e.Kind == MonsterWorldEventKind.Move) &&
+                       runtime.SnapshotAll()[0].State == MonsterAiState.Chase &&
+                       runtime.SnapshotAll()[0].X > 24,
+            "reachable target did not restore the chase and movement state");
+        var stopped = runtime.Tick(4, [blockedTarget]);
+        var after = runtime.SnapshotAll()[0];
+        Checks.Require(after.TargetActorId == 42 &&
+                       after.State == MonsterAiState.Idle &&
+                       stopped.All(e => e.Kind != MonsterWorldEventKind.Move),
+            "blocked target retained a stale chase animation after moving");
     }
 
     private static void WanderOnlyWhenMoving(string root)
