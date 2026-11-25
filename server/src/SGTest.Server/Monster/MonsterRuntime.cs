@@ -116,6 +116,7 @@ public sealed class MonsterRuntime
         public byte Facing = 1;
         public long LastAttackTick = -1;
         public long RespawnAtTick = -1;
+        public long LastRespawnTick = -1;
         public long NextWanderTick;
         public uint WanderSequence;
         public readonly Dictionary<long,long> DamageByActor = [];
@@ -130,6 +131,9 @@ public sealed class MonsterRuntime
     private readonly MapNavigator _navigation;
     private readonly MonsterRuntimeOptions _options;
     private readonly Dictionary<long, Monster> _monsters = [];
+    // Respawns are gameplay deadlines, not AI work. Order equal deadlines by
+    // stable entity ID so a limited AI budget cannot delay or reorder them.
+    private readonly PriorityQueue<(long EntityId, long Deadline), (long Tick, long EntityId)> _respawns = new();
     private readonly long[] _order;
     private int _cursor;
     private long _lastWorldTick = -1;
@@ -213,18 +217,25 @@ public sealed class MonsterRuntime
         if (worldTick <= _lastWorldTick)
             throw new InvalidOperationException("Monster runtime Tick must be strictly monotonic");
         ArgumentNullException.ThrowIfNull(targets);
+        bool aiDue = _order.Length != 0 &&
+            worldTick % _options.AiIntervalTicks == 0;
+        // Do not advance the clock or publish respawns for an invalid AI input.
+        var targetMap = aiDue ? ValidateTargets(targets) : null;
         _lastWorldTick = worldTick;
-        if (_order.Length == 0 || worldTick % _options.AiIntervalTicks != 0)
+        if (!aiDue &&
+            (!_respawns.TryPeek(out _, out var next) || next.Tick > worldTick))
             return Array.Empty<MonsterWorldEvent>();
+        var events = new List<MonsterWorldEvent>();
+        ProcessDueRespawns(worldTick, events);
+        if (!aiDue)
+            return events;
 
-        var targetMap = ValidateTargets(targets);
         int count = Math.Min(_options.MaxAiPerStep, _order.Length);
         int pathBudget = _options.MaxPathQueriesPerStep;
-        var events = new List<MonsterWorldEvent>();
         for (int i = 0; i < count; i++)
         {
             int index = (_cursor + i) % _order.Length;
-            Process(_monsters[_order[index]], worldTick, targetMap, ref pathBudget, events);
+            Process(_monsters[_order[index]], worldTick, targetMap!, ref pathBudget, events);
         }
         _cursor = (_cursor + count) % _order.Length;
         _aiSteps++;
@@ -315,6 +326,8 @@ public sealed class MonsterRuntime
             monster.State = MonsterAiState.Dead;
             monster.TargetActorId = 0;
             monster.RespawnAtTick = checked(worldTick + monster.Definition.Stats.RespawnTicks);
+            _respawns.Enqueue((monster.EntityId, monster.RespawnAtTick),
+                (monster.RespawnAtTick, monster.EntityId));
         }
         else if (monster.TargetActorId == 0)
         {
@@ -324,30 +337,44 @@ public sealed class MonsterRuntime
         return new(true, killed, applied, monster.Snapshot(MapId));
     }
 
+    private void ProcessDueRespawns(long tick, List<MonsterWorldEvent> events)
+    {
+        while (_respawns.TryPeek(out var due, out var priority) &&
+               priority.Tick <= tick)
+        {
+            _respawns.Dequeue();
+            var monster = _monsters[due.EntityId];
+            // A stale timer must not resurrect a later monster life.
+            if (monster.State != MonsterAiState.Dead ||
+                monster.RespawnAtTick != due.Deadline)
+                continue;
+            var stats = monster.Definition.Stats;
+            monster.CurrentHp = stats.MaxHp;
+            monster.X = monster.Spawn.X;
+            monster.Y = monster.Spawn.Y;
+            monster.State = MonsterAiState.Idle;
+            monster.TargetActorId = 0;
+            monster.LastAttackTick = -1;
+            monster.RespawnAtTick = -1;
+            monster.LastRespawnTick = tick;
+            monster.DamageByActor.Clear();
+            monster.NextWanderTick = checked(tick + stats.WanderIntervalTicks);
+            Bump(monster);
+            events.Add(new(MonsterWorldEventKind.Respawn, tick,
+                monster.Snapshot(MapId)));
+        }
+    }
+
     private void Process(Monster monster, long tick,
         IReadOnlyDictionary<long, MonsterCombatTarget> targets,
         ref int pathBudget, List<MonsterWorldEvent> events)
     {
-        var stats = monster.Definition.Stats;
-        if (monster.State == MonsterAiState.Dead)
-        {
-            if (monster.RespawnAtTick >= 0 && tick >= monster.RespawnAtTick)
-            {
-                monster.CurrentHp = stats.MaxHp;
-                monster.X = monster.Spawn.X;
-                monster.Y = monster.Spawn.Y;
-                monster.State = MonsterAiState.Idle;
-                monster.TargetActorId = 0;
-                monster.LastAttackTick = -1;
-                monster.RespawnAtTick = -1;
-                monster.DamageByActor.Clear();
-                monster.NextWanderTick = checked(tick + stats.WanderIntervalTicks);
-                Bump(monster);
-                events.Add(new(MonsterWorldEventKind.Respawn, tick,
-                    monster.Snapshot(MapId)));
-            }
+        // Keep the old idle-on-respawn-tick behavior even when that tick
+        // happens to be an AI step.
+        if (monster.State == MonsterAiState.Dead ||
+            monster.LastRespawnTick == tick)
             return;
-        }
+        var stats = monster.Definition.Stats;
 
         MonsterCombatTarget target = default;
         bool hasTarget = monster.TargetActorId > 0 &&

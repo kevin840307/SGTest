@@ -15,6 +15,8 @@ internal static class MonsterRuntimeChecks
             () => CrossMapTargetLost(root));
         Checks.Run("monster trusted damage owns death/respawn and AI budget is fair across 300 entities",
             () => DamageRespawnAndBudget(root));
+        Checks.Run("monster respawn deadline is independent of AI cadence and budget",
+            () => RespawnDeadlineIndependentOfAi(root));
     }
 
     private static void PopulationGate(string root)
@@ -180,6 +182,47 @@ internal static class MonsterRuntimeChecks
                        "dead monster did not respawn when its bounded AI slot returned");
         Checks.Require(runtime.DamageContributions(first.EntityId).Count==0,
             "respawn did not clear prior-life damage contributors");
+    }
+
+    private static void RespawnDeadlineIndependentOfAi(string root)
+    {
+        string dir = Checks.Fixture(root, 216, 12, 12, (_, _) => 0);
+        var grid = BlockingGrid.Load(dir, 216);
+        string path = Path.Combine(dir, "population.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(Document(
+            216, true, [Spawn(0, 1, 24, 24), Spawn(1, 1, 40, 24)],
+            [Definition(1, respawn: 3, wanderRadius: 0, wanderInterval: 100)])));
+        var runtime = new MonsterRuntime(grid,
+            MonsterPopulationCatalog.LoadVerified(path, 216, grid),
+            new(AiIntervalTicks: 8, MaxAiPerStep: 1, MaxPathQueriesPerStep: 0));
+
+        var monsters = runtime.SnapshotAll();
+        foreach (var monster in monsters)
+        {
+            var death = runtime.ApplyTrustedDamage(monster.EntityId, 99, 100, 0);
+            Checks.Require(death.Killed &&
+                           death.Monster.State == MonsterAiState.Dead,
+                "setup failed to kill both monsters");
+        }
+
+        Checks.Require(runtime.Tick(1, []).Count == 0 &&
+                       runtime.Tick(2, []).Count == 0,
+            "monster respawned before its scheduled deadline");
+        var due = runtime.Tick(3, []);
+        Checks.Require(due.Count == 2 &&
+                       due.All(e => e.Kind == MonsterWorldEventKind.Respawn &&
+                                    e.Tick == 3) &&
+                       due.Select(e => e.Monster.EntityId).SequenceEqual(
+                           monsters.Select(m => m.EntityId)) &&
+                       due.All(e => e.Monster.State == MonsterAiState.Idle &&
+                                    e.Monster.CurrentHp == e.Monster.MaxHp &&
+                                    e.Monster.TargetActorId == 0) &&
+                       monsters.All(m => runtime.DamageContributions(m.EntityId).Count == 0),
+            "scheduled respawn waited for round-robin AI or lost ordering/state");
+        Checks.Require(runtime.Tick(4, []).Count == 0 &&
+                       runtime.Tick(8, []).All(e =>
+                           e.Kind != MonsterWorldEventKind.Respawn),
+            "one death emitted duplicate respawn events");
     }
 
     private static object Document(int mapId,bool verified,
