@@ -490,7 +490,8 @@ func check_attack_ui(panel,stub) -> void:
 	panel._latest.player_dead = false
 
 
-func check_skill_ui(panel, stub) -> void:
+func check_skill_ui(panel, stub, classic_shell) -> void:
+	panel._latest.skill_book = {99001:3}
 	panel._set_skill_controls()
 	if not panel.skill_area_button.visible or panel.skill_area_button.disabled:
 		fail("WorldReady combat player has no skill controls")
@@ -515,11 +516,55 @@ func check_skill_ui(panel, stub) -> void:
 	if panel.skill_area_button.disabled or not panel.skill_status.text.contains("成功（代碼 0）"):
 		fail("Durable skill receipt did not release the UI gate")
 		return
-	panel.skill_target_mode.button_pressed = true
+
+	# The real Classic F1 path must arm a scoped pre-use action instead of
+	# permanently switching the diagnostic monster-click mode.
+	panel.skill_target_mode.button_pressed = false
+	classic_shell._active = true
+	classic_shell._panel = panel
+	classic_shell._stats = {
+		"hotkeys":{0:{"data_type":1,"data_id":99001}},
+		"skill_book":{99001:3}
+	}
+	var f1 := InputEventKey.new()
+	f1.keycode = KEY_F1
+	f1.pressed = true
+	classic_shell._handle_hotkey_key(f1)
+	if panel._pre_use_skill_id != 99001:
+		fail("Classic F1 did not arm the learned authoritative skill")
+		return
 	if not panel.submit_monster_action(1001) or stub.target_skills != 1 or stub.last_skill_target != 1001:
+		fail("F1 pre-use plus monster click did not send the existing cast_skill intent")
+		return
+	if panel._pre_use_skill_id != 0 or panel.skill_target_mode.button_pressed:
+		fail("F1 target skill leaked into persistent monster-click mode")
+		return
+	panel._latest.skill_sequence = 2
+	panel._latest.pending_skill_sequence = 0
+	panel._latest.last_skill_result_sequence = 2
+	panel._latest.last_skill_result_status = 0
+	panel._set_skill_controls()
+	if panel.arm_pre_use_skill(77777):
+		fail("F1 pre-use accepted an unlearned skill")
+		return
+	if not panel.arm_pre_use_skill(99001):
+		fail("Learned F1 skill could not be armed after authoritative result")
+		return
+	panel._latest.reconnecting = true
+	panel._set_skill_controls()
+	if panel._pre_use_skill_id != 0:
+		fail("Reconnect retained stale F1 pre-use skill")
+		return
+	panel._latest.reconnecting = false
+	panel._set_skill_controls()
+
+	# Keep the diagnostic persistent target-mode regression separate from the
+	# player's one-shot Classic F-key path.
+	panel.skill_target_mode.button_pressed = true
+	if not panel.submit_monster_action(1001) or stub.target_skills != 2 or stub.last_skill_target != 1001:
 		fail("Monster click skill mode did not reuse existing cast_skill")
 		return
-	if panel.submit_monster_action(1001) or stub.target_skills != 1:
+	if panel.submit_monster_action(1001) or stub.target_skills != 2:
 		fail("Queued skill allowed duplicate monster click")
 		return
 	panel._latest.player_dead = true
@@ -774,7 +819,7 @@ func run() -> void:
 		return
 	panel._latest.player_dead = false
 	check_attack_ui(panel,stub)
-	check_skill_ui(panel,stub)
+	check_skill_ui(panel,stub,app.classic_world)
 	panel._latest = {"combat_available":true,"player_current_hp":88,"player_max_hp":100,"player_current_mp":7,"player_max_mp":20}
 	if panel._combat_status_suffix() != "｜HP 88/100｜MP 7/20":
 		fail("UI failed to display server HP/MP without estimating local skill costs")

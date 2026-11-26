@@ -92,6 +92,12 @@ var _last_manage_revision := -1
 var _respawn_queued_after := -1
 var _skill_queued_after := -1
 var _skill_queued_at_ms := 0
+# Old CHotKeyItf direct-call evidence includes SetPreUseSkill/SetControlMode.
+# SGTest keeps Classic F-key staging separate from the diagnostic persistent
+# toggle and generation-scoped so it cannot leak across a cast/map/reconnect.
+# Exact original cancellation timing still requires native/HK verification.
+var _pre_use_skill_id := 0
+var _pre_use_skill_map_epoch := 0
 const SKILL_RESULT_NAMES = ["成功","未命中","目標不存在","目標死亡","超出距離","障礙阻擋","冷卻中","無法戰鬥","地圖已變更","重複序號","伺服器未核准技能","MP 不足","範圍目標數超限","此地圖禁止玩家 PvP","攻擊者為受保護藍名","目標為受保護藍名","不可對自己施放","伺服器忙碌，請稍後重試"]
 
 
@@ -426,6 +432,18 @@ func submit_attack_monster(entity_id: int) -> bool:
 
 # Client chooses only skill identity and target; the server owns rules, cost and damage.
 func submit_monster_action(entity_id: int) -> bool:
+	if _pre_use_skill_id > 0:
+		if _pre_use_skill_map_epoch != int(_latest.get("map_epoch",0)) or not _skill_can_submit():
+			cancel_pre_use_skill()
+			return false
+		var armed_skill_id := _pre_use_skill_id
+		if not submit_target_skill_id(armed_skill_id,entity_id):
+			return false
+		# Consume SGTest's staged Classic action after one accepted target
+		# intent. The Server still decides rule availability, MP, cooldown,
+		# range, hit and damage.
+		cancel_pre_use_skill()
+		return true
 	if skill_target_mode.button_pressed:
 		return submit_target_skill(entity_id)
 	return submit_attack_monster(entity_id)
@@ -442,13 +460,44 @@ func _skill_queued() -> void:
 	_set_skill_controls()
 
 
-func submit_target_skill(entity_id: int) -> bool:
-	if not _skill_can_submit() or _skill_queued_after >= 0 or int(_latest.get("pending_skill_sequence",0)) != 0 or entity_id <= 0:
+func cancel_pre_use_skill() -> bool:
+	var had_pre_use := _pre_use_skill_id > 0
+	_pre_use_skill_id = 0
+	_pre_use_skill_map_epoch = 0
+	return had_pre_use
+
+
+func arm_pre_use_skill(skill_id: int) -> bool:
+	if (
+		skill_id <= 0 or skill_id > 100000000 or
+		not _skill_can_submit() or _skill_queued_after >= 0 or
+		int(_latest.get("pending_skill_sequence",0)) != 0
+	):
 		return false
-	if not session.cast_skill(int(skill_id_input.value),entity_id):
+	var learned:Dictionary = _latest.get("skill_book",{})
+	if int(learned.get(skill_id,learned.get(str(skill_id),0))) <= 0:
+		return false
+	_pre_use_skill_id = skill_id
+	_pre_use_skill_map_epoch = int(_latest.get("map_epoch",0))
+	skill_status.text = "已選擇技能 %d；點選怪物施放，Esc 取消" % skill_id
+	return true
+
+
+func submit_target_skill_id(skill_id: int,entity_id: int) -> bool:
+	if (
+		not _skill_can_submit() or _skill_queued_after >= 0 or
+		int(_latest.get("pending_skill_sequence",0)) != 0 or
+		skill_id <= 0 or skill_id > 100000000 or entity_id <= 0
+	):
+		return false
+	if not session.cast_skill(skill_id,entity_id):
 		return false
 	_skill_queued()
 	return true
+
+
+func submit_target_skill(entity_id: int) -> bool:
+	return submit_target_skill_id(int(skill_id_input.value),entity_id)
 
 
 func submit_area_skill(skill_id: int) -> bool:
@@ -721,6 +770,7 @@ func disconnect_session() -> void:
 	_respawn_queued_after = -1
 	_skill_queued_after = -1
 	_skill_queued_at_ms = 0
+	cancel_pre_use_skill()
 	skill_target_mode.button_pressed = false
 	skill_status.text = ""
 	pickup_status.text = ""
@@ -812,6 +862,13 @@ func _set_respawn_controls() -> void:
 # Presentation-only pending guard; no gameplay timer or local skill settlement.
 func _set_skill_controls() -> void:
 	var in_world: bool = active and int(_latest.get("state",-1)) == State.STATE_IN_WORLD
+	if _pre_use_skill_id > 0 and (
+		not in_world or
+		_pre_use_skill_map_epoch != int(_latest.get("map_epoch",0)) or
+		not _skill_can_submit() or _skill_queued_after >= 0 or
+		int(_latest.get("pending_skill_sequence",0)) != 0
+	):
+		cancel_pre_use_skill()
 	# Only a new world/connection generation or the matching server result
 	# clears an unsettled skill. Same-epoch resync does not settle MP.
 	if not in_world or bool(_latest.get("reconnecting",false)) or bool(_latest.get("waiting_for_new_map",false)):

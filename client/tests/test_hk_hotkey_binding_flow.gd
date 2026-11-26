@@ -25,6 +25,9 @@ class FakePanel:
 		recovery_used.append(item_uid)
 		return true
 
+	func cancel_pre_use_skill()->bool:
+		return false
+
 
 func _init()->void:
 	call_deferred("_run")

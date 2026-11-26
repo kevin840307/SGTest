@@ -496,6 +496,9 @@ func _unhandled_key_input(event:InputEvent)->void:
 	if _friend_question.visible:
 		_reject_friend_invite()
 		get_viewport().set_input_as_handled()
+		return
+	if _panel!=null and _panel.cancel_pre_use_skill():
+		get_viewport().set_input_as_handled()
 
 
 func _transparent_line_edit(edit:LineEdit)->void:
@@ -1739,18 +1742,21 @@ func _activate_hotkey(slot_index:int)->bool:
 	var data_type:=int(binding.get("data_type",-1))
 	var data_id:=int(binding.get("data_id",0))
 	if data_type==0 and data_id>0:
-		return _panel.submit_recovery_use(data_id)
+		var used:bool=_panel.submit_recovery_use(data_id)
+		if used:
+			_panel.cancel_pre_use_skill()
+		return used
 	if data_type==1 and data_id>0:
 		var learned:Dictionary=_stats.get("skill_book",{})
 		if int(learned.get(data_id,learned.get(str(data_id),0)))<=0:
 			return false
-		# Original CHotKeyItf::OnUseSkill selects the learned skill first; for
-		# non-self skills it then enters target-selection mode. Current SGTest
-		# snapshots do not expose the original skill target-type byte, so do
-		# not invent an immediate self/area cast classification here.
-		_panel.skill_id_input.value=data_id
-		_panel.skill_target_mode.button_pressed=true
-		return true
+		# Old CHotKeyItf::OnUseSkill direct-call evidence includes
+		# SetPreUseSkill/SetControlMode. Keep Classic F-key staging separate
+		# from the diagnostic persistent skill-mode toggle. Exact original
+		# cancellation timing remains native-reference NOT VERIFIED.
+		# Target kind is not guessed: the next monster click uses the existing
+		# authenticated SkillUse path and Server-owned rule checks.
+		return _panel.arm_pre_use_skill(data_id)
 	return false
 
 func _make_item_hotkey_draggable(row:Button,item_uid:int,item_definition_id:int)->void:
