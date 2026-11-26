@@ -2435,8 +2435,9 @@ func _refresh_hud()->void:
 	else:
 		_exp_percent_label.text=""
 		_set_progress(_hud_exp_clip,0,0)
-	# ITF s04 semantics are not yet proven in the current wire snapshot.
-	_status_value_label.text=""
+	# HK StatusLite 2094/s04 is the money row beneath WP (original HUD screenshot).
+	var money:=int(_stats.get("player_money",-1))
+	_status_value_label.text=str(money) if money>=0 else ""
 	_animate_status_bars()
 
 func _clear_rows(box:Container)->void:
@@ -2686,10 +2687,11 @@ func _refresh_character()->void:
 	var creation_profile_ready:=bool(_stats.get("player_creation_profile_ready",profile_ready))
 	_refresh_character_vital_fill(_character_hp_fill,"hp")
 	_refresh_character_vital_fill(_character_mp_fill,"mp")
+	var money:=int(_stats.get("player_money",-1))
 	var values={
 		"名稱":str(_stats.get("character_name",_stats.get("player_name",""))),
 		"HP":_character_vital("hp"),"MP":_character_vital("mp"),
-		"金錢":str(_stats.get("wallet",_stats.get("player_money","—"))),
+		"金錢":str(money) if money>=0 else "—",
 	}
 	if creation_profile_ready:
 		var creation_fields: Dictionary = {

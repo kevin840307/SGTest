@@ -433,6 +433,8 @@ public sealed partial class IdentitySessionAuthorization
             if(inventory.Count>WireProtocol.InventorySnapshotMaxItems)
                 throw new InvalidOperationException(
                     "Character inventory exceeds bounded V1 baseline capacity");
+            long walletMoney=await _identity.GetCharacterMoneyAsync(
+                snapshot.ActorId,cancellationToken).ConfigureAwait(false);
 
             var skills = await _identity.ListCharacterSkillsAsync(
                 snapshot.ActorId,WireProtocol.SkillBookSnapshotMaxSkills+1,
@@ -473,12 +475,12 @@ public sealed partial class IdentitySessionAuthorization
                     .ToArray();
                 bool final=start+group.Length==inventory.Count;
                 await WriteFrameAsync(tls,WireProtocol.EncodeInventorySnapshot(
-                    new(snapshot.ActorId,start,final,group)),
+                    new(snapshot.ActorId,start,final,group,final?walletMoney:null)),
                     cancellationToken).ConfigureAwait(false);
             }
             if(inventory.Count==0)
                 await WriteFrameAsync(tls,WireProtocol.EncodeInventorySnapshot(
-                    new(snapshot.ActorId,0,true,Array.Empty<InventoryItemWire>())),
+                    new(snapshot.ActorId,0,true,Array.Empty<InventoryItemWire>(),walletMoney)),
                     cancellationToken).ConfigureAwait(false);
 
             // Learned skill state is Server-owned even when empty. Always send

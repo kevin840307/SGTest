@@ -38,8 +38,8 @@ func _initialize() -> void:
 			and int(v.pending_world_ready_ack_epoch)==0
 			and int(v.last_world_ready_ack_epoch)==int(v.map_epoch)
 		),7000)
-	if ready.is_empty():
-		_fail("world/inventory baseline "+str(session.snapshot()),session)
+	if ready.is_empty() or int(ready.get("player_money",-1))!=1000:
+		_fail("world/inventory/wallet baseline "+str(session.snapshot()),session)
 		return
 
 	if not session.open_bank(88):
@@ -66,6 +66,7 @@ func _initialize() -> void:
 			int(v.pending_bank_sequence)==0
 			and int(v.last_bank_response_sequence)==2
 			and int(v.bank_wallet_money)==600
+			and int(v.player_money)==600
 			and int(v.bank_money)==400
 		),7000)
 	if deposited.is_empty() or int(deposited.last_bank_result.status)!=0 or int(deposited.last_bank_result.kind)!=1 or int(deposited.last_bank_result.amount)!=400:
@@ -79,6 +80,7 @@ func _initialize() -> void:
 		return (
 			int(v.pending_bank_sequence)==0
 			and int(v.last_bank_response_sequence)==3
+			and int(v.player_money)==1000
 			and int(v.bank_wallet_money)==1000
 			and int(v.bank_money)==0
 		),7000)

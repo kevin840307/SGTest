@@ -1332,14 +1332,18 @@ static func encode_ground_pickup(epoch: int, sequence: int, drop_id: int) -> Pac
 
 
 static func decode_inventory_snapshot(frame: PackedByteArray) -> Dictionary:
-	if not _valid_variable_header(frame,OPCODE_INVENTORY_SNAPSHOT,INVENTORY_SNAPSHOT_HEADER_BYTES,INVENTORY_SNAPSHOT_HEADER_BYTES+INVENTORY_SNAPSHOT_MAX_PER_FRAME*INVENTORY_ITEM_BYTES):
+	if not _valid_variable_header(frame,OPCODE_INVENTORY_SNAPSHOT,INVENTORY_SNAPSHOT_HEADER_BYTES,INVENTORY_SNAPSHOT_HEADER_BYTES+INVENTORY_SNAPSHOT_MAX_PER_FRAME*INVENTORY_ITEM_BYTES+8):
 		return {}
 	var reader := _reader(frame,8)
 	var character := reader.get_64()
 	var start := reader.get_32()
 	var final_chunk := reader.get_u8()
 	var count := reader.get_u16()
-	if character <= 0 or start < 0 or start > INVENTORY_SNAPSHOT_MAX_ITEMS or final_chunk > 1 or count > INVENTORY_SNAPSHOT_MAX_PER_FRAME or start+count > INVENTORY_SNAPSHOT_MAX_ITEMS or frame.size() != INVENTORY_SNAPSHOT_HEADER_BYTES+count*INVENTORY_ITEM_BYTES:
+	if character <= 0 or start < 0 or start > INVENTORY_SNAPSHOT_MAX_ITEMS or final_chunk > 1 or count > INVENTORY_SNAPSHOT_MAX_PER_FRAME or start+count > INVENTORY_SNAPSHOT_MAX_ITEMS:
+		return {}
+	var item_end:=INVENTORY_SNAPSHOT_HEADER_BYTES+count*INVENTORY_ITEM_BYTES
+	var has_wallet:=frame.size()==item_end+8 and final_chunk==1
+	if not has_wallet and frame.size()!=item_end:
 		return {}
 	var items: Array[Dictionary] = []
 	var ids := {}
@@ -1356,8 +1360,14 @@ static func decode_inventory_snapshot(frame: PackedByteArray) -> Dictionary:
 		items.append({"item_uid":uid,"item_definition_id":item_id,
 			"quantity":quantity,"drop_id":drop_id,
 			"enhancement_level":enhancement_level,"durability_raw":durability_raw})
-	return {"character_id":character,"start_index":start,
+	var result:={"character_id":character,"start_index":start,
 		"complete":final_chunk==1,"items":items}
+	if has_wallet:
+		var wallet:=reader.get_64()
+		if wallet<0 or wallet>9000000000000000:
+			return {}
+		result["wallet_money"]=wallet
+	return result
 
 
 static func decode_skill_book_snapshot(frame: PackedByteArray) -> Dictionary:

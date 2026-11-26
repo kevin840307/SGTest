@@ -133,6 +133,8 @@ var inventory_items := {}
 var inventory_ready := false
 var inventory_revision := 0
 var inventory_next_index := 0
+# Unknown until a self-only authoritative inventory/economy receipt arrives.
+var player_money := -1
 var skill_book := {}
 var skill_book_ready := false
 var skill_book_revision := 0
@@ -1585,6 +1587,7 @@ func snapshot() -> Dictionary:
 		"inventory_ready": inventory_ready,
 		"inventory_revision": inventory_revision,
 		"inventory_next_index": inventory_next_index,
+		"player_money": player_money,
 		"skill_book": skill_book.duplicate(true),
 		"skill_book_ready": skill_book_ready,
 		"skill_book_revision": skill_book_revision,
@@ -2174,6 +2177,7 @@ func _reset_character_economy_state() -> void:
 	inventory_ready = false
 	inventory_revision = 0
 	inventory_next_index = 0
+	player_money = -1
 	skill_book.clear()
 	skill_book_ready = false
 	skill_book_revision = 0
@@ -3322,6 +3326,7 @@ func _apply_inventory_snapshot(frame: PackedByteArray) -> bool:
 		inventory_items[uid] = item.duplicate(true)
 		inventory_next_index += 1
 	if bool(value.complete):
+		player_money = int(value.get("wallet_money",-1))
 		inventory_ready = true
 		inventory_revision += 1
 	return true
@@ -3529,6 +3534,7 @@ func _apply_shop_snapshot(frame: PackedByteArray) -> bool:
 	if int(value.status) == 0:
 		active_shop_npc = int(value.npc_spawn_id)
 		shop_money = int(value.money)
+		player_money = shop_money
 		if active_bank_npc != 0:
 			bank_wallet_money = shop_money
 		shop_items.clear()
@@ -3599,6 +3605,7 @@ func _apply_shop_transaction_result(frame: PackedByteArray) -> bool:
 				inventory_items[uid] = updated
 		inventory_revision += 1
 		shop_money = int(result.money)
+		player_money = shop_money
 		if active_bank_npc != 0:
 			bank_wallet_money = shop_money
 	# Access failures are authoritative evidence that this shop session is no
@@ -3875,6 +3882,7 @@ func _apply_bank_snapshot(frame: PackedByteArray) -> bool:
 		active_bank_npc = int(value.npc_spawn_id)
 		bank_scope = int(value.scope)
 		bank_wallet_money = int(value.wallet_money)
+		player_money = bank_wallet_money
 		bank_money = int(value.bank_money)
 		if active_shop_npc != 0:
 			shop_money = bank_wallet_money
@@ -3910,6 +3918,7 @@ func _apply_bank_transaction_result(frame: PackedByteArray) -> bool:
 		if active_bank_npc != pending_bank_npc or bank_scope != int(result.scope):
 			return fail("bank_result_scope_or_session_mismatch")
 		bank_wallet_money = int(result.wallet_money)
+		player_money = bank_wallet_money
 		bank_money = int(result.bank_money)
 		if active_shop_npc != 0:
 			shop_money = bank_wallet_money
@@ -3993,6 +4002,7 @@ func _apply_repair_snapshot(frame: PackedByteArray) -> bool:
 	if bool(value.complete):
 		active_repair_npc = int(value.npc_spawn_id)
 		repair_ready = true
+		player_money = repair_wallet_money
 		repair_revision += 1
 		last_repair_response_sequence = sequence
 		if active_shop_npc != 0:
@@ -4040,6 +4050,7 @@ func _apply_repair_result(frame: PackedByteArray) -> bool:
 			previous.cost = int(result.cost)
 		repair_items[pending_repair_item_uid] = previous
 		repair_wallet_money = int(result.wallet_money)
+		player_money = repair_wallet_money
 		if active_shop_npc != 0:
 			shop_money = repair_wallet_money
 		if active_bank_npc != 0:
@@ -4114,6 +4125,7 @@ func _apply_enhancement_snapshot(frame: PackedByteArray) -> bool:
 	if bool(value.complete):
 		active_enhancement_npc = int(value.npc_spawn_id)
 		enhancement_ready = true
+		player_money = enhancement_wallet_money
 		enhancement_revision += 1
 		last_enhancement_response_sequence = sequence
 		if active_shop_npc != 0:
@@ -4171,6 +4183,7 @@ func _apply_enhancement_result(frame: PackedByteArray) -> bool:
 				enhancement_items.erase(pending_enhancement_item_uid)
 			elif int(result.current_level) != int(previous.current_level):
 				return fail("enhancement_failed_level_changed")
+		player_money = enhancement_wallet_money
 		if active_shop_npc != 0:
 			shop_money = enhancement_wallet_money
 		if active_bank_npc != 0:
@@ -4268,6 +4281,7 @@ func _apply_player_shop_snapshot(frame:PackedByteArray)->bool:
 	player_shop_inspected_listings=next_listings
 	player_shop_inspected=_player_shop_first(player_shop_inspected_listings)
 	player_shop_wallet=int(value.buyer_wallet)
+	player_money=player_shop_wallet
 	return true
 
 
@@ -4328,6 +4342,7 @@ func _apply_player_shop_result(frame:PackedByteArray)->bool:
 			player_shop_own_listings[int(value.listing_id)]=value.duplicate(true)
 			player_shop_own_listing=_player_shop_first(player_shop_own_listings)
 			player_shop_wallet=int(value.seller_wallet)
+			player_money=player_shop_wallet
 		elif status not in [6,7,8,16]:
 			return fail("player_shop_open_unhandled_status")
 	elif action==2:
@@ -4377,6 +4392,7 @@ func _apply_player_shop_result(frame:PackedByteArray)->bool:
 				):
 					return fail("player_shop_buy_replay_uid_conflict")
 			player_shop_wallet=int(value.buyer_wallet)
+			player_money=player_shop_wallet
 			player_shop_inspected_listings.erase(int(value.listing_id))
 			player_shop_inspected=_player_shop_first(player_shop_inspected_listings)
 		elif status in [2,12,13,14]:
@@ -4424,6 +4440,7 @@ func _apply_player_shop_sold(frame:PackedByteArray)->bool:
 	inventory_items.erase(uid)
 	inventory_revision+=1
 	player_shop_wallet=int(value.seller_wallet)
+	player_money=player_shop_wallet
 	last_player_shop_sold=value.duplicate(true)
 	last_player_shop_sold_listing_id=listing
 	player_shop_own_listings.erase(listing)
@@ -6083,6 +6100,7 @@ func _apply_trade_terminal(frame: PackedByteArray) -> bool:
 			}
 		inventory_revision += 1
 		var wallet := int(terminal.wallet_money)
+		player_money = wallet
 		if active_shop_npc != 0:
 			shop_money = wallet
 		if active_bank_npc != 0:

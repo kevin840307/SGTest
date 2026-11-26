@@ -55,7 +55,7 @@ func _initialize() -> void:
 		fail("bank deposit settlement")
 		return
 	state = world.snapshot()
-	if int(state.bank_wallet_money)!=600 or int(state.bank_money)!=400 or int(state.shop_money)!=600 or int(state.last_bank_result.status)!=0:
+	if int(state.bank_wallet_money)!=600 or int(state.player_money)!=600 or int(state.bank_money)!=400 or int(state.shop_money)!=600 or int(state.last_bank_result.status)!=0:
 		fail("bank deposit did not converge server balances")
 		return
 	var stale := int(state.stale_bank_results)
@@ -67,7 +67,7 @@ func _initialize() -> void:
 		fail("bank withdraw settlement")
 		return
 	state = world.snapshot()
-	if int(state.bank_wallet_money)!=750 or int(state.bank_money)!=250 or int(state.shop_money)!=750:
+	if int(state.bank_wallet_money)!=750 or int(state.player_money)!=750 or int(state.bank_money)!=250 or int(state.shop_money)!=750:
 		fail("bank withdraw authoritative balances mismatch")
 		return
 
@@ -98,7 +98,7 @@ func _initialize() -> void:
 		fail("bank access failure receipt")
 		return
 	state = world.snapshot()
-	if int(state.active_bank_npc)!=0 or int(state.bank_scope)!=0 or int(state.bank_money)!=0:
+	if int(state.active_bank_npc)!=0 or int(state.bank_scope)!=0 or int(state.bank_money)!=0 or int(state.player_money)!=600:
 		fail("bank access failure left stale session open")
 		return
 

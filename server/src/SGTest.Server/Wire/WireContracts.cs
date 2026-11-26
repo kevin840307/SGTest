@@ -534,7 +534,7 @@ public readonly record struct InventoryItemWire(
     int EnhancementLevel = 0,int DurabilityRaw = -1);
 public sealed record InventorySnapshotWire(
     long CharacterId,int StartIndex,bool Complete,
-    IReadOnlyList<InventoryItemWire> Items);
+    IReadOnlyList<InventoryItemWire> Items, long? WalletMoney = null);
 public readonly record struct SkillBookEntryWire(int SkillId,int Level);
 public sealed record SkillBookSnapshotWire(
     long CharacterId,int StartIndex,bool Complete,

@@ -32,6 +32,27 @@ func _initialize() -> void:
 	if WireCodec.decode_inventory_snapshot(empty).is_empty():
 		fail("empty but final inventory baseline was rejected")
 		return
+	var wallet_frame:=empty.duplicate()
+	wallet_frame.resize(31)
+	wallet_frame.encode_s32(0,31)
+	wallet_frame.encode_s64(23,123456)
+	var wallet_world=new_world()
+	if not wallet_world.apply_frame(wallet_frame) or int(wallet_world.snapshot().player_money)!=123456:
+		fail("empty inventory login must establish authoritative money")
+		return
+	if not wallet_world.apply_frame(MAP13_READY.hex_decode()) or int(wallet_world.snapshot().player_money)!=123456:
+		fail("wallet lost on map transfer")
+		return
+	var invalid_wallet:=wallet_frame.duplicate()
+	invalid_wallet.encode_s64(23,-1)
+	if not WireCodec.decode_inventory_snapshot(invalid_wallet).is_empty():
+		fail("negative wallet accepted")
+		return
+	invalid_wallet=wallet_frame.duplicate()
+	invalid_wallet[20]=0
+	if not WireCodec.decode_inventory_snapshot(invalid_wallet).is_empty():
+		fail("non-final wallet trailer accepted")
+		return
 	var bad := INVENTORY.hex_decode()
 	bad[20] = 2
 	if not WireCodec.decode_inventory_snapshot(bad).is_empty():

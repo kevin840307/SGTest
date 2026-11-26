@@ -198,13 +198,18 @@ func _run()->void:
 	# EXP percent is Server-authored from the source-backed PLAYERLVLUP table.
 	# The original HUD must show that value directly and leave unknown (-1)
 	# blank instead of inventing a Client-side threshold.
-	shell.apply_snapshot({"chat_messages":[],"friends":{},"player_profile_ready":true,"player_level":3,"player_current_hp":154,"player_max_hp":154,"player_current_mp":125,"player_max_mp":125,"player_current_wp":101,"player_max_wp":101,"player_experience_percent":11})
+	shell.apply_snapshot({"chat_messages":[],"friends":{},"player_profile_ready":true,"player_level":3,"player_current_hp":154,"player_max_hp":154,"player_current_mp":125,"player_max_mp":125,"player_current_wp":101,"player_max_wp":101,"player_experience_percent":11,"player_money":12345})
 	await process_frame
+	_expect(shell._status_value_label.text=="12345","authoritative wallet in source s04 row")
+	_rect(shell._status_value_label,Rect2(27,64,87,10))
 	_expect(shell._exp_percent_label.text=="11%","authority EXP percent text")
 	_expect(is_equal_approx(shell._hud_exp_clip.size.x,92.0*0.11),"authority EXP bar width")
 	shell.apply_snapshot({"player_profile_ready":true,"player_experience_percent":-1})
 	await process_frame
 	_expect(shell._exp_percent_label.text.is_empty() and is_zero_approx(shell._hud_exp_clip.size.x),"unknown EXP percent stays blank")
+	_expect(shell._status_value_label.text.is_empty(),"unknown money stays blank")
+	shell.apply_snapshot({"player_money":0})
+	_expect(shell._status_value_label.text=="0","known empty wallet displays zero")
 	var args:=OS.get_cmdline_user_args()
 	if not args.is_empty():
 		# Native renderer only; capture the same 800x600 UI surface without

@@ -21,7 +21,9 @@ public static partial class WireProtocol
         if(value.CharacterId<=0||value.StartIndex<0||
             value.StartIndex>InventorySnapshotMaxItems ||
             value.Items is null || value.Items.Count>InventorySnapshotMaxItemsPerFrame ||
-            value.StartIndex+value.Items.Count>InventorySnapshotMaxItems)
+            value.StartIndex+value.Items.Count>InventorySnapshotMaxItems ||
+            (value.WalletMoney.HasValue && (!value.Complete ||
+                value.WalletMoney.Value<0 || value.WalletMoney.Value>SqliteIdentityStore.MaximumMoney)))
             throw new ArgumentOutOfRangeException(nameof(value));
         var ids=new HashSet<long>();
         foreach(var item in value.Items)
@@ -32,7 +34,7 @@ public static partial class WireProtocol
                 throw new ArgumentOutOfRangeException(nameof(value));
         int count=value.Items.Count;
         var frame=NewFrame(WireOpcode.InventorySnapshot,
-            InventorySnapshotHeaderBytes+count*InventoryItemBytes);
+            InventorySnapshotHeaderBytes+count*InventoryItemBytes+(value.WalletMoney.HasValue?8:0));
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.CharacterId);
         BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(16,4),value.StartIndex);
         frame[20]=(byte)(value.Complete?1:0);
@@ -48,6 +50,10 @@ public static partial class WireProtocol
             frame[offset+24]=checked((byte)item.EnhancementLevel);
             BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(offset+25,4),item.DurabilityRaw);
         }
+        // The authenticated final inventory chunk carries the durable wallet.
+        // Legacy diagnostic frames may omit it; an omitted wallet is unknown, not zero.
+        if(value.WalletMoney is long wallet)
+            BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(frame.Length-8,8),wallet);
         return frame;
     }
 
@@ -63,9 +69,16 @@ public static partial class WireProtocol
         int count=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(21,2));
         if(character<=0||start<0||complete>1||
             count>InventorySnapshotMaxItemsPerFrame||
-            start+count>InventorySnapshotMaxItems ||
-            frame.Length!=InventorySnapshotHeaderBytes+count*InventoryItemBytes)
+            start>InventorySnapshotMaxItems || start+count>InventorySnapshotMaxItems)
             return false;
+        int itemEnd=InventorySnapshotHeaderBytes+count*InventoryItemBytes;
+        long? wallet=null;
+        if(frame.Length==itemEnd+8 && complete==1)
+        {
+            wallet=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(itemEnd,8));
+            if(wallet.Value<0 || wallet.Value>SqliteIdentityStore.MaximumMoney) return false;
+        }
+        else if(frame.Length!=itemEnd) return false;
         var items=new List<InventoryItemWire>(count);
         var ids=new HashSet<long>();
         for(int i=0;i<count;i++)
@@ -84,7 +97,7 @@ public static partial class WireProtocol
                !ids.Add(item.ItemUid)) return false;
             items.Add(item);
         }
-        value=new(character,start,complete==1,items);
+        value=new(character,start,complete==1,items,wallet);
         return true;
     }
 

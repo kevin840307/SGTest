@@ -918,8 +918,9 @@ public static partial class WireProtocol
                 advertised <= PartySnapshotMaximumFrameBytes,
             WireOpcode.InventorySnapshot => advertised >= InventorySnapshotHeaderBytes &&
                 advertised <= InventorySnapshotHeaderBytes +
-                    InventorySnapshotMaxItemsPerFrame*InventoryItemBytes &&
-                (advertised-InventorySnapshotHeaderBytes)%InventoryItemBytes==0,
+                    InventorySnapshotMaxItemsPerFrame*InventoryItemBytes+8 &&
+                ((advertised-InventorySnapshotHeaderBytes)%InventoryItemBytes==0 ||
+                 (advertised-InventorySnapshotHeaderBytes)%InventoryItemBytes==8),
             WireOpcode.SkillBookSnapshot =>
                 advertised >= SkillBookSnapshotHeaderBytes &&
                 advertised <= SkillBookSnapshotHeaderBytes +

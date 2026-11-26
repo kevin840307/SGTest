@@ -56,7 +56,7 @@ internal static class BankAesChecks
                 "bank_tls_user","Bank-Aes-Password-123!");
             Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
                 await ReadFrame(first.Aes),out var inventory)&&
-                inventory is not null&&inventory.Complete&&inventory.Items.Count==0,
+                inventory is not null&&inventory.Complete&&inventory.Items.Count==0&&inventory.WalletMoney==1000,
                 "bank AES initial inventory baseline mismatch");
 
             long epoch=_lastMapEpoch;
@@ -111,7 +111,7 @@ internal static class BankAesChecks
                 "bank_tls_user","Bank-Aes-Password-123!");
             Checks.Require(WireProtocol.TryDecodeInventorySnapshot(
                 await ReadFrame(second.Aes),out var inventory2)&&
-                inventory2 is not null&&inventory2.Complete,
+                inventory2 is not null&&inventory2.Complete&&inventory2.WalletMoney==750,
                 "bank AES relogin inventory baseline missing");
 
             var reopen=WireProtocol.EncodeBankOpen(new(_lastMapEpoch,1,88));

@@ -30,6 +30,14 @@ internal static class InventorySnapshotChecks
             decodedEmpty is not null && decodedEmpty.Complete &&
             decodedEmpty.Items.Count==0,
             "zero-item final baseline frame was not emitted");
+        var wallet=WireProtocol.EncodeInventorySnapshot(new(11,0,true,Array.Empty<InventoryItemWire>(),123456));
+        Checks.Require(wallet.Length==31 && WireProtocol.TryDecodeInventorySnapshot(wallet,out var walletDecoded) &&
+            walletDecoded?.WalletMoney==123456,"authoritative wallet trailer round trip");
+        wallet[20]=0;
+        Checks.Require(!WireProtocol.TryDecodeInventorySnapshot(wallet,out _),"nonfinal wallet trailer accepted");
+        wallet[20]=1;
+        System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(wallet.AsSpan(23),-1);
+        Checks.Require(!WireProtocol.TryDecodeInventorySnapshot(wallet,out _),"negative wallet trailer accepted");
 
         byte[] bad=(byte[])payload.Clone();
         bad[20]=2; // complete flag may only be 0 or 1
