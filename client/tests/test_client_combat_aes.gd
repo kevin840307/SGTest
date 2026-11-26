@@ -129,6 +129,37 @@ func _initialize() -> void:
 		_fail("authoritative skill settlement "+str(session.snapshot()),session)
 		return
 
+	var dropped := _wait(session,func(v):
+		return (
+			v.ground_drops.size()==1
+			and int(v.last_skill_result.current_hp)==0
+		),7000)
+	if dropped.is_empty():
+		_fail("authoritative v2 loot did not enter client AOI "+str(session.snapshot()),session)
+		return
+	var drop_ids: Array = dropped.ground_drops.keys()
+	var drop_id := int(drop_ids[0])
+	var drop: Dictionary = dropped.ground_drops[drop_id]
+	if int(drop.item_definition_id)!=2701 or int(drop.quantity)!=2:
+		_fail("unexpected v2 loot payload "+str(drop),session)
+		return
+	if not session.pickup_ground_drop(drop_id):
+		_fail("pickup intent refused for authoritative ground UID",session)
+		return
+	var picked := _wait(session,func(v):
+		return (
+			int(v.last_pickup_result_sequence)==1
+			and int(v.last_pickup_result_status)==0
+			and int(v.last_pickup_result.drop_id)==drop_id
+			and int(v.last_pickup_result.item_definition_id)==2701
+			and int(v.last_pickup_result.quantity)==2
+			and v.received_item_grants.size()==1
+			and v.ground_drops.is_empty()
+		),7000)
+	if picked.is_empty():
+		_fail("SQLite pickup result/AOI despawn did not converge "+str(session.snapshot()),session)
+		return
+
 	# Wait for the same authoritative monster generation to respawn, then try a
 	# synthetic rule whose MP cost exceeds the remaining durable MP.
 	var respawned_monster := _wait(session,func(v):
@@ -162,7 +193,42 @@ func _initialize() -> void:
 		_fail("rejected MP skill emitted presentation damage",session)
 		return
 	session.stop()
-	print("CLIENT_COMBAT_AES_PASS target=%d player_damage=60 normal_attack_hp=40 skill_id=99001 skill_damage=40 skill_mp=2_to_1 insufficient_mp_status=11 rejected_skill_no_damage=true monster_respawn_hp=100 monster_damage=18 death_hp=0 respawn_hp=100 dead=false skill_request_has_no_damage=true skill_receipt_does_not_mutate_monster=true player_damage_visual=true player_respawn_visual=true visual_after_db_commit=true public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
+	OS.delay_msec(50)
+
+	var relog = Session.new()
+	if relog.connect_secure("127.0.0.1",int(args[0]),USERNAME,PASSWORD) != OK:
+		_fail("relog connect",relog)
+		return
+	var relog_selecting := _wait(relog,func(v):
+		return int(v.state)==WorldState.STATE_SELECTING_CHARACTER,5000)
+	if relog_selecting.is_empty() or relog_selecting.characters.size()!=1:
+		_fail("relog character list "+str(relog.snapshot()),relog)
+		return
+	if not FixtureLogin.provision_and_choose(relog, character_id):
+		_fail("relog choose",relog)
+		return
+	var relog_ready := _wait(relog,func(v):
+		if (
+			int(v.state)!=WorldState.STATE_IN_WORLD
+			or not bool(v.world_ready)
+			or not bool(v.inventory_ready)
+			or v.inventory_items.size()!=1
+			or not v.ground_drops.is_empty()
+			or not v.received_item_grants.is_empty()
+		):
+			return false
+		var values: Array = v.inventory_items.values()
+		var item: Dictionary = values[0]
+		return (
+			int(item.item_definition_id)==2701
+			and int(item.quantity)==2
+			and int(item.drop_id)==drop_id
+		),7000)
+	if relog_ready.is_empty():
+		_fail("relog inventory/ground-drop persistence "+str(relog.snapshot()),relog)
+		return
+	relog.stop()
+	print("CLIENT_COMBAT_AES_PASS target=%d player_damage=60 normal_attack_hp=40 skill_id=99001 skill_damage=40 skill_mp=2_to_1 loot_v2=true ground_uid=true item=2701 quantity=2 pickup=true atomic_inventory=true aoidespawn=true relog_inventory=true ground_drop_absent_after_relog=true insufficient_mp_status=11 rejected_skill_no_damage=true monster_respawn_hp=100 monster_damage=18 death_hp=0 respawn_hp=100 dead=false skill_request_has_no_damage=true skill_receipt_does_not_mutate_monster=true player_damage_visual=true player_respawn_visual=true visual_after_db_commit=true public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

@@ -218,7 +218,8 @@ public sealed class WorldAoiPump
                            changed.State==MonsterAiState.Dead)
                         {
                             if(_loot is not null&&
-                               _loot.TryPostDeath(changed)==MonsterLootPostStatus.Backpressured)
+                               _loot.TryPostDeath(changed,attack.Profile?.Level??0)==
+                                   MonsterLootPostStatus.Backpressured)
                                 throw new AoiBackpressureException(
                                     "Loot settlement queue full; accepted death must not be dropped");
                             TryPostExperienceDeath(changed);
@@ -265,7 +266,8 @@ public sealed class WorldAoiPump
                         if(changed.CurrentHp==0&&changed.State==MonsterAiState.Dead)
                         {
                             if(_loot is not null&&
-                               _loot.TryPostDeath(changed)==MonsterLootPostStatus.Backpressured)
+                               _loot.TryPostDeath(changed,petAttack.Profile?.Level??0)==
+                                   MonsterLootPostStatus.Backpressured)
                                 throw new AoiBackpressureException(
                                     "Loot settlement queue full; accepted pet death must not be dropped");
                             TryPostExperienceDeath(changed);
@@ -313,7 +315,8 @@ public sealed class WorldAoiPump
                         if(changed.CurrentHp==0&&changed.State==MonsterAiState.Dead)
                         {
                             if(_loot is not null&&
-                               _loot.TryPostDeath(changed)==MonsterLootPostStatus.Backpressured)
+                               _loot.TryPostDeath(changed,petSkill.Profile?.Level??0)==
+                                   MonsterLootPostStatus.Backpressured)
                                 throw new AoiBackpressureException(
                                     "Loot settlement queue full; accepted pet skill death must not be dropped");
                             TryPostExperienceDeath(changed);
@@ -528,7 +531,8 @@ public sealed class WorldAoiPump
                     if(monster.CurrentHp==0&&monster.State==MonsterAiState.Dead)
                     {
                         if(_loot is not null&&
-                           _loot.TryPostDeath(monster)==MonsterLootPostStatus.Backpressured)
+                           _loot.TryPostDeath(monster,skill.Profile?.Level??0)==
+                               MonsterLootPostStatus.Backpressured)
                             throw new AoiBackpressureException(
                                 "Loot settlement queue full; accepted skill death must not be dropped");
                         TryPostExperienceDeath(monster);

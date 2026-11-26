@@ -306,13 +306,29 @@ internal static class Program
                     // Explicit synthetic failure-path rule. It exists only to
                     // prove insufficient MP cannot mutate the target.
                     [99002]=new(99002,10,48,1,MpCost:2)
-                });
+                },
+                normalAttackHitRules:
+                [new CharacterExperienceRewardRule(
+                    15, 1, 3, 1,
+                    CharacterExperienceRewardTrust.SyntheticTest,
+                    "ci:combat-hit-fixture", EnemyDodge: 0)],
+                normalAttackRoll: () => 0);
 
             await using var world = new ServerWorldHost(
                 [grid], options: new WorldHostOptions(PublishIdleTicks: true));
             await world.StartAsync().ConfigureAwait(false);
             using var store = new SqliteIdentityStore(Path.Combine(root, "identity.db"));
             await store.InitializeAsync().ConfigureAwait(false);
+            long lootGeneration = await store.AllocateLootWorldGenerationAsync()
+                .ConfigureAwait(false);
+            var loot = new MonsterLootSettlement(
+                store, lootGeneration,
+                [new MonsterDropRule(
+                    15, 1, 0, 2701, 2,
+                    LootSourceTrust.SyntheticTest, "ci:v2-probability",
+                    EnemyLevel: 3, RollThreshold: 100,
+                    LevelDeltaDivisor: 15, Guaranteed: false)],
+                capacity: 8, nextRoll: () => 0);
             long accountId = (await store.CreateAccountAsync(Username, Password))
                 .AccountId;
             long characterId = (await store.CreateCharacterAsync(
@@ -351,9 +367,11 @@ internal static class Program
                             "combat fixture damage visual queue full");
                 });
             var pump = new WorldAoiPump(
-                router, monsters: coordinator, playerCombat: settlement);
+                router, monsters: coordinator, playerCombat: settlement,
+                loot: loot);
             var authorization = new IdentitySessionAuthorization(
-                store, world, combat: settlement);
+                store, world, combat: settlement,
+                pickupWorldGeneration: lootGeneration);
             var settings = AesCbcSettings.FromEnvironment();
 
             var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -362,6 +380,7 @@ internal static class Program
             var routing = router.RunAsync(world.Results);
             var pumping = pump.RunAsync(stop.Token);
             var settling = settlement.RunAsync(stop.Token);
+            var looting = loot.RunAsync();
             try
             {
                 int port = ((IPEndPoint)listener.LocalEndpoint).Port;
@@ -376,13 +395,32 @@ internal static class Program
                     new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000))
                     .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
 
+                using var relogClient = await listener.AcceptTcpClientAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                var relogEnded = await authorization.RunAuthenticatedAesSocketAsync(
+                    relogClient, settings, router,
+                    new AesWireConnectionOptions(AuthorizationTimeoutMilliseconds: 15000))
+                    .WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+
                 var monster = runtime.SnapshotAll().Single();
                 var player = await store.GetCharacterCombatProfileAsync(characterId)
+                    .ConfigureAwait(false);
+                var inventory = await store.ListInventoryItemsAsync(characterId)
+                    .ConfigureAwait(false);
+                var activeDrops = await store.ListActiveGroundDropsAsync(15)
                     .ConfigureAwait(false);
                 if (monster.CurrentHp != 100 || monster.MaxHp != 100 ||
                     player?.Data.CurrentHp != 100 || player.Data.MaxHp != 100 ||
                     player.Data.CurrentMp != 1 || player.Data.MaxMp != 2 ||
-                    ended.CommandsAccepted != 6 ||
+                    inventory.Count != 1 ||
+                    inventory[0].ItemDefinitionId != 2701 ||
+                    inventory[0].Quantity != 2 ||
+                    inventory[0].SourceDropId <= 0 ||
+                    activeDrops.Count != 0 ||
+                    loot.Statistics.DeathsCommitted != 1 ||
+                    loot.Statistics.DropsCommitted != 1 ||
+                    ended.CommandsAccepted != 7 ||
+                    relogEnded.CommandsAccepted != 1 ||
                     settlement.Statistics.HitsCommitted != 1 ||
                     settlement.Statistics.DamageCommitted != 18 ||
                     settlement.Statistics.DeathsCommitted != 1 ||
@@ -390,19 +428,29 @@ internal static class Program
                     throw new InvalidOperationException(
                         $"combat E2E mismatch monster={monster.CurrentHp}/{monster.MaxHp} " +
                         $"player={player?.Data.CurrentHp}/{player?.Data.MaxHp} " +
+                        $"inventory={inventory.Count} activeDrops={activeDrops.Count} " +
+                        $"lootDeaths={loot.Statistics.DeathsCommitted} lootDrops={loot.Statistics.DropsCommitted} " +
                         $"hits={settlement.Statistics.HitsCommitted} deaths={settlement.Statistics.DeathsCommitted} " +
-                        $"commands={ended.CommandsAccepted} sessions={router.Statistics.ActiveSessions}");
+                        $"commands={ended.CommandsAccepted} relogCommands={relogEnded.CommandsAccepted} " +
+                        $"sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
                     $"COMBAT_FIXTURE_PASS aes=true target={monster.EntityId} " +
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} player_hp={player.Data.CurrentHp}/{player.Data.MaxHp} " +
-                    $"player_mp={player.Data.CurrentMp}/{player.Data.MaxMp} respawn=true skill_99001=true skill_mp_cost=1 insufficient_skill_99002=true monster_damage_committed={settlement.Statistics.DamageCommitted} deaths={settlement.Statistics.DeathsCommitted} commands={ended.CommandsAccepted}");
+                    $"player_mp={player.Data.CurrentMp}/{player.Data.MaxMp} respawn=true skill_99001=true skill_mp_cost=1 " +
+                    $"loot_v2=true item=2701 quantity=2 source_drop={inventory[0].SourceDropId} pickup=true " +
+                    $"relog_inventory=true ground_drop_absent_after_relog=true " +
+                    $"insufficient_skill_99002=true monster_damage_committed={settlement.Statistics.DamageCommitted} " +
+                    $"deaths={settlement.Statistics.DeathsCommitted} commands={ended.CommandsAccepted} " +
+                    $"relog_commands={relogEnded.CommandsAccepted}");
                 Console.Out.Flush();
                 return 0;
             }
             finally
             {
                 listener.Stop();
+                loot.Complete();
+                await looting.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
                 stop.Cancel();
                 await Task.WhenAll(pumping, settling).ConfigureAwait(false);
                 await world.StopAsync().ConfigureAwait(false);

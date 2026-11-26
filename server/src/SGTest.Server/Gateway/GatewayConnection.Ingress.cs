@@ -644,7 +644,8 @@ public sealed partial class GatewayConnection
                 return WireFrameDisposition.ProtocolViolation;
             var request=new TrustedPetAttack(
                 bound.ActorId,bound.ConnectionEpoch,petAttack.MapEpoch,
-                petAttack.AttackSequence,petAttack.PetUid,petAttack.TargetEntityId);
+                petAttack.AttackSequence,petAttack.PetUid,petAttack.TargetEntityId,
+                _combatProfile);
             if(!postPetAttack(request))
                 return WireFrameDisposition.Backpressured;
             _lastPetAttackSequence=petAttack.AttackSequence;
@@ -661,7 +662,7 @@ public sealed partial class GatewayConnection
             var request=new TrustedPetSkill(
                 bound.ActorId,bound.ConnectionEpoch,petSkill.MapEpoch,
                 petSkill.SkillSequence,petSkill.PetUid,petSkill.SkillId,
-                petSkill.TargetEntityId);
+                petSkill.TargetEntityId,_combatProfile);
             if(!postPetSkill(request))
                 return WireFrameDisposition.Backpressured;
             _lastPetSkillSequence=petSkill.SkillSequence;

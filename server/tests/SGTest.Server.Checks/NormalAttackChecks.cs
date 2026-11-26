@@ -365,7 +365,9 @@ internal static class NormalAttackChecks
         long generation=await lootStore.AllocateLootWorldGenerationAsync();
         var loot=new MonsterLootSettlement(lootStore,generation,
             [new MonsterDropRule(mapId,1,0,2701,2,
-                LootSourceTrust.SyntheticTest,"ci:explicit-synthetic")]);
+                LootSourceTrust.SyntheticTest,"ci:v2-probability",3,100,15,
+                Guaranteed:false)],
+            nextRoll:()=>0);
 
         await using var host=new ServerWorldHost(
             [grid],options:new WorldHostOptions(PublishIdleTicks:true));

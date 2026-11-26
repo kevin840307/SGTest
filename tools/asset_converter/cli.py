@@ -31,6 +31,7 @@ from asset_converter.content.build_pet_visual_evidence import publish_pet_visual
 from asset_converter.content.build_pet_runtime_catalog import publish_pet_runtime_catalog
 from asset_converter.content.build_pet_growth_curve import publish_pet_growth_curve
 from asset_converter.content.build_character_experience_rewards import publish_character_experience_rewards
+from asset_converter.content.build_monster_drop_rules import publish_monster_drop_rules
 from asset_converter.content.build_character_progression_rules import publish_character_progression_rules
 from asset_converter.content.build_weapon_attack_ranges import publish_weapon_attack_ranges
 from asset_converter.content.build_weapon_definition_ranges import publish_weapon_definition_ranges
@@ -424,6 +425,19 @@ def main() -> int:
         '--source-reference',
         default='Old SGOEnemyDistSys LoadNewCSVData/AddAttr + Enemy_Data.csv + EN_AttXX.csv',
         help='non-private provenance label')
+    monster_drop = sub.add_parser(
+        'monster-drop-rules',
+        help='compile audited Old Server per-map monster drop probability rules')
+    monster_drop.add_argument('--server-dat',type=Path,required=True,
+                      help='Old Server Dat root containing Enemy and Map')
+    monster_drop.add_argument('--map',dest='maps',action='append',type=int,required=True,
+                      help='map id to include; repeatable')
+    monster_drop.add_argument('--output',type=Path,
+                      default=REPO/'local-assets/asset_converter/combat/monster_drop_rules.json')
+    monster_drop.add_argument(
+        '--source-reference',
+        default='Old SGOEnemyDistSys::LoadEnemyData/CheckDropItem + Dat/Enemy/Enemy_Data.csv + enemy.cfg',
+        help='non-private provenance label')
     weapon_ranges = sub.add_parser(
         'weapon-attack-ranges',
         help='compile audited Old Server Weapon.itd item attack distances')
@@ -495,9 +509,9 @@ def main() -> int:
         args.map_ids = sorted(selected_maps)
     if args.command == 'world-content' and args.output and (args.all_maps or len(args.map_ids) > 1 or args.include_map or args.include_population):
         ap.error('multiple maps, include-map and include-population use output-root, not a single output file')
-    if args.command == 'character-experience-rules':
+    if args.command in ('character-experience-rules','monster-drop-rules'):
         if len(set(args.maps)) != len(args.maps) or any(not 1 <= n <= 65535 for n in args.maps):
-            ap.error('character EXP map IDs must be unique integers between 1 and 65535')
+            ap.error('reward map IDs must be unique integers between 1 and 65535')
     try:
         with converter_operation(REPO/'.cache/asset_converter/operation.lock'):
             return _execute(args)
@@ -567,6 +581,15 @@ def _execute(args):
     if args.command == 'character-experience-rules':
         try:
             result = publish_character_experience_rewards(
+                args.server_dat,args.output,set(args.maps),
+                source_reference=args.source_reference)
+        except (OSError,ValueError,TypeError) as error:
+            result = {'status':'failed','error':str(error)}
+        print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
+        return 0 if result['status']=='pass' else 1
+    if args.command == 'monster-drop-rules':
+        try:
+            result = publish_monster_drop_rules(
                 args.server_dat,args.output,set(args.maps),
                 source_reference=args.source_reference)
         except (OSError,ValueError,TypeError) as error:
