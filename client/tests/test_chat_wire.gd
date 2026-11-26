@@ -348,10 +348,49 @@ func _initialize()->void:
 	):
 		_fail("friend message relog archive retrieval")
 		return
+
+	# Original type-15 offline mailbox returns a successful queued state even
+	# though the peer has no live connection. That result must close the pending
+	# send and archive the outgoing message instead of failing as unavailable.
+	var offline_sender:=_base_world(987654323)
+	offline_sender.friends[22]={"actor_id":22,"name":"MultiHeroOne","online":false}
+	if not offline_sender.mark_friend_message_sent(10,22,"離線信箱"):
+		_fail("offline friend message sender admission")
+		return
+	var offline_result:=WHISPER_RESULT_HEX.hex_decode()
+	offline_result[20]=3
+	for i in range(29,37):
+		offline_result[i]=0
+	var decoded_offline:=WireCodec.decode_whisper_result(offline_result)
+	if (
+		decoded_offline.is_empty() or int(decoded_offline.status)!=3 or
+		int(decoded_offline.target_connection_epoch)!=0 or
+		str(decoded_offline.target_name)!="MultiHeroOne"
+	):
+		_fail("offline friend queued result codec")
+		return
+	if not offline_sender.apply_frame(offline_result):
+		_fail("offline friend queued result reducer "+offline_sender.protocol_error)
+		return
+	var offline_snapshot:=offline_sender.snapshot()
+	if (
+		int(offline_snapshot.pending_whisper_sequence)!=0 or
+		int(offline_snapshot.last_whisper_result_status)!=3 or
+		(offline_snapshot.friend_messages as Array).size()!=1 or
+		str(offline_snapshot.friend_messages[0].direction)!="outgoing" or
+		not bool(offline_snapshot.friend_messages[0].get("offline_queued",false)) or
+		int(offline_snapshot.friend_messages[0].target_connection_epoch)!=0 or
+		str(offline_snapshot.friend_messages[0].message)!="離線信箱"
+	):
+		_fail("offline friend queued sender history")
+		return
+
 	DirAccess.remove_absolute(
 		ProjectSettings.globalize_path(friend_sender._friend_message_history_path()))
 	DirAccess.remove_absolute(
 		ProjectSettings.globalize_path(friend_observer._friend_message_history_path()))
+	DirAccess.remove_absolute(
+		ProjectSettings.globalize_path(offline_sender._friend_message_history_path()))
 
 	var emotion_command:=WireCodec.encode_emotion_command(3,9,5)
 	if emotion_command.hex_encode().to_upper()!=EMOTION_COMMAND_HEX:

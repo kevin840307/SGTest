@@ -159,7 +159,8 @@ public enum WhisperResultStatus : byte
 {
     Delivered = 0,
     TargetUnavailable = 1,
-    SelfTarget = 2
+    SelfTarget = 2,
+    QueuedOffline = 3
 }
 public enum ClanCommandAction : byte
 {

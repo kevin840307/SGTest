@@ -717,12 +717,15 @@ public static partial class WireProtocol
         WhisperResultWire value,byte[] targetName)
     {
         if(value.MapEpoch<=0||value.ChatSequence==0||
-           (byte)value.Status>(byte)WhisperResultStatus.SelfTarget||
+           (byte)value.Status>(byte)WhisperResultStatus.QueuedOffline||
            value.TargetActorId<0||
            targetName.Length>ChatMaxSenderNameBytes)
             return false;
         if(value.Status==WhisperResultStatus.Delivered)
             return value.TargetActorId>0&&value.TargetConnectionEpoch>0&&
+                targetName.Length>0&&!string.IsNullOrWhiteSpace(value.TargetName);
+        if(value.Status==WhisperResultStatus.QueuedOffline)
+            return value.TargetActorId>0&&value.TargetConnectionEpoch==0&&
                 targetName.Length>0&&!string.IsNullOrWhiteSpace(value.TargetName);
         if(value.Status==WhisperResultStatus.SelfTarget)
             return value.TargetActorId>0&&value.TargetConnectionEpoch==0&&

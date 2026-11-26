@@ -587,6 +587,30 @@ internal static class ChatWireChecks
             WireProtocol.TryDecodeWhisperResult(ignoredFrame,out var ignored)&&
             ignored.Status==WhisperResultStatus.TargetUnavailable,
             "friend message bypassed recipient ignore authority");
+
+        Checks.Require(router.TryDetach(target),
+            "friend offline-message fixture could not detach target");
+        bool queuedOffline=false;
+        ChatRouting.RouteAsync(
+            trusted with { ChatSequence=15,Message="離線信箱" },
+            router,null,NotIgnored,null,Friends,
+            (source,connection,sequence,recipient,message)=>
+            {
+                queuedOffline=
+                    source==11&&connection==5&&sequence==15&&
+                    recipient==22&&message=="離線信箱";
+                return Task.FromResult(new FriendOfflineQueueResult(
+                    FriendOfflineQueueStatus.Queued,22,"FriendTarget"));
+            }).GetAwaiter().GetResult();
+        Checks.Require(
+            queuedOffline&&
+            sender.TryDequeueReliable(out var queuedFrame)&&
+            WireProtocol.TryDecodeWhisperResult(queuedFrame,out var queuedResult)&&
+            queuedResult.Status==WhisperResultStatus.QueuedOffline&&
+            queuedResult.TargetActorId==22&&
+            queuedResult.TargetConnectionEpoch==0&&
+            queuedResult.TargetName=="FriendTarget",
+            "offline friend message did not return authoritative queued-mailbox result");
     }
 
     private static void Gate()

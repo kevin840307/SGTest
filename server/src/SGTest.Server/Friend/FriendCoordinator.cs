@@ -32,6 +32,25 @@ public sealed class FriendCoordinator
             var ignored=await _identity.GetIgnoredFriendsAsync(binding.ActorId).ConfigureAwait(false);
             if(friends.Count>0||ignored.Count>0)
                 await QueueSnapshotAsync(binding,router).ConfigureAwait(false);
+
+            var offlineMessages=await _identity.GetFriendOfflineMessagesAsync(binding.ActorId)
+                .ConfigureAwait(false);
+            foreach(var message in offlineMessages)
+            {
+                var delivery=new ChatDeliveryWire(
+                    binding.MapEpoch,message.SenderCharacterId,
+                    message.SenderConnectionEpoch,message.SenderChatSequence,
+                    ChatChannel.FriendMessage,0,message.SenderName,message.Message);
+                var status=router.QueueChatDelivery(binding,delivery);
+                if(status!=GatewaySendStatus.Enqueued)
+                    throw new IOException(
+                        "Offline friend-message delivery could not be queued: "+status);
+                if(!await _identity.DeleteFriendOfflineMessageAsync(
+                    binding.ActorId,message.MessageId).ConfigureAwait(false))
+                    throw new InvalidOperationException(
+                        "Queued offline friend-message could not be consumed");
+            }
+
             var relations=await _identity.GetFriendRelationsAsync(binding.ActorId).ConfigureAwait(false);
             foreach(var friend in relations)
                 if(router.TryGetCurrentBinding(friend.CharacterId,out var peer))

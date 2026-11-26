@@ -1,5 +1,6 @@
 using SGTest.Server.Clan;
 using SGTest.Server.Gateway;
+using SGTest.Server.Identity;
 using SGTest.Server.Party;
 using SGTest.Server.Visibility;
 using SGTest.Server.Wire;
@@ -16,7 +17,8 @@ public static class ChatRouting
     public static async Task RouteAsync(TrustedChatCommand request,
         WorldResultRouter router,PartyCoordinator? parties,
         Func<long,long,Task<bool>>? isIgnored=null,ClanCoordinator? clans=null,
-        Func<long,long,Task<bool>>? isFriend=null)
+        Func<long,long,Task<bool>>? isFriend=null,
+        Func<long,long,uint,long,string,Task<FriendOfflineQueueResult>>? queueFriendOffline=null)
     {
         var sender=new ConnectionBinding(
             request.ActorId,request.ConnectionEpoch,request.RequestMapEpoch);
@@ -183,10 +185,21 @@ public static class ChatRouting
             }
             else if(!friendTargetFound)
             {
-                friendResult=new(
-                    request.RequestMapEpoch,request.ChatSequence,
-                    WhisperResultStatus.TargetUnavailable,request.TargetActorId,
-                    0,string.Empty);
+                FriendOfflineQueueResult? offline=queueFriendOffline is null
+                    ?null
+                    :await queueFriendOffline(
+                        request.ActorId,request.ConnectionEpoch,request.ChatSequence,
+                        request.TargetActorId,request.Message).ConfigureAwait(false);
+                friendResult=offline is not null&&
+                    offline.Status==FriendOfflineQueueStatus.Queued
+                    ?new WhisperResultWire(
+                        request.RequestMapEpoch,request.ChatSequence,
+                        WhisperResultStatus.QueuedOffline,offline.TargetCharacterId,
+                        0,offline.TargetName)
+                    :new WhisperResultWire(
+                        request.RequestMapEpoch,request.ChatSequence,
+                        WhisperResultStatus.TargetUnavailable,request.TargetActorId,
+                        0,string.Empty);
             }
             else if(isFriend is null||
                     !await isFriend(request.ActorId,friendTarget.ActorId)

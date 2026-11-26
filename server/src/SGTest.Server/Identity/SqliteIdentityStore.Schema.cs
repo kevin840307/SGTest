@@ -1032,6 +1032,21 @@ ON character_ignores(target_character_id,owner_character_id);",tx);
 );",tx);
             Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_character_friend_aliases_target
 ON character_friend_aliases(target_character_id,owner_character_id);",tx);
+            // Schema v46: Old icq.sql persists friend offline messages with recipient,
+            // sender and message text. Keep sender connection/sequence so delayed
+            // delivery can still use the existing replay-safe FriendMessage wire.
+            Execute(connection,@"CREATE TABLE IF NOT EXISTS character_friend_offline_messages (
+    message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recipient_character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    sender_character_id INTEGER NOT NULL REFERENCES characters(character_id) ON DELETE CASCADE,
+    sender_connection_epoch INTEGER NOT NULL CHECK(sender_connection_epoch > 0),
+    sender_chat_sequence INTEGER NOT NULL CHECK(sender_chat_sequence BETWEEN 1 AND 4294967295),
+    message TEXT NOT NULL CHECK(length(CAST(message AS BLOB)) BETWEEN 1 AND 101),
+    created_unix_ms INTEGER NOT NULL,
+    CHECK(recipient_character_id <> sender_character_id)
+);",tx);
+            Execute(connection,@"CREATE INDEX IF NOT EXISTS ix_character_friend_offline_recipient
+ON character_friend_offline_messages(recipient_character_id,message_id);",tx);
             // Schema v36: durable Mecha roster and exactly one mounted instance per
             // character. Exact HK parts/card/stat semantics remain source-gated;
             // parts_blob is opaque server-owned state in this lifecycle baseline.

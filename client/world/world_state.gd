@@ -4621,12 +4621,18 @@ func _apply_whisper_result(frame:PackedByteArray)->bool:
 		target_matches=response_target>=0
 	if sequence!=pending_whisper_sequence or not target_matches:
 		return fail("whisper_result_wrong_request")
-	if status==0:
+	if status==0 or status==3:
+		var offline_queued:=status==3
 		if (
-			int(value.target_connection_epoch)<=0 or
-			str(value.target_name).strip_edges().is_empty()
+			str(value.target_name).strip_edges().is_empty() or
+			(offline_queued and int(value.target_connection_epoch)!=0) or
+			(not offline_queued and int(value.target_connection_epoch)<=0)
 		):
-			return fail("whisper_delivered_without_target_identity")
+			return fail(
+				"whisper_offline_queue_without_friend_identity"
+				if offline_queued else
+				"whisper_delivered_without_target_identity"
+			)
 		if pending_whisper_is_friend_message:
 			_append_friend_message({
 				"receiver_map_epoch":map_epoch,
@@ -4642,8 +4648,11 @@ func _apply_whisper_result(frame:PackedByteArray)->bool:
 				"peer_name":str(value.target_name),
 				"target_actor_id":response_target,
 				"target_connection_epoch":int(value.target_connection_epoch),
-				"target_name":str(value.target_name)
+				"target_name":str(value.target_name),
+				"offline_queued":offline_queued
 			})
+		elif offline_queued:
+			return fail("regular_whisper_offline_queue")
 		else:
 			_append_chat_message({
 				"receiver_map_epoch":map_epoch,

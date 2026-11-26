@@ -317,7 +317,10 @@ public sealed partial class IdentitySessionAuthorization
                 handleChat:request=>ChatRouting.RouteAsync(
                     request,router,_parties,
                     (owner,target)=>_identity.IsIgnoredAsync(owner,target),_clans,
-                    (left,right)=>_identity.IsFriendAsync(left,right)),
+                    (left,right)=>_identity.IsFriendAsync(left,right),
+                    (sender,connection,sequence,target,message)=>
+                        _identity.QueueFriendOfflineMessageAsync(
+                            sender,connection,sequence,target,message)),
                 handleParty: _parties is null ? null : request => _parties.HandleAsync(request, router),
                 handleClan: _clans is null ? null : request => _clans.HandleAsync(request, router),
                 handleFriend: _friends is null ? null : request => _friends.HandleAsync(request, router),

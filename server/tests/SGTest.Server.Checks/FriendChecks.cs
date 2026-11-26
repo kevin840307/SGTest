@@ -293,10 +293,30 @@ UPDATE schema_version SET version=43;";
                 "friend disconnect did not preserve owner alias while notifying offline");
             Checks.Require(router.TryDetach(b),"friend old binding detach failed");
 
+            var queued=await store.QueueFriendOfflineMessageAsync(
+                aId,11,77,bId,"離線好友訊息");
+            Checks.Require(
+                queued.Status==FriendOfflineQueueStatus.Queued&&
+                queued.TargetCharacterId==bId&&queued.TargetName=="補師"&&
+                (await store.GetFriendOfflineMessagesAsync(bId)).Count==1,
+                "offline friend message was not persisted for an offline friend");
+
             var b2=Gateway(Actor(bId,23,6),"PresenceBeta");
             Checks.Require(router.TryAttach(b2),"friend relog binding attach failed");
             await coordinator.AttachAsync(b2.Binding,router);
             var bRelog=DrainSnapshot(b2);
+            Checks.Require(
+                b2.TryDequeueReliable(out var offlineFrame)&&
+                WireProtocol.TryDecodeChatDelivery(offlineFrame,out var offlineMessage)&&
+                offlineMessage.Channel==ChatChannel.FriendMessage&&
+                offlineMessage.ReceiverMapEpoch==6&&
+                offlineMessage.SenderActorId==aId&&
+                offlineMessage.SenderConnectionEpoch==11&&
+                offlineMessage.ChatSequence==77&&
+                offlineMessage.SenderName=="PresenceAlpha"&&
+                offlineMessage.Message=="離線好友訊息"&&
+                (await store.GetFriendOfflineMessagesAsync(bId)).Count==0,
+                "friend relog did not deliver and consume the durable offline mailbox");
             var aRelog=DrainSnapshot(a);
             Checks.Require(bRelog.Friends.Count==1&&bRelog.Friends[0].IsOnline&&
                 bRelog.Friends[0].Name=="PresenceAlpha"&&

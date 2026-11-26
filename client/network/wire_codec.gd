@@ -2617,7 +2617,7 @@ static func decode_whisper_result(frame:PackedByteArray)->Dictionary:
 	var target_connection:=reader.get_64()
 	var name_count:=reader.get_u16()
 	if (
-		epoch<=0 or sequence==0 or status>2 or target<0 or
+		epoch<=0 or sequence==0 or status>3 or target<0 or
 		name_count>CHAT_MAX_SENDER_NAME_BYTES or
 		reader.get_available_bytes()!=name_count
 	):
@@ -2636,6 +2636,9 @@ static func decode_whisper_result(frame:PackedByteArray)->Dictionary:
 			return {}
 	if status==0:
 		if target<=0 or target_connection<=0 or name_count==0:
+			return {}
+	elif status==3:
+		if target<=0 or target_connection!=0 or name_count==0:
 			return {}
 	elif status==2:
 		if target<=0 or target_connection!=0 or name_count!=0:

@@ -198,6 +198,16 @@ WHERE (owner_character_id=$a AND target_character_id=$b)
                 clearAliases.Parameters.AddWithValue("$b",targetCharacterId);
                 clearAliases.ExecuteNonQuery();
             }
+            using(var clearOffline=connection.CreateCommand())
+            {
+                clearOffline.Transaction=tx;
+                clearOffline.CommandText=@"DELETE FROM character_friend_offline_messages
+WHERE (recipient_character_id=$a AND sender_character_id=$b)
+   OR (recipient_character_id=$b AND sender_character_id=$a);";
+                clearOffline.Parameters.AddWithValue("$a",characterId);
+                clearOffline.Parameters.AddWithValue("$b",targetCharacterId);
+                clearOffline.ExecuteNonQuery();
+            }
             tx.Commit();
             return FriendStoreStatus.Success;
         },cancellationToken).ConfigureAwait(false);
