@@ -48,6 +48,7 @@ public sealed partial class IdentitySessionAuthorization
     private readonly NpcShopCatalog? _shops;
     private readonly NpcStorageCatalog? _storages;
     private readonly IReadOnlyDictionary<int,EquipmentRule>? _equipmentRules;
+    private readonly IReadOnlyDictionary<int,EquipmentCombatRule>? _equipmentCombatRules;
     private readonly NpcBankCatalog? _banks;
     private readonly NpcRepairCatalog? _repairs;
     private readonly IReadOnlyDictionary<int,RepairItemRule>? _repairItemRules;
@@ -77,6 +78,7 @@ public sealed partial class IdentitySessionAuthorization
                                      NpcShopCatalog? shops = null,
                                      NpcStorageCatalog? storages = null,
                                      IReadOnlyDictionary<int,EquipmentRule>? equipmentRules = null,
+                                     IReadOnlyDictionary<int,EquipmentCombatRule>? equipmentCombatRules = null,
                                      NpcBankCatalog? banks = null,
                                      NpcRepairCatalog? repairs = null,
                                      IReadOnlyDictionary<int,RepairItemRule>? repairItemRules = null,
@@ -116,6 +118,7 @@ public sealed partial class IdentitySessionAuthorization
         _shops = shops;
         _storages = storages;
         _equipmentRules = equipmentRules;
+        _equipmentCombatRules = equipmentCombatRules;
         _banks = banks;
         _repairs = repairs;
         _repairItemRules = repairItemRules;

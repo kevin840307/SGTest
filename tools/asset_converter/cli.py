@@ -35,6 +35,7 @@ from asset_converter.content.build_monster_drop_rules import publish_monster_dro
 from asset_converter.content.build_character_progression_rules import publish_character_progression_rules
 from asset_converter.content.build_weapon_attack_ranges import publish_weapon_attack_ranges
 from asset_converter.content.build_weapon_definition_ranges import publish_weapon_definition_ranges
+from asset_converter.content.build_equipment_combat_rules import publish_equipment_combat_rules
 from asset_converter.content.skill_evidence import compile_skill_evidence
 from asset_converter.content.current_client_skill_evidence import compile_current_client_skill_evidence
 
@@ -470,6 +471,27 @@ def main() -> int:
         '--old-source-reference',
         default='Old SGOEquip::ReadWeaponData/SearchIndex + Dat/Item/Weapon.itd',
         help='non-private provenance label for Old weapon evidence')
+    equipment_combat = sub.add_parser(
+        'equipment-combat-rules',
+        help='compile verified player equipment combat modifier authority')
+    equipment_combat.add_argument('--items',type=Path,required=True,
+        help='current converted SGTest Items root')
+    equipment_combat.add_argument('--hk-item-itd',type=Path,required=True,
+        help='HK Item/item.itd identity and stat evidence')
+    equipment_combat.add_argument('--weapon-itd',type=Path,required=True,
+        help='Old Server Dat/Item/Weapon.itd attack-distance evidence')
+    equipment_combat.add_argument('--output',type=Path,
+        default=REPO/'local-assets/asset_converter/combat/equipment_combat_rules.json')
+    equipment_combat.add_argument(
+        '--item-source-reference',default='converted SGTest Items/*.tres')
+    equipment_combat.add_argument(
+        '--hk-source-reference',default='HK SGO Item/item.itd')
+    equipment_combat.add_argument(
+        '--old-equip-source-reference',
+        default='Old SGOEquip::EquipItem + SGOPlayer::UpdateParam decompilation')
+    equipment_combat.add_argument(
+        '--old-weapon-source-reference',
+        default='Old SGOEquip::ReadWeaponData/SearchIndex + Dat/Item/Weapon.itd')
     character_progression = sub.add_parser(
         'character-progression-rules',
         help='compile audited Old Server character level/attribute/profile rules')
@@ -612,6 +634,18 @@ def _execute(args):
                 item_source_reference=args.item_source_reference,
                 hk_source_reference=args.hk_source_reference,
                 old_source_reference=args.old_source_reference)
+        except (OSError,ValueError,TypeError) as error:
+            result = {'status':'failed','error':str(error)}
+        print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)
+        return 0 if result['status']=='pass' else 1
+    if args.command == 'equipment-combat-rules':
+        try:
+            result = publish_equipment_combat_rules(
+                args.items,args.hk_item_itd,args.weapon_itd,args.output,
+                item_source_reference=args.item_source_reference,
+                hk_source_reference=args.hk_source_reference,
+                old_equip_source_reference=args.old_equip_source_reference,
+                old_weapon_source_reference=args.old_weapon_source_reference)
         except (OSError,ValueError,TypeError) as error:
             result = {'status':'failed','error':str(error)}
         print(json.dumps(result,ensure_ascii=False,indent=2),flush=True)

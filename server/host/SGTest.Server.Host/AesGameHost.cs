@@ -196,6 +196,12 @@ internal static class AesGameHost
             IReadOnlyDictionary<int,EquipmentRule>? equipmentRules=
                 equipmentManifest is null ? null :
                 EquipmentItemCatalog.LoadVerified(Path.GetFullPath(equipmentManifest));
+            string? equipmentCombatManifest=
+                options.GetValueOrDefault("--equipment-combat-rules");
+            IReadOnlyDictionary<int,EquipmentCombatRule>? equipmentCombatRules=
+                equipmentCombatManifest is null ? null :
+                EquipmentCombatRuleCatalog.LoadVerified(
+                    Path.GetFullPath(equipmentCombatManifest));
             string? mechaEquipmentManifest=
                 options.GetValueOrDefault("--mecha-equipment-rules");
             IReadOnlyDictionary<int,MechaEquipmentRule>? mechaEquipmentRules=
@@ -361,6 +367,7 @@ internal static class AesGameHost
                 shops: shops,
                 storages: storages,
                 equipmentRules: equipmentRules,
+                equipmentCombatRules: equipmentCombatRules,
                 banks: banks,
                 repairs: repairs,
                 repairItemRules: repairItemRules,
@@ -525,7 +532,7 @@ internal static class AesGameHost
                 "[--pet-combat-rules <VERIFIED_JSON>] [--pet-skill-rules <VERIFIED_JSON>] [--pet-growth-rules <VERIFIED_JSON>] " +
                 "[--pet-equipment-rules <VERIFIED_JSON>] " +
                 "[--shop-rules <VERIFIED_JSON>] [--storage-rules <VERIFIED_JSON>] " +
-                "[--equipment-rules <VERIFIED_JSON>] [--mecha-equipment-rules <VERIFIED_JSON>] [--mecha-battery-rules <VERIFIED_JSON>] " +
+                "[--equipment-rules <VERIFIED_JSON>] [--equipment-combat-rules <VERIFIED_JSON>] [--mecha-equipment-rules <VERIFIED_JSON>] [--mecha-battery-rules <VERIFIED_JSON>] " +
                 "[--bank-rules <VERIFIED_JSON>] " +
                 "[--repair-rules <VERIFIED_JSON> --repair-item-rules <VERIFIED_JSON>] " +
                 "[--quest-rules <VERIFIED_JSON>] [--trade-item-rules <VERIFIED_JSON>] " +
@@ -565,6 +572,7 @@ internal static class AesGameHost
                           "--pet-combat-rules", "--pet-skill-rules", "--pet-growth-rules",
                           "--pet-equipment-rules",
                           "--shop-rules", "--storage-rules", "--equipment-rules",
+                          "--equipment-combat-rules",
                           "--mecha-equipment-rules", "--mecha-battery-rules", "--bank-rules",
                           "--repair-rules", "--repair-item-rules", "--quest-rules",
                           "--trade-item-rules", "--gm-accounts",

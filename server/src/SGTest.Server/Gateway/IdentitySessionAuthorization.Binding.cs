@@ -358,11 +358,17 @@ public sealed partial class IdentitySessionAuthorization
                 "Character equipment exceeds bounded V1 baseline capacity");
 
         CharacterCombatProfileData? effectiveCombat = combat?.Data;
-        if(effectiveCombat is { } profileOnly &&
-           _combat is not null &&
-           SourceVerifiedUnarmedCombatRules.TryPromoteEmptyEquipment(
-               profileOnly,equipment.Count,_world.TickHz,out var promoted))
-            effectiveCombat=promoted;
+        if(effectiveCombat is { } profileOnly && _combat is not null)
+        {
+            if(SourceVerifiedUnarmedCombatRules.TryPromoteEmptyEquipment(
+                profileOnly,equipment.Count,_world.TickHz,out var unarmed))
+                effectiveCombat=unarmed;
+            else if(_equipmentCombatRules is not null &&
+                    SourceVerifiedEquipmentCombatRules.TryPromote(
+                        profileOnly,equipment,_equipmentCombatRules,
+                        _world.TickHz,out var equippedCombat))
+                effectiveCombat=equippedCombat;
+        }
 
         bool combatEnabled = effectiveCombat?.Trust is
             CombatProfileTrust.Verified or CombatProfileTrust.SyntheticTest;

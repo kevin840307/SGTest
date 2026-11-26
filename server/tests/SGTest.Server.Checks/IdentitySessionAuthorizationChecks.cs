@@ -49,6 +49,10 @@ internal static class IdentitySessionAuthorizationChecks
             () => SourceBackedEmptyEquipmentCombatAdmission(root).GetAwaiter().GetResult());
         Checks.Run("AES source-backed formal character sends normal attack through authoritative monster pipeline",
             () => SourceBackedNormalAttackEndToEnd(root).GetAwaiter().GetResult());
+        Checks.Run("AES verified equipped weapon applies source-backed stats and range through authoritative attack",
+            () => SourceBackedEquippedWeaponAttackEndToEnd(root).GetAwaiter().GetResult());
+        Checks.Run("equipment combat manifest loader accepts verified rules and rejects range/type mismatch",
+            EquipmentCombatManifestLoader);
     }
 
     private static async Task CharacterManagementViaAes(string root)
@@ -1118,6 +1122,299 @@ internal static class IdentitySessionAuthorizationChecks
             await world.StopAsync();
         }
         finally{Directory.Delete(identityRoot,true);}
+    }
+
+    private static void EquipmentCombatManifestLoader()
+    {
+        string root=TempRoot();
+        try
+        {
+            string valid=Path.Combine(root,"equipment-combat.json");
+            File.WriteAllText(valid,JsonSerializer.Serialize(new
+            {
+                kind="verified_equipment_combat_rules",
+                version=1,rules_verified=true,gameplay_ready=true,
+                source_reference="runtime/HK exact stats + Old EquipItem/Weapon.itd",
+                rules=new[]
+                {
+                    new {
+                        item_definition_id=9001,
+                        attack_bonus=20,defense_bonus=7,
+                        hit_bonus=5,dodge_bonus=2,
+                        is_weapon=true,attack_range=80
+                    },
+                    new {
+                        item_definition_id=9002,
+                        attack_bonus=0,defense_bonus=9,
+                        hit_bonus=0,dodge_bonus=1,
+                        is_weapon=false,attack_range=0
+                    }
+                }
+            }));
+            var loaded=EquipmentCombatRuleCatalog.LoadVerified(valid);
+            Checks.Require(loaded.Count==2&&
+                loaded[9001].IsWeapon&&loaded[9001].AttackRange==80&&
+                !loaded[9002].IsWeapon&&loaded[9002].DefenseBonus==9,
+                "verified equipment combat manifest did not load");
+
+            string invalid=Path.Combine(root,"equipment-combat-invalid.json");
+            File.WriteAllText(invalid,JsonSerializer.Serialize(new
+            {
+                kind="verified_equipment_combat_rules",
+                version=1,rules_verified=true,gameplay_ready=true,
+                source_reference="invalid fixture",
+                rules=new[]
+                {
+                    new {
+                        item_definition_id=9001,
+                        attack_bonus=20,defense_bonus=0,
+                        hit_bonus=0,dodge_bonus=0,
+                        is_weapon=false,attack_range=80
+                    }
+                }
+            }));
+            bool rejected=false;
+            try { EquipmentCombatRuleCatalog.LoadVerified(invalid); }
+            catch(InvalidDataException) { rejected=true; }
+            Checks.Require(rejected,
+                "equipment combat loader accepted non-weapon positive range");
+        }
+        finally
+        {
+            Directory.Delete(root,true);
+        }
+    }
+
+    private static async Task SourceBackedEquippedWeaponAttackEndToEnd(string root)
+    {
+        string identityRoot=TempRoot();
+        try
+        {
+            const int mapId=123;
+            const int weaponDefinition=9001;
+            string mapDir=Checks.Fixture(root,mapId,20,20,(_,_)=>0);
+            var grid=BlockingGrid.Load(mapDir,mapId);
+            string populationPath=Path.Combine(mapDir,"population-equipped-combat.json");
+            File.WriteAllText(populationPath,JsonSerializer.Serialize(new
+            {
+                version=5,kind="verified_monster_target_runtime",map_id=mapId,
+                stats_verified=true,target_combat_ready=true,ai_ready=false,
+                definitions=new[] { new {
+                    id=1,name="EquippedRangeTarget",sprite="EN001A",
+                    atlas="Enemy/EN001A/atlas.json",
+                    stats=new {
+                        level=3,max_hp=150,defense_power=0,
+                        magic_defense_power=0,dodge_rate=0,respawn_ticks=90
+                    }}},
+                spawns=new[]{new{source_index=0,source_flags=7,
+                    definition=1,p=new[]{80,24}}}
+            }));
+            var runtime=new MonsterRuntime(
+                grid,MonsterPopulationCatalog.LoadVerified(
+                    populationPath,mapId,grid));
+            var monsters=new MonsterWorldCoordinator([runtime],
+                normalAttackRoll:()=>0,
+                normalAttackDamageRoll:exclusiveMax=>exclusiveMax==20?10:0);
+            await using var world=new ServerWorldHost(
+                [grid],options:new WorldHostOptions(PublishIdleTicks:true));
+            await world.StartAsync();
+
+            using var store=new SqliteIdentityStore(
+                Path.Combine(identityRoot,"identity.db"));
+            await store.InitializeAsync();
+            const string username="equipped_attack_user";
+            const string password="Equipped-Attack-Password-123!";
+            long account=(await store.CreateAccountAsync(username,password)).AccountId;
+            long characterId=(await store.CreateCharacterAsync(
+                account,0,"EquippedFighter",new CharacterSpawn(mapId,24,24)))
+                .Character?.CharacterId
+                ??throw new Exception("equipped attack character missing");
+            var durable=new CharacterCombatProfileData(
+                CombatProfileTrust.ProfileOnlyVerified,
+                "old-server:CreateCharPara+SGOPlayer::UpdateParam",
+                Race:0,Career:0,Strength:5,Dexterity:5,Constitution:5,Wisdom:5,
+                Level:3,CurrentHp:100,MaxHp:100,
+                Attack:14,Defense:3,Hit:19,Dodge:19,
+                AttackRange:0,AttackCooldownTicks:0,
+                CurrentMp:50,MaxMp:50);
+            await store.SetCharacterCombatProfileAsync(characterId,durable);
+
+            long generation=await store.AllocateLootWorldGenerationAsync();
+            var drop=await store.CreateTrustedGroundDropAsync(new(
+                mapId,24,24,3901,
+                SqliteIdentityStore.ComposeLootDeathRevision(generation,1),
+                0,weaponDefinition,1,LootSourceTrust.SyntheticTest,
+                "equipped-combat-weapon-fixture"));
+            var claim=await store.ClaimGroundDropAsync(new TrustedPickupContext(
+                characterId,SqliteIdentityStore.ComposePickupConnectionEpoch(
+                    generation,1),1,1,mapId,24,24),drop.DropId);
+            Checks.Require(
+                claim.Status==PickupStatus.Granted&&claim.ItemUid>0,
+                "equipped combat weapon seed failed");
+
+            IReadOnlyDictionary<int,EquipmentRule> equipmentRules=
+                new Dictionary<int,EquipmentRule>
+                {
+                    [weaponDefinition]=new(weaponDefinition,4)
+                };
+            var equipmentCombatRules=
+                new Dictionary<int,EquipmentCombatRule>
+                {
+                    [weaponDefinition]=new(
+                        weaponDefinition,
+                        AttackBonus:20,DefenseBonus:7,HitBonus:5,DodgeBonus:2,
+                        IsWeapon:true,AttackRange:80,
+                        SourceReference:"verified-equipment-combat-fixture")
+                };
+            var equipped=await store.EquipInventoryItemAsync(
+                new TrustedEquipmentContext(characterId,901,1,1),
+                claim.ItemUid,equipmentRules);
+            Checks.Require(equipped.Status==EquipmentTransferStatus.Applied,
+                "verified weapon was not equipped");
+
+            var snapshot=await store.ListEquippedItemsAsync(characterId);
+            Checks.Require(
+                SourceVerifiedEquipmentCombatRules.TryPromote(
+                    durable,snapshot,equipmentCombatRules,world.TickHz,
+                    out var promoted)&&
+                promoted.Trust==CombatProfileTrust.Verified&&
+                promoted.Attack==34&&promoted.Defense==10&&
+                promoted.Hit==24&&promoted.Dodge==21&&
+                promoted.AttackRange==80&&promoted.AttackCooldownTicks==63,
+                "source-backed equipped combat profile mismatch");
+            Checks.Require(
+                !SourceVerifiedEquipmentCombatRules.TryPromote(
+                    durable,
+                    [snapshot[0] with { EnhancementLevel=1 }],
+                    equipmentCombatRules,world.TickHz,out _),
+                "enhanced equipment escaped fail-closed combat admission");
+            Checks.Require(
+                !SourceVerifiedEquipmentCombatRules.TryPromote(
+                    durable,
+                    [snapshot[0] with { DurabilityRaw=0 }],
+                    equipmentCombatRules,world.TickHz,out _),
+                "broken equipment escaped fail-closed combat admission");
+
+            var combat=new PlayerCombatSettlement(store);
+            var router=new WorldResultRouter(
+                new WorldResultRouterOptions(AttackRequestCapacity:8));
+            var pump=new WorldAoiPump(router,monsters:monsters);
+            var authorization=new IdentitySessionAuthorization(
+                store,world,combat:combat,
+                pickupWorldGeneration:generation,
+                equipmentRules:equipmentRules,
+                equipmentCombatRules:equipmentCombatRules);
+            using var stop=new CancellationTokenSource();
+            Task routing=router.RunAsync(world.Results);
+            Task pumping=pump.RunAsync(stop.Token);
+
+            var session=await StartRoutedSession(authorization,world,router);
+            try
+            {
+                await session.Stream.WriteAsync(
+                    WireProtocol.EncodeAuthRequest(new(username,password)));
+                await session.Stream.FlushAsync();
+                Checks.Require(WireProtocol.TryDecodeAuthResult(
+                        await ReadFrameAsync(session.Stream),out var auth)&&
+                    auth.Status==AuthWireStatus.Success,
+                    "equipped combat auth failed");
+                Checks.Require(WireProtocol.TryDecodeCharacterList(
+                        await ReadFrameAsync(session.Stream),out var list)&&
+                    list.Characters.Single().CharacterId==characterId,
+                    "equipped combat character list mismatch");
+                await CharacterChooseTestHarness.ChooseAsync(
+                    session.Stream,characterId);
+                await session.Stream.FlushAsync();
+                Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                        await ReadFrameAsync(session.Stream),out var choose)&&
+                    choose.Status==CharacterChooseWireStatus.Success,
+                    "equipped combat choose failed");
+
+                PlayerCombatStateWire? vitals=null;
+                PlayerProfileStateWire? profile=null;
+                WorldReadyWire? ready=null;
+                MonsterStateWire? target=null;
+                using(var startupTimeout=
+                    new CancellationTokenSource(TimeSpan.FromSeconds(4)))
+                {
+                    while(vitals is null||profile is null||
+                          ready is null||target is null)
+                    {
+                        byte[] frame=await ReadFrameAsync(
+                            session.Stream,startupTimeout.Token);
+                        if(WireProtocol.TryDecodePlayerCombatState(
+                            frame,out var combatState))
+                            vitals=combatState;
+                        else if(WireProtocol.TryDecodePlayerProfileState(
+                            frame,out var profileState))
+                            profile=profileState;
+                        else if(WireProtocol.TryDecodeWorldReady(
+                            frame,out var worldReady))
+                            ready=worldReady;
+                        else if(WireProtocol.TryDecodeMonsterState(
+                            frame,out var kind,out var monster)&&
+                            kind==WireOpcode.MonsterSpawn)
+                            target=monster;
+                    }
+                }
+                Checks.Require(vitals is { CombatEnabled:true },
+                    "verified equipped character was not combat-enabled");
+                Checks.Require(profile is { Attack:34,Defense:10,Hit:24,Dodge:21 },
+                    "verified equipment modifiers were not exposed in profile UI state");
+                Checks.Require(target is { CurrentHp:150 }&&
+                    target.Value.X==80&&target.Value.Y==24,
+                    "equipped-range target spawn mismatch");
+
+                // Distance is 56: beyond source-backed unarmed 45 but inside
+                // this verified weapon's 80 range.
+                await session.Stream.WriteAsync(WireProtocol.EncodeWorldReadyAck(
+                    new(choose.MapEpoch,ready!.Value.ServerTick)));
+                await session.Stream.WriteAsync(WireProtocol.EncodeNormalAttack(
+                    new(choose.MapEpoch,1,target!.Value.EntityId)));
+                await session.Stream.FlushAsync();
+
+                NormalAttackResultWire? result=null;
+                MonsterStateWire? delta=null;
+                using(var attackTimeout=
+                    new CancellationTokenSource(TimeSpan.FromSeconds(4)))
+                {
+                    while(result is null||delta is null)
+                    {
+                        byte[] frame=await ReadFrameAsync(
+                            session.Stream,attackTimeout.Token);
+                        if(WireProtocol.TryDecodeNormalAttackResult(
+                            frame,out var attack)&&attack.AttackSequence==1)
+                            result=attack;
+                        else if(WireProtocol.TryDecodeMonsterState(
+                            frame,out var kind,out var monster)&&
+                            kind==WireOpcode.MonsterDelta)
+                            delta=monster;
+                    }
+                }
+                Checks.Require(result is { Status:NormalAttackStatus.Applied }&&
+                    result.Value.Damage>0&&
+                    result.Value.TargetEntityId==target.Value.EntityId,
+                    "verified weapon range did not reach authoritative monster");
+                Checks.Require(delta is { } changed&&
+                    changed.EntityId==result.Value.TargetEntityId&&
+                    changed.CurrentHp==result.Value.CurrentHp,
+                    "equipped weapon monster delta did not match authority");
+            }
+            finally
+            {
+                await session.Stream.DisposeAsync();
+                session.Client.Dispose();
+                await session.ServerTask.WaitAsync(TimeSpan.FromSeconds(3));
+                stop.Cancel();
+                await pumping.WaitAsync(TimeSpan.FromSeconds(3));
+                await world.StopAsync();
+                await routing.WaitAsync(TimeSpan.FromSeconds(3));
+            }
+        }
+        finally
+        {
+            Directory.Delete(identityRoot,true);
+        }
     }
 
     private static async Task SourceBackedNormalAttackEndToEnd(string root)
