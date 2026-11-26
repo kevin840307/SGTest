@@ -193,6 +193,10 @@ var _party_member_actor_ids:Array[int]=[0,0,0,0,0,0]
 var _party_question:=Control.new()
 var _party_question_text:=RichTextLabel.new()
 var _party_question_actor:=0
+var _party_leave_blocker:=Control.new()
+var _party_leave_question:=Control.new()
+var _party_leave_question_text:=RichTextLabel.new()
+var _party_leave_previous_focus:Control
 var _request_menu:=Control.new()
 var _request_menu_actor:=0
 var _clan_rows:=VBoxContainer.new()
@@ -470,6 +474,13 @@ func _process(_delta:float)->void:
 
 
 func _unhandled_key_input(event:InputEvent)->void:
+	if _party_leave_blocker.visible:
+		if event.is_action_pressed("ui_accept"):
+			_confirm_party_leave()
+		elif event.is_action_pressed("ui_cancel"):
+			_cancel_party_leave()
+		get_viewport().set_input_as_handled()
+		return
 	if not event.is_action_pressed("ui_cancel"):
 		_handle_hotkey_key(event)
 		return
@@ -1857,6 +1868,38 @@ func _build_party()->void:
 		_party_hp_clips.append(hp.clip)
 		_party_mp_clips.append(mp.clip)
 
+	# Old CTeamItf::OnQuitTeam constructs CYesNoBox with an empty ITF path;
+	# CYesNoBox::Create therefore loads 010_MESSAGE01.itf and CenterScreen
+	# integer-centers its 256x119 source rect at (272,240) on the 800x600 UI.
+	# Keep a full-canvas blocker so the confirmation is actually modal while
+	# preserving the inner source geometry and original BG/YELLOW_BUTTON art.
+	_party_leave_blocker.name="PartyLeaveModalBlocker"
+	_party_leave_blocker.position=Vector2.ZERO
+	_party_leave_blocker.size=BASE_SIZE
+	_party_leave_blocker.visible=false
+	_party_leave_blocker.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_party_leave_blocker)
+	_party_leave_question.name="PartyLeaveQuestion"
+	_party_leave_question.position=Vector2(272,240)
+	_party_leave_question.size=Vector2(256,119)
+	_party_leave_question.mouse_filter=Control.MOUSE_FILTER_STOP
+	_party_leave_blocker.add_child(_party_leave_question)
+	_background(_party_leave_question,"BG_MESSAGE",_party_leave_question.size)
+	_party_leave_question_text=_itf_text(
+		_party_leave_question,"PartyLeaveQuestionText",Rect2(15,11,231,71),12)
+	_texture_button(
+		_party_leave_question,"PartyLeaveConfirm","YELLOW_BUTTON",Vector2(38,93),Vector2(85,21),
+		_confirm_party_leave,"確定")
+	_texture_button(
+		_party_leave_question,"PartyLeaveCancel","YELLOW_BUTTON",Vector2(138,93),Vector2(85,21),
+		_cancel_party_leave,"取消")
+	var leave_confirm_text:=_itf_text(
+		_party_leave_question,"PartyLeaveConfirmText",Rect2(69,97,24,12),12,true)
+	leave_confirm_text.text="確定"
+	var leave_cancel_text:=_itf_text(
+		_party_leave_question,"PartyLeaveCancelText",Rect2(169,97,24,12),12,true)
+	leave_cancel_text.text="取消"
+
 	# Paradise CSGOUim::OnTeamInviteReq routes through ONUIQuestion and
 	# CReplierItf, which loads 044_QUESTION_BOX.itf.
 	_party_question.name="PartyInviteQuestion"
@@ -2198,6 +2241,7 @@ func set_world_active(active:bool)->void:
 		_inventory_render_initialized=false
 		_inventory_render_signature.clear()
 		_social_render_signatures.clear()
+		_close_party_leave_question(false)
 		_party_question.hide()
 		_party_question_actor=0
 		_request_menu.hide()
@@ -2601,8 +2645,33 @@ func _party_create()->void:
 
 
 func _party_leave()->void:
-	if _panel!=null and _panel.session!=null:
-		_panel.session.party_leave()
+	if _panel==null or _panel.session==null or int(_stats.get("party_id",0))<=0:
+		return
+	_party_leave_previous_focus=get_viewport().gui_get_focus_owner()
+	_party_leave_question_text.text="決定離開團隊？"
+	_party_leave_blocker.show()
+	_party_leave_blocker.move_to_front()
+
+
+func _confirm_party_leave()->void:
+	if not _party_leave_blocker.visible or _panel==null or _panel.session==null:
+		return
+	if _panel.session.party_leave():
+		_close_party_leave_question(true)
+
+
+func _cancel_party_leave()->void:
+	_close_party_leave_question(true)
+
+
+func _close_party_leave_question(restore_focus:bool)->void:
+	_party_leave_blocker.hide()
+	if (
+		restore_focus and _party_leave_previous_focus!=null and
+		is_instance_valid(_party_leave_previous_focus) and _party_leave_previous_focus.is_visible_in_tree()
+	):
+		_party_leave_previous_focus.grab_focus()
+	_party_leave_previous_focus=null
 
 
 func _party_member_pressed(index:int)->void:
@@ -2618,6 +2687,8 @@ func _party_member_pressed(index:int)->void:
 
 
 func _refresh_party()->void:
+	if int(_stats.get("party_id",0))<=0 and _party_leave_blocker.visible:
+		_close_party_leave_question(false)
 	var members:Dictionary=_stats.get("party_members",{})
 	# PartyCoordinator preserves authoritative membership order; do not sort by
 	# actor id and accidentally move the leader/member rows between snapshots.

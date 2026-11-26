@@ -19,6 +19,14 @@ class FriendMessageSession:
 		message=value
 		return true
 
+class PartyLeaveSession:
+	extends RefCounted
+	var leaves:=0
+	var queue_ok:=true
+	func party_leave()->bool:
+		leaves+=1
+		return queue_ok
+
 func _fail(reason: String) -> void:
 	push_error("CLASSIC_IE_UI_FAIL "+reason)
 	quit(1)
@@ -291,6 +299,71 @@ func _run() -> void:
 		if control==null or control.position!=expected[0] or control.size!=expected[1]:
 			_fail("HK 026_TEAM control rect drifted: "+str(control_name))
 			return
+	var leave_confirm:=world._party_leave_question.get_node_or_null("PartyLeaveConfirm") as Control
+	var leave_cancel:=world._party_leave_question.get_node_or_null("PartyLeaveCancel") as Control
+	var leave_confirm_text:=world._party_leave_question.get_node_or_null("PartyLeaveConfirmText") as RichTextLabel
+	var leave_cancel_text:=world._party_leave_question.get_node_or_null("PartyLeaveCancelText") as RichTextLabel
+	var leave_bg:=world._party_leave_question.get_node_or_null("BG_MESSAGEBackground") as TextureRect
+	if (
+		world._party_leave_blocker.size!=Vector2(800,600) or
+		world._party_leave_question.position!=Vector2(272,240) or world._party_leave_question.size!=Vector2(256,119) or
+		world._party_leave_question_text.position!=Vector2(15,11) or world._party_leave_question_text.size!=Vector2(231,71) or
+		leave_bg==null or leave_bg.texture==null or
+		leave_confirm==null or leave_confirm.position!=Vector2(38,93) or leave_confirm.size!=Vector2(85,21) or
+		leave_cancel==null or leave_cancel.position!=Vector2(138,93) or leave_cancel.size!=Vector2(85,21) or
+		leave_confirm_text==null or leave_confirm_text.position!=Vector2(69,97) or leave_confirm_text.size!=Vector2(24,12) or leave_confirm_text.text!="確定" or
+		leave_cancel_text==null or leave_cancel_text.position!=Vector2(169,97) or leave_cancel_text.size!=Vector2(24,12) or leave_cancel_text.text!="取消"
+	):
+		_fail("HK 010_MESSAGE01 party leave confirmation geometry/art drifted")
+		return
+	var original_session=app.session_panel.session
+	var original_party_id:Variant=world._stats.get("party_id",0)
+	var leave_session:=PartyLeaveSession.new()
+	app.session_panel.session=leave_session
+	world._stats["party_id"]=77
+	world._party_leave()
+	if not world._party_leave_blocker.visible or world._party_leave_question_text.text!="決定離開團隊？" or leave_session.leaves!=0:
+		_fail("party leave must open the original confirmation without sending authority early")
+		return
+	var escape:=InputEventKey.new()
+	escape.keycode=KEY_ESCAPE
+	escape.pressed=true
+	Input.parse_input_event(escape)
+	await process_frame
+	if world._party_leave_blocker.visible or leave_session.leaves!=0:
+		_fail("party leave Esc must cancel without sending")
+		return
+	escape.pressed=false
+	Input.parse_input_event(escape)
+	await process_frame
+	leave_session.queue_ok=false
+	world._party_leave()
+	(world._party_leave_question.get_node("PartyLeaveConfirm") as TextureButton).pressed.emit()
+	if not world._party_leave_blocker.visible or leave_session.leaves!=1:
+		_fail("party leave confirmation must remain visible when ClientSession rejects queueing")
+		return
+	world._cancel_party_leave()
+	leave_session.queue_ok=true
+	world._party_leave()
+	var enter:=InputEventKey.new()
+	enter.keycode=KEY_ENTER
+	enter.pressed=true
+	Input.parse_input_event(enter)
+	await process_frame
+	if world._party_leave_blocker.visible or leave_session.leaves!=2:
+		_fail("party leave Enter must queue exactly one authoritative leave request")
+		return
+	enter.pressed=false
+	Input.parse_input_event(enter)
+	await process_frame
+	world._party_leave()
+	world._stats["party_id"]=0
+	world._refresh_party()
+	if world._party_leave_blocker.visible:
+		_fail("authoritative party clear must dismiss a stale leave confirmation")
+		return
+	world._stats["party_id"]=original_party_id
+	app.session_panel.session=original_session
 	if (
 		world._party_question.size!=Vector2(469,19) or
 		world._party_question_text.position!=Vector2(9,3) or world._party_question_text.size!=Vector2(382,12) or

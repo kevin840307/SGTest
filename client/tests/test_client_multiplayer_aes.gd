@@ -244,9 +244,16 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 		# Keep the observer alive briefly so the returning actor can
 		# also reduce its authoritative peer Spawn, not only WorldReady.
 		OS.delay_msec(650)
-		if not portal and int(session.snapshot().get("party_id",0))<=0:
-			_fail("observer party membership did not survive actor map transfer",session)
-			return
+		if not portal:
+			var retained_party_id:=int(session.snapshot().get("party_id",0))
+			if retained_party_id<=0:
+				_fail("observer party membership did not survive actor map transfer",session)
+				return
+			var after_leave:=_wait_party_members(session,retained_party_id,1,7000)
+			if after_leave.is_empty() or int(after_leave.get("party_leader_actor_id",0))!=self_id:
+				_fail("observer did not receive authoritative singleton snapshot after actor leave %s" % session.snapshot(),session)
+				return
+			print("CLIENT_CROSSMAP_PARTY_LEAVE_SEEN role=observer party=%d members=1 leader=%d" % [retained_party_id,self_id])
 		session.stop()
 		print("CLIENT_%s_PASS role=observer map15=PASS delta=PASS despawn=PASS respawn=PASS nearby_chat_isolation=%s party_crossmap=%s whisper_crossmap=%s remote=%d" % ["PORTAL" if portal else "CROSSMAP","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS",remote_id])
 		quit(0)
@@ -531,8 +538,22 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 			return
 		print("CLIENT_%s_RETURN_MOVE_ACK role=actor epoch=%d"%[
 			"PORTAL" if portal else "CROSSMAP",int(returned.map_epoch)])
-		# The spectator must see re-entry before this actor logs out.
+		# The spectator must see re-entry before this actor changes party state.
 		OS.delay_msec(700)
+		if not portal:
+			if not session.party_leave():
+				_fail("actor party leave intent rejected",session)
+				return
+			var leave_result:=_wait_party_result(session,2,4,0,7000)
+			if leave_result.is_empty() or int(leave_result.get("status",-1))!=0:
+				_fail("actor party leave authoritative result missing %s" % session.snapshot(),session)
+				return
+			var cleared:=_wait_party_members(session,0,0,7000)
+			if cleared.is_empty() or int(cleared.get("party_leader_actor_id",0))!=0:
+				_fail("actor party leave clear snapshot missing %s" % session.snapshot(),session)
+				return
+			print("CLIENT_CROSSMAP_PARTY_LEAVE_PASS role=actor result=PASS clear_snapshot=PASS")
+			OS.delay_msec(250)
 		session.stop()
 		print("CLIENT_%s_PASS role=actor map15_map13_map15=PASS new_epochs=PASS world_ready=PASS old_aoi_clear=PASS npc_authority=%s nearby_chat_isolation=%s party_crossmap=%s whisper_crossmap=%s whisper_unavailable=%s" % ["PORTAL" if portal else "CROSSMAP","PASS" if portal else "NOT_TESTED","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS","NOT_TESTED" if portal else "PASS"])
 		quit(0)
