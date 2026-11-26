@@ -129,6 +129,15 @@ func _initialize() -> void:
 		_fail("authoritative skill settlement "+str(session.snapshot()),session)
 		return
 
+	var experienced := _wait(session,func(v):
+		return (
+			int(v.player_experience)==1
+			and int(v.player_experience_percent)==10
+		),7000)
+	if experienced.is_empty():
+		_fail("authoritative EXP profile/HUD state "+str(session.snapshot()),session)
+		return
+
 	var dropped := _wait(session,func(v):
 		return (
 			v.ground_drops.size()==1
@@ -212,6 +221,8 @@ func _initialize() -> void:
 			int(v.state)!=WorldState.STATE_IN_WORLD
 			or not bool(v.world_ready)
 			or not bool(v.inventory_ready)
+			or int(v.player_experience)!=1
+			or int(v.player_experience_percent)!=10
 			or v.inventory_items.size()!=1
 			or not v.ground_drops.is_empty()
 			or not v.received_item_grants.is_empty()
@@ -228,7 +239,7 @@ func _initialize() -> void:
 		_fail("relog inventory/ground-drop persistence "+str(relog.snapshot()),relog)
 		return
 	relog.stop()
-	print("CLIENT_COMBAT_AES_PASS target=%d player_damage=60 normal_attack_hp=40 skill_id=99001 skill_damage=40 skill_mp=2_to_1 loot_v2=true ground_uid=true item=2701 quantity=2 pickup=true atomic_inventory=true aoidespawn=true relog_inventory=true ground_drop_absent_after_relog=true insufficient_mp_status=11 rejected_skill_no_damage=true monster_respawn_hp=100 monster_damage=18 death_hp=0 respawn_hp=100 dead=false skill_request_has_no_damage=true skill_receipt_does_not_mutate_monster=true player_damage_visual=true player_respawn_visual=true visual_after_db_commit=true public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
+	print("CLIENT_COMBAT_AES_PASS target=%d player_damage=60 normal_attack_hp=40 skill_id=99001 skill_damage=40 skill_mp=2_to_1 experience=1 experience_percent=10 exp_profile_live=true exp_profile_relog=true loot_v2=true ground_uid=true item=2701 quantity=2 pickup=true atomic_inventory=true aoidespawn=true relog_inventory=true ground_drop_absent_after_relog=true insufficient_mp_status=11 rejected_skill_no_damage=true monster_respawn_hp=100 monster_damage=18 death_hp=0 respawn_hp=100 dead=false skill_request_has_no_damage=true skill_receipt_does_not_mutate_monster=true player_damage_visual=true player_respawn_visual=true visual_after_db_commit=true public_intents_blocked_while_dead=true move_after_respawn=true damage_sequence_continuous=true request_has_no_damage=true receipt_does_not_mutate_monster=true delta_owns_hp=true damage_after_db_commit=true" % target)
 	quit(0)
 
 func _wait(session, predicate: Callable, timeout_ms: int) -> Dictionary:

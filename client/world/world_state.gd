@@ -91,6 +91,7 @@ var player_race := 0
 var player_career := 0
 var player_level := 0
 var player_experience := 0
+var player_experience_percent := -1
 var player_strength := 0
 var player_dexterity := 0
 var player_constitution := 0
@@ -1540,6 +1541,7 @@ func snapshot() -> Dictionary:
 		"player_job": player_career,
 		"player_level": player_level,
 		"player_experience": player_experience,
+		"player_experience_percent": player_experience_percent,
 		"player_strength": player_strength,
 		"player_dexterity": player_dexterity,
 		"player_constitution": player_constitution,
@@ -2076,6 +2078,7 @@ func _reset_character_actions_and_combat() -> void:
 	player_career = 0
 	player_level = 0
 	player_experience = 0
+	player_experience_percent = -1
 	player_strength = 0
 	player_dexterity = 0
 	player_constitution = 0
@@ -2494,6 +2497,7 @@ func _apply_player_profile_state(frame: PackedByteArray) -> bool:
 	player_career = int(value.career)
 	player_level = int(value.level)
 	player_experience = int(value.experience)
+	player_experience_percent = int(value.get("experience_percent",-1))
 	player_strength = int(value.strength)
 	player_dexterity = int(value.dexterity)
 	player_constitution = int(value.constitution)

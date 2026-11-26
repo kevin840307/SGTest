@@ -150,6 +150,21 @@ public sealed class CharacterProgressionRules
         return Math.Max(0,residual);
     }
 
+    /// <summary>
+    /// Original CCharInfoLiteItf::CalEXPBar reads PLAYERLVLUP[level-1] and
+    /// displays floor(current-level EXP * 100 / required EXP), clamped when
+    /// current EXP reaches the threshold. Keep the calculation on the trusted
+    /// progression table instead of reconstructing thresholds in the client.
+    /// </summary>
+    public int ExperiencePercent(int level,long totalExperience)
+    {
+        long current=CurrentExperience(level,totalExperience);
+        long required=_levels[level-1].RequiredExperience;
+        if(current>=required)
+            return 100;
+        return (int)(current*100/required);
+    }
+
     public int AwardedPointsForAdvance(int oldLevel,int newLevel)
     {
         ValidateLevel(oldLevel);

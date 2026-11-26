@@ -262,6 +262,12 @@ internal static class Program
         {
             string mapDir = CreateMap(root, 15);
             var grid = BlockingGrid.Load(mapDir, 15);
+            string progressionPath=Path.Combine(root,"combat-progression.json");
+            WriteCombatProgressionManifest(progressionPath);
+            var progressionRules=CharacterProgressionRules.LoadVerified(progressionPath);
+            var experienceRule=new CharacterExperienceRewardRule(
+                15,1,3,1,CharacterExperienceRewardTrust.SyntheticTest,
+                "ci:combat-exp-fixture",EnemyDodge:0);
             string populationPath = Path.Combine(root, "combat-population.json");
             File.WriteAllText(populationPath, JsonSerializer.Serialize(new
             {
@@ -307,11 +313,7 @@ internal static class Program
                     // prove insufficient MP cannot mutate the target.
                     [99002]=new(99002,10,48,1,MpCost:2)
                 },
-                normalAttackHitRules:
-                [new CharacterExperienceRewardRule(
-                    15, 1, 3, 1,
-                    CharacterExperienceRewardTrust.SyntheticTest,
-                    "ci:combat-hit-fixture", EnemyDodge: 0)],
+                normalAttackHitRules:[experienceRule],
                 normalAttackRoll: () => 0);
 
             await using var world = new ServerWorldHost(
@@ -337,8 +339,8 @@ internal static class Program
                 ?? throw new InvalidOperationException("combat character create failed");
             await store.SetCharacterCombatProfileAsync(characterId,
                 new CharacterCombatProfileData(
-                    CombatProfileTrust.SyntheticTest,
-                    "ci:tls-combat-fixture",
+                    CombatProfileTrust.Verified,
+                    "ci:combat-progression-fixture",
                     Race: 0, Career: 0, Strength: 5, Dexterity: 5,
                     Constitution: 5, Wisdom: 5, Level: 1,
                     CurrentHp: 18, MaxHp: 100,
@@ -349,6 +351,9 @@ internal static class Program
 
             var router = new WorldResultRouter(
                 new WorldResultRouterOptions(AttackRequestCapacity: 8));
+            var experience=new CharacterExperienceSettlement(
+                store,router,lootGeneration,[experienceRule],
+                progressionRules:progressionRules,capacity:8);
             var settlement = new PlayerCombatSettlement(
                 store, new(Capacity: 8), router.QueuePlayerDamage,
                 committedLifecycle: async result =>
@@ -368,10 +373,11 @@ internal static class Program
                 });
             var pump = new WorldAoiPump(
                 router, monsters: coordinator, playerCombat: settlement,
-                loot: loot);
+                loot: loot,experience:experience);
             var authorization = new IdentitySessionAuthorization(
                 store, world, combat: settlement,
-                pickupWorldGeneration: lootGeneration);
+                pickupWorldGeneration: lootGeneration,
+                progressionRules:progressionRules);
             var settings = AesCbcSettings.FromEnvironment();
 
             var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -380,6 +386,7 @@ internal static class Program
             var routing = router.RunAsync(world.Results);
             var pumping = pump.RunAsync(stop.Token);
             var settling = settlement.RunAsync(stop.Token);
+            var experiencing = experience.RunAsync();
             var looting = loot.RunAsync();
             try
             {
@@ -409,6 +416,8 @@ internal static class Program
                     .ConfigureAwait(false);
                 var activeDrops = await store.ListActiveGroundDropsAsync(15)
                     .ConfigureAwait(false);
+                var characterExperience=await store.GetCharacterExperienceAsync(characterId)
+                    .ConfigureAwait(false);
                 if (monster.CurrentHp != 100 || monster.MaxHp != 100 ||
                     player?.Data.CurrentHp != 100 || player.Data.MaxHp != 100 ||
                     player.Data.CurrentMp != 1 || player.Data.MaxMp != 2 ||
@@ -417,6 +426,8 @@ internal static class Program
                     inventory[0].Quantity != 2 ||
                     inventory[0].SourceDropId <= 0 ||
                     activeDrops.Count != 0 ||
+                    characterExperience?.Experience != 1 ||
+                    experience.Statistics.GrantsApplied != 1 ||
                     loot.Statistics.DeathsCommitted != 1 ||
                     loot.Statistics.DropsCommitted != 1 ||
                     ended.CommandsAccepted != 7 ||
@@ -428,7 +439,8 @@ internal static class Program
                     throw new InvalidOperationException(
                         $"combat E2E mismatch monster={monster.CurrentHp}/{monster.MaxHp} " +
                         $"player={player?.Data.CurrentHp}/{player?.Data.MaxHp} " +
-                        $"inventory={inventory.Count} activeDrops={activeDrops.Count} " +
+                        $"inventory={inventory.Count} activeDrops={activeDrops.Count} exp={characterExperience?.Experience} " +
+                        $"expGrants={experience.Statistics.GrantsApplied} " +
                         $"lootDeaths={loot.Statistics.DeathsCommitted} lootDrops={loot.Statistics.DropsCommitted} " +
                         $"hits={settlement.Statistics.HitsCommitted} deaths={settlement.Statistics.DeathsCommitted} " +
                         $"commands={ended.CommandsAccepted} relogCommands={relogEnded.CommandsAccepted} " +
@@ -439,6 +451,7 @@ internal static class Program
                     $"monster_hp={monster.CurrentHp}/{monster.MaxHp} player_hp={player.Data.CurrentHp}/{player.Data.MaxHp} " +
                     $"player_mp={player.Data.CurrentMp}/{player.Data.MaxMp} respawn=true skill_99001=true skill_mp_cost=1 " +
                     $"loot_v2=true item=2701 quantity=2 source_drop={inventory[0].SourceDropId} pickup=true " +
+                    $"experience={characterExperience!.Experience} experience_percent=10 relog_experience=true " +
                     $"relog_inventory=true ground_drop_absent_after_relog=true " +
                     $"insufficient_skill_99002=true monster_damage_committed={settlement.Statistics.DamageCommitted} " +
                     $"deaths={settlement.Statistics.DeathsCommitted} commands={ended.CommandsAccepted} " +
@@ -450,7 +463,9 @@ internal static class Program
             {
                 listener.Stop();
                 loot.Complete();
-                await looting.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+                experience.Complete();
+                await Task.WhenAll(looting,experiencing)
+                    .WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
                 stop.Cancel();
                 await Task.WhenAll(pumping, settling).ConfigureAwait(false);
                 await world.StopAsync().ConfigureAwait(false);
@@ -468,6 +483,50 @@ internal static class Program
         }
     }
 
+
+    private static void WriteCombatProgressionManifest(string path)
+    {
+        var levels=Enumerable.Range(1,100).Select(level=>new
+        {
+            level,
+            required_experience=level==1?10L:1000L+level,
+            attribute_points_awarded=2,
+            base_hp=100,
+            base_mp=2,
+            base_attack=60,
+            base_defense=10,
+            base_magic_attack=0,
+            base_magic_defense=0,
+            base_hit=10,
+            base_dodge=3,
+            base_will=0
+        }).ToArray();
+        int[] ramp=Enumerable.Repeat(0,200).ToArray();
+        int[] hp=Enumerable.Repeat(0,200).ToArray();
+        int[] hit=Enumerable.Repeat(0,200).ToArray();
+        int[] mp=Enumerable.Repeat(0,200).ToArray();
+        var race=new
+        {
+            strength_attack=ramp,
+            constitution_hp=hp,
+            dexterity_hit=hit,
+            dexterity_dodge=hit,
+            wisdom_mp=mp,
+            wisdom_magic_attack=hit
+        };
+        File.WriteAllText(path,JsonSerializer.Serialize(new
+        {
+            schema="sgtest.character_progression_rules/v1",
+            status="pass",
+            rules_verified=true,
+            gameplay_ready=true,
+            source="synthetic combat E2E progression fixture",
+            max_level=100,
+            max_attribute=200,
+            levels,
+            races=new {boy=race,girl=race,migu=race,robot=race}
+        }));
+    }
 
     private static async Task<int> RunTargetCombatAsync(bool forceMonsterMiss=false)
     {

@@ -44,24 +44,30 @@ internal static class CharacterProgressionChecks
                     initialWire.VerifiedStats==
                         (PlayerProfileStatVerification.Attack |
                          PlayerProfileStatVerification.Hit |
-                         PlayerProfileStatVerification.Dodge),
-                    "profile-only verification mask exposed unresolved effective Defense");
+                         PlayerProfileStatVerification.Dodge)&&
+                    initialWire.Experience==0&&initialWire.ExperiencePercent==0,
+                    "profile baseline verification or EXP percent was not source-backed");
 
                 var first=await store.ApplyCharacterProgressionExperienceAsync(
                     character,1,"monsterdeath:1:1",rules);
+                var firstWire=CharacterProfileProgressionHandler.BuildState(
+                    first.Profile!.Data,character,1,rules);
                 Checks.Require(
                     first.Status==CharacterExperienceGrantStatus.Applied&&
-                    first.Profile?.Data.Level==1&&first.CurrentExperience==1&&
-                    first.Profile.Data.AvailableAttributePoints==0,
-                    "sub-threshold EXP changed level or points");
+                    first.Profile.Data.Level==1&&first.CurrentExperience==1&&
+                    first.Profile.Data.AvailableAttributePoints==0&&
+                    firstWire.Experience==1&&firstWire.ExperiencePercent==50,
+                    "sub-threshold EXP changed level/points or did not publish original EXP percent");
 
                 var level=await store.ApplyCharacterProgressionExperienceAsync(
                     character,1,"monsterdeath:1:2",rules);
+                var levelWire=CharacterProfileProgressionHandler.BuildState(
+                    level.Profile!.Data,character,2,rules);
                 Checks.Require(
                     level.Status==CharacterExperienceGrantStatus.Applied&&
-                    level.Leveled&&level.Profile?.Data.Level==2&&
-                    level.CurrentExperience==0&&
-                    level.Profile!.Data.AvailableAttributePoints==2&&
+                    level.Leveled&&level.Profile.Data.Level==2&&
+                    level.CurrentExperience==0&&levelWire.ExperiencePercent==0&&
+                    level.Profile.Data.AvailableAttributePoints==2&&
                     level.Profile!.Data.CurrentHp==level.Profile!.Data.MaxHp&&
                     level.Profile!.Data.CurrentMp==level.Profile!.Data.MaxMp,
                     "level-up did not consume threshold refill vitals and award two points");

@@ -59,6 +59,9 @@ public sealed class CharacterProfileProgressionHandler
         long visibleExperience=rules is null
             ?lifetimeExperience
             :rules.CurrentExperience(profile.Level,lifetimeExperience);
+        int experiencePercent=rules is null
+            ?-1
+            :rules.ExperiencePercent(profile.Level,lifetimeExperience);
         PlayerProfileStatVerification verifiedStats=profile.Trust switch
         {
             CombatProfileTrust.Verified or CombatProfileTrust.SyntheticTest =>
@@ -77,6 +80,6 @@ public sealed class CharacterProfileProgressionHandler
             characterId,profile.Race,profile.Career,profile.Level,visibleExperience,
             profile.Strength,profile.Dexterity,profile.Constitution,profile.Wisdom,
             profile.Attack,profile.Defense,profile.Hit,profile.Dodge,
-            profile.AvailableAttributePoints,verifiedStats);
+            profile.AvailableAttributePoints,verifiedStats,experiencePercent);
     }
 }

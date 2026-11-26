@@ -437,7 +437,8 @@ public readonly record struct PlayerProfileStateWire(
     int Strength, int Dexterity, int Constitution, int Wisdom,
     int Attack, int Defense, int Hit, int Dodge,
     int AvailableAttributePoints,
-    PlayerProfileStatVerification VerifiedStats = PlayerProfileStatVerification.All);
+    PlayerProfileStatVerification VerifiedStats = PlayerProfileStatVerification.All,
+    int ExperiencePercent = -1);
 public readonly record struct PlayerAttributeAllocateWire(
     uint AttributeSequence, CharacterAttributeKind Attribute);
 public readonly record struct PlayerCreationProfileStateWire(

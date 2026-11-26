@@ -2380,10 +2380,10 @@ func _refresh_hud()->void:
 	else:
 		_wp_label.text=""
 		_set_progress(_hud_wp_clip,0,0)
-	# Old CalEXPBar uses level-up table thresholds. Current snapshots expose raw
-	# EXP but not that verified threshold, so only render a percent when the
-	# authority explicitly supplies one rather than inventing a formula.
-	if _stats.has("player_experience_percent"):
+	# Old CalEXPBar uses PLAYERLVLUP[level-1] and integer percentage math.
+	# The Server now publishes that source-backed result; -1 stays fail-closed
+	# when no verified progression threshold is loaded.
+	if _stats.has("player_experience_percent") and int(_stats.player_experience_percent)>=0:
 		var exp_percent:=clampi(int(_stats.player_experience_percent),0,100)
 		_exp_percent_label.text="%d%%"%exp_percent
 		_set_progress(_hud_exp_clip,exp_percent,100)

@@ -14,7 +14,7 @@ const EMPTY_LIST := "0900000001000C0000"
 const CREATE_RESULT := "1B000000010010000021000000000000000007004E65774865726F"
 const CREATED_LIST := "1B00000001000C000121000000000000000007004E65774865726F"
 const CREATION_PROFILE := "20000000010086000B0000000000000002000000020000000200000002000000"
-const PROFILE := "49000000010085000B0000000000000002000000030000000400000040E2010000000000050000000600000007000000080000005A00000050000000460000003C0000000200000001"
+const PROFILE := "4A000000010085000B0000000000000002000000030000000400000040E2010000000000050000000600000007000000080000005A00000050000000460000003C000000020000000125"
 const COMBAT := "210000000100070001000000000000003C000000640000001E0000002800000001"
 
 func _fail(message: String) -> void:
@@ -134,7 +134,8 @@ func _initialize() -> void:
 		return
 	var profile_snapshot:=world.snapshot()
 	if not bool(profile_snapshot.player_profile_ready) or int(profile_snapshot.player_level)!=4 or \
-		int(profile_snapshot.player_experience)!=123456 or int(profile_snapshot.player_strength)!=5 or \
+		int(profile_snapshot.player_experience)!=123456 or int(profile_snapshot.player_experience_percent)!=37 or \
+		int(profile_snapshot.player_strength)!=5 or \
 		int(profile_snapshot.player_dexterity)!=6 or int(profile_snapshot.player_constitution)!=7 or \
 		int(profile_snapshot.player_wisdom)!=8 or int(profile_snapshot.player_attack)!=90 or \
 		int(profile_snapshot.player_defense)!=80 or int(profile_snapshot.player_hit)!=70 or \
@@ -233,7 +234,8 @@ func _verify_cross_map_reset() -> bool:
 		int(changed.map_epoch) != 2 or int(changed.map_id) != 13 or
 		not bool(changed.world_ready) or bool(changed.waiting_for_new_map) or
 		not changed.player_profile_ready or changed.player_level != 4 or
-		changed.player_experience != 123456 or changed.player_wisdom != 8 or
+		changed.player_experience != 123456 or changed.player_experience_percent != 37 or
+		changed.player_wisdom != 8 or
 		not changed.combat_available or changed.player_current_hp != 60 or changed.player_max_hp != 100 or
 		changed.player_current_mp != 30 or changed.player_max_mp != 40 or
 		not changed.inventory_items.has(301) or

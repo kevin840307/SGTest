@@ -18,6 +18,7 @@ public static partial class WireProtocol
             value.Constitution < 0 || value.Wisdom < 0 ||
             value.Attack < 0 || value.Defense < 0 ||
             value.Hit < 0 || value.Dodge < 0 || value.AvailableAttributePoints < 0 ||
+            value.ExperiencePercent is < -1 or > 100 ||
             (value.VerifiedStats & ~PlayerProfileStatVerification.All) != 0)
             throw new ArgumentOutOfRangeException(nameof(value));
 
@@ -44,6 +45,10 @@ public static partial class WireProtocol
             PlayerProfileStatVerification.All => 1,
             _ => (byte)(0x80 | (byte)value.VerifiedStats)
         };
+        // 0xFF means no source-verified progression threshold was loaded.
+        frame[73] = value.ExperiencePercent < 0
+            ? byte.MaxValue
+            : (byte)value.ExperiencePercent;
         return frame;
     }
 
@@ -66,6 +71,11 @@ public static partial class WireProtocol
             verifiedStats=(PlayerProfileStatVerification)(verificationByte&0x0F);
         else
             return false;
+        byte experiencePercentByte=frame[73];
+        int experiencePercent=experiencePercentByte==byte.MaxValue
+            ? -1 : experiencePercentByte;
+        if(experiencePercent>100)
+            return false;
         value = new(
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(16,4)),
@@ -81,7 +91,8 @@ public static partial class WireProtocol
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(60,4)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(64,4)),
             BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(68,4)),
-            verifiedStats);
+            verifiedStats,
+            experiencePercent);
         try
         {
             _ = EncodePlayerProfileState(value);

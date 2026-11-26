@@ -13,7 +13,7 @@ const CHARACTER_CHOOSE_HEX := "1000000001000D001600000000000000"
 const CHARACTER_CHOOSE_RESULT_HEX := "2D00000001000E000016000000000000000F0000000000000000C0BE40000000000010C6400300000000000000"
 const CHARACTER_CREATE_HEX := "1200000001000F000207004E65774865726F"
 const CHARACTER_CREATE_RESULT_HEX := "1B000000010010000021000000000000000207004E65774865726F"
-const PLAYER_PROFILE_STATE_HEX := "49000000010085000B0000000000000002000000030000000400000040E2010000000000050000000600000007000000080000005A00000050000000460000003C000000020000008D"
+const PLAYER_PROFILE_STATE_HEX := "4A000000010085000B0000000000000002000000030000000400000040E2010000000000050000000600000007000000080000005A00000050000000460000003C000000020000008D25"
 
 func _fail(message: String) -> void:
 	push_error("WIRE_CODEC_FAIL " + message)
@@ -67,7 +67,7 @@ func _initialize() -> void:
 		return
 	var profile := WireCodec.decode_player_profile_state(PLAYER_PROFILE_STATE_HEX.hex_decode())
 	if profile != {"character_id":11,"race":2,"career":3,"level":4,"experience":123456,
-		"strength":5,"dexterity":6,"constitution":7,"wisdom":8,
+		"experience_percent":37,"strength":5,"dexterity":6,"constitution":7,"wisdom":8,
 		"attack":90,"defense":80,"hit":70,"dodge":60,"available_attribute_points":2,
 		"verified_stats_mask":13}:
 		_fail("PlayerProfileState decode "+str(profile))
@@ -81,6 +81,16 @@ func _initialize() -> void:
 	invalid_profile[72]=0x10
 	if not WireCodec.decode_player_profile_state(invalid_profile).is_empty():
 		_fail("PlayerProfileState accepted unknown verification encoding")
+		return
+	var unavailable_profile:=PLAYER_PROFILE_STATE_HEX.hex_decode()
+	unavailable_profile[73]=0xFF
+	if int(WireCodec.decode_player_profile_state(unavailable_profile).get("experience_percent",-2))!=-1:
+		_fail("PlayerProfileState did not preserve unavailable EXP percent sentinel")
+		return
+	var invalid_percent:=PLAYER_PROFILE_STATE_HEX.hex_decode()
+	invalid_percent[73]=101
+	if not WireCodec.decode_player_profile_state(invalid_percent).is_empty():
+		_fail("PlayerProfileState accepted invalid EXP percent")
 		return
 	var allocate:=WireCodec.encode_player_attribute_allocate(7,1)
 	if allocate.hex_encode().to_upper()!="0D000000010087000700000001":

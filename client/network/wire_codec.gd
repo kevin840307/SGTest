@@ -154,7 +154,7 @@ const SKILL_USE_FRAME_BYTES := 32
 const SKILL_USE_RESULT_FRAME_BYTES := 61
 const PLAYER_SKILL_VISUAL_FRAME_BYTES := 70
 const PLAYER_COMBAT_STATE_FRAME_BYTES := 33
-const PLAYER_PROFILE_STATE_FRAME_BYTES := 73
+const PLAYER_PROFILE_STATE_FRAME_BYTES := 74
 const PLAYER_CREATION_PROFILE_STATE_FRAME_BYTES := 32
 const PLAYER_ATTRIBUTE_ALLOCATE_FRAME_BYTES := 13
 const PLAYER_DAMAGE_FRAME_BYTES := 57
@@ -662,6 +662,7 @@ static func decode_player_profile_state(frame: PackedByteArray) -> Dictionary:
 	var dodge := reader.get_32()
 	var available_attribute_points := reader.get_32()
 	var verification_byte := reader.get_u8()
+	var experience_percent_byte := reader.get_u8()
 	var verified_stats_mask := 0
 	if verification_byte == 1:
 		verified_stats_mask=0x0F
@@ -671,10 +672,14 @@ static func decode_player_profile_state(frame: PackedByteArray) -> Dictionary:
 		verified_stats_mask=verification_byte & 0x0F
 	else:
 		return {}
+	var experience_percent := -1 if experience_percent_byte == 0xFF else experience_percent_byte
+	if experience_percent > 100:
+		return {}
 	if character_id <= 0 or race < 0 or career < 0 or level < 0 or experience < 0 or strength < 0 or dexterity < 0 or constitution < 0 or wisdom < 0 or attack < 0 or defense < 0 or hit < 0 or dodge < 0 or available_attribute_points < 0:
 		return {}
 	return {"character_id":character_id,"race":race,"career":career,"level":level,
-		"experience":experience,"strength":strength,"dexterity":dexterity,
+		"experience":experience,"experience_percent":experience_percent,
+		"strength":strength,"dexterity":dexterity,
 		"constitution":constitution,"wisdom":wisdom,"attack":attack,
 		"defense":defense,"hit":hit,"dodge":dodge,
 		"available_attribute_points":available_attribute_points,
