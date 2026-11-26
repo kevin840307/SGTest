@@ -3,6 +3,36 @@ extends Control
 signal binding_dropped(slot_index:int,payload:Dictionary)
 
 var slot_index:int=-1
+var hotkey_drag_payload:Dictionary={}
+var drag_enabled:=true
+
+func _get_drag_data(_at_position:Vector2):
+	if (
+		not drag_enabled or slot_index<0 or slot_index>=12 or
+		hotkey_drag_payload.is_empty()
+	):
+		return null
+	var payload:=hotkey_drag_payload.duplicate(true)
+	payload["source_slot"]=slot_index
+	# Original CHotKeyItf::PickButton clears only its local slot state here;
+	# SendRemoveHotKey(source) happens later in ReceiveDropButton after a valid
+	# hotkey destination accepts the drop. Keep Server state unchanged on pickup
+	# so a cancelled Godot drag cannot delete a durable binding.
+	var preview:=TextureRect.new()
+	preview.custom_minimum_size=Vector2(22,22)
+	preview.size=Vector2(22,22)
+	preview.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
+	preview.stretch_mode=TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	var icon:=get_node_or_null("Icon") as TextureRect
+	if icon!=null:
+		preview.texture=icon.texture
+	# Direct headless handler checks are not a live GUI drag. The engine sets
+	# this state during a real _get_drag_data callback, where the preview is legal.
+	if get_viewport()!=null and get_viewport().gui_is_dragging():
+		set_drag_preview(preview)
+	else:
+		preview.queue_free()
+	return payload
 
 func _can_drop_data(_at_position:Vector2,data)->bool:
 	return (

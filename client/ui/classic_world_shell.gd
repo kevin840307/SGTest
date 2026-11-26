@@ -114,6 +114,7 @@ var hotkey_panel:=Control.new()
 var _hotkey_page:=0
 var _hotkey_slots:Array=[]
 var _hotkey_refresh_requested:=false
+var _pending_hotkey_rebind:Dictionary={}
 var command_panel:=Control.new()
 var menu:=Control.new() # retained as a non-visible compatibility handle
 var secondary_menu:=Control.new()
@@ -1621,14 +1622,55 @@ func _toggle_hotkey_size()->void:
 	_refresh_hotkeys()
 
 func _on_hotkey_binding_dropped(slot_index:int,payload:Dictionary)->void:
-	if _panel==null or int(_stats.get("pending_hotkey_sequence",0))!=0:
+	if _panel==null or slot_index<0 or slot_index>=12:
 		return
 	var kind:=str(payload.get("hotkey_kind",""))
 	var data_id:=int(payload.get("data_id",0))
-	if data_id<=0:
+	if kind not in ["item","skill"] or data_id<=0:
 		return
 	var data_type:=0 if kind=="item" else 1
+	var source_slot:=int(payload.get("source_slot",-1))
+	if source_slot>=0:
+		if source_slot>=12 or int(_stats.get("pending_hotkey_sequence",0))!=0:
+			return
+		# Original CHotKeyItf::ReceiveDropButton sends source removal only after a
+		# valid hotkey destination accepts the drop. Keep a cancelled drag durable,
+		# then sequence destination Save behind the authoritative Remove snapshot.
+		_pending_hotkey_rebind={
+			"slot_index":slot_index,"data_type":data_type,"data_id":data_id,
+			"after_sequence":int(_stats.get("hotkey_sequence",0))
+		}
+		if _panel.submit_hotkey_remove(source_slot):
+			_hotkey_refresh_requested=true
+		else:
+			_pending_hotkey_rebind.clear()
+		return
+	if int(_stats.get("pending_hotkey_sequence",0))!=0:
+		return
 	if _panel.submit_hotkey_bind(slot_index,data_type,data_id):
+		_hotkey_refresh_requested=true
+
+func _try_submit_pending_hotkey_rebind()->void:
+	if (
+		_pending_hotkey_rebind.is_empty() or _panel==null or
+		int(_stats.get("pending_hotkey_sequence",0))!=0
+	):
+		return
+	# Ignore a stale pre-remove presentation snapshot (including an old failure
+	# status). Only the next authoritative hotkey sequence can resolve this move.
+	if int(_stats.get("hotkey_sequence",0))<=int(_pending_hotkey_rebind.get("after_sequence",-1)):
+		return
+	# This queue exists only after a source-slot remove. Never create a duplicate
+	# binding when that authoritative remove was rejected.
+	if int(_stats.get("last_hotkey_status",-1))>0:
+		_pending_hotkey_rebind.clear()
+		return
+	var queued:=_pending_hotkey_rebind.duplicate(true)
+	if _panel.submit_hotkey_bind(
+		int(queued.get("slot_index",-1)),int(queued.get("data_type",-1)),
+		int(queued.get("data_id",0))
+	):
+		_pending_hotkey_rebind.clear()
 		_hotkey_refresh_requested=true
 
 func _refresh_hotkeys()->void:
@@ -1651,11 +1693,18 @@ func _refresh_hotkeys()->void:
 		var icon:=slot.get_node("Icon") as TextureRect
 		icon.texture=null
 		slot.tooltip_text="F%d"%(i+1)
+		slot.hotkey_drag_payload={}
+		slot.drag_enabled=int(_stats.get("pending_hotkey_sequence",0))==0
 		if not bindings.has(actual_slot):
 			continue
 		var binding:Dictionary=bindings[actual_slot]
 		var data_type:=int(binding.get("data_type",-1))
 		var data_id:=int(binding.get("data_id",0))
+		if data_id>0 and data_type in [0,1]:
+			slot.hotkey_drag_payload={
+				"hotkey_kind":"item" if data_type==0 else "skill",
+				"data_id":data_id
+			}
 		if data_type==0 and inventory_items.has(data_id) and _panel!=null:
 			var item:Dictionary=inventory_items[data_id]
 			var definition:=int(item.get("item_definition_id",0))
@@ -2247,6 +2296,7 @@ func set_world_active(active:bool)->void:
 	set_process(active)
 	if not active:
 		_hotkey_refresh_requested=false
+		_pending_hotkey_rebind.clear()
 		_inventory_render_initialized=false
 		_inventory_render_signature.clear()
 		_social_render_signatures.clear()
@@ -2275,6 +2325,8 @@ func apply_snapshot(snapshot:Dictionary)->void:
 		not _hotkey_refresh_requested and _panel!=null
 	):
 		_hotkey_refresh_requested=_panel.submit_hotkey_refresh()
+	if int(_stats.get("pending_hotkey_sequence",0))==0:
+		_try_submit_pending_hotkey_rebind()
 	_refresh_hud()
 	_refresh_hotkeys()
 	if _inventory_snapshot_changed():

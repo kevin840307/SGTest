@@ -111,6 +111,23 @@ SELECT last_insert_rowid();";
                     rejected.Status==HotkeyResultStatus.InvalidBinding&&
                     rejected.Entries.Count==1&&rejected.Entries[0].Slot==11,
                     "server accepted forged inventory UID or lost valid binding");
+
+                FeedHotkey(gateway,new HotkeyCommandWire(
+                    3,3,HotkeyCommandAction.Remove,11,HotkeyDataType.Item,0),
+                    coordinator,router);
+                var removed=DrainSnapshot(gateway);
+                Checks.Require(
+                    removed.Status==HotkeyResultStatus.Applied&&removed.Entries.Count==0,
+                    "server did not authoritatively clear source hotkey slot");
+
+                FeedHotkey(gateway,new HotkeyCommandWire(
+                    3,4,HotkeyCommandAction.Save,10,HotkeyDataType.Item,itemUid),
+                    coordinator,router);
+                var moved=DrainSnapshot(gateway);
+                Checks.Require(
+                    moved.Status==HotkeyResultStatus.Applied&&moved.Entries.Count==1&&
+                    moved.Entries[0].Slot==10&&moved.Entries[0].DataId==itemUid,
+                    "server did not persist moved hotkey binding");
             }
 
             using(var reopened=new SqliteIdentityStore(db))
@@ -118,10 +135,10 @@ SELECT last_insert_rowid();";
                 await reopened.InitializeAsync();
                 var durable=await reopened.ListCharacterHotkeysAsync(actorId);
                 Checks.Require(
-                    durable.Count==1&&durable[0].Slot==11&&
+                    durable.Count==1&&durable[0].Slot==10&&
                     durable[0].DataType==(int)HotkeyDataType.Item&&
                     durable[0].DataId==itemUid,
-                    "hotkey binding did not survive SQLite reopen");
+                    "moved hotkey binding did not survive SQLite reopen");
 
                 var router=new WorldResultRouter();
                 var relog=Gateway(Actor(actorId,12,4),"HotkeyActor");
@@ -134,7 +151,7 @@ SELECT last_insert_rowid();";
                 var refreshed=DrainSnapshot(relog);
                 Checks.Require(
                     refreshed.Status==HotkeyResultStatus.Applied&&
-                    refreshed.Entries.Count==1&&refreshed.Entries[0].Slot==11&&
+                    refreshed.Entries.Count==1&&refreshed.Entries[0].Slot==10&&
                     refreshed.Entries[0].DataId==itemUid,
                     "relog refresh did not return durable hotkey binding");
             }
