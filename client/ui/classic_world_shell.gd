@@ -201,6 +201,10 @@ var _party_leave_previous_focus:Control
 var _request_menu:=Control.new()
 var _request_menu_actor:=0
 var _clan_rows:=VBoxContainer.new()
+var _clan_create_button:Button
+var _clan_name_dialog:=Control.new()
+var _clan_name_input:=SourceLineEdit.new()
+var _clan_name_confirm:TextureButton
 var _shop_buy_rows:=VBoxContainer.new()
 var _shop_sell_rows:=VBoxContainer.new()
 var _quest_title: Label
@@ -2003,12 +2007,8 @@ func _build_clan()->void:
 	_clan_rows.size=Vector2(238,190)
 	_clan_rows.add_theme_constant_override("separation",0)
 	clan_window.add_child(_clan_rows)
-	var create:=_hit(clan_window,"ClanCreateButton",Rect2(7,330,75,24),func():
-		if _panel!=null:
-			var requested="SGTest戰團"
-			_panel.submit_clan_create(requested)
-	,"建立戰團")
-	create.modulate=Color(1,1,1,0.01)
+	_clan_create_button=_hit(clan_window,"ClanCreateButton",Rect2(7,330,75,24),_open_clan_name,"建立戰團")
+	_clan_create_button.modulate=Color(1,1,1,0.01)
 	var refresh:=_hit(clan_window,"ClanRefreshButton",Rect2(92,330,75,24),func():
 		if _panel!=null:_panel.submit_clan_refresh()
 	,"更新")
@@ -2017,6 +2017,43 @@ func _build_clan()->void:
 		if _panel!=null:_panel.submit_clan_leave()
 	,"離開戰團")
 	leave.modulate=Color(1,1,1,0.01)
+
+	# HK SGOClient sub_4AC1CD loads 061_CLUB_Name.itf before the create request,
+	# then caps its edit control at 10. Keep the exact ITF-local geometry and
+	# original sprites instead of sending the previous fixed "SGTest戰團" name.
+	_clan_name_dialog.name="ClanNameDialog"
+	_clan_name_dialog.position=Vector2(272,250)
+	_clan_name_dialog.size=Vector2(256,100)
+	_clan_name_dialog.visible=false
+	_clan_name_dialog.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_clan_name_dialog)
+	_background(_clan_name_dialog,"BG_RANK_01",_clan_name_dialog.size)
+	_texture_button(
+		_clan_name_dialog,"ClanNameClose","CLOSESCREEN",Vector2(238,4),Vector2(16,16),
+		_close_clan_name,"取消")
+	_texture_button(
+		_clan_name_dialog,"ClanNameHelp","B_ONLINEHELP",Vector2(220,4),Vector2(16,16),
+		Callable(),"說明")
+	var prompt:=_itf_text(
+		_clan_name_dialog,"ClanNamePrompt",Rect2(10,29,120,14),12)
+	prompt.text="請輸入將要成立的皇家戰團名字"
+	_clan_name_input.name="ClanNameInput"
+	_clan_name_input.position=Vector2(14,53)
+	_clan_name_input.size=Vector2(236,12)
+	_clan_name_input.max_length=10
+	_clan_name_input.display_font=_character_raster_font
+	_clan_name_input.display_font_size=12
+	_clan_name_input.baseline=10.0
+	_clan_name_input.text_changed.connect(func(_value):_update_clan_name_action())
+	_clan_name_input.text_submitted.connect(func(_value):_submit_clan_name())
+	_clan_name_dialog.add_child(_clan_name_input)
+	_clan_name_confirm=_texture_button(
+		_clan_name_dialog,"ClanNameConfirm","YELLOW_BUTTON",Vector2(166,73),Vector2(85,21),
+		_submit_clan_name,"確定")
+	var confirm_text:=_itf_text(
+		_clan_name_dialog,"ClanNameConfirmText",Rect2(197,77,24,14),12,true)
+	confirm_text.text="確定"
+	_update_clan_name_action()
 
 func _build_shop()->void:
 	shop_window=_window("ShopWindow","BG_SHOP",Vector2(770,506),Vector2(15,69))
@@ -2849,14 +2886,65 @@ func _request_friend()->void:
 	if target>0 and _panel!=null and _panel.session!=null:
 		_panel.session.friend_add_actor(target)
 
+
+func _open_clan_name()->void:
+	if int(_stats.get("clan_id",0))!=0 or int(_stats.get("pending_clan_sequence",0))!=0:
+		return
+	_clan_name_input.text=""
+	_clan_name_input.caret_column=0
+	_update_clan_name_action()
+	_clan_name_dialog.show()
+	_clan_name_dialog.move_to_front()
+	_clan_name_input.focus_editor()
+
+
+func _close_clan_name()->void:
+	_clan_name_dialog.hide()
+	_clan_name_input.text=""
+
+
+func _update_clan_name_action()->void:
+	if _clan_name_confirm==null:
+		return
+	var clean:=_clan_name_input.text.strip_edges()
+	_clan_name_confirm.disabled=(
+		int(_stats.get("clan_id",0))!=0 or int(_stats.get("pending_clan_sequence",0))!=0 or
+		clean!=_clan_name_input.text or clean.length()<2 or clean.length()>10 or
+		clean.to_utf8_buffer().size()>WireCodec.CLAN_MAX_NAME_BYTES
+	)
+
+
+func _submit_clan_name()->void:
+	if _panel==null or int(_stats.get("clan_id",0))!=0 or int(_stats.get("pending_clan_sequence",0))!=0:
+		return
+	var clean:=_clan_name_input.text.strip_edges()
+	if (
+		clean!=_clan_name_input.text or clean.length()<2 or clean.length()>10 or
+		clean.to_utf8_buffer().size()>WireCodec.CLAN_MAX_NAME_BYTES
+	):
+		return
+	if _panel.submit_clan_create(clean):
+		# Keep the dialog present until Server result/snapshot. This prevents a
+		# locally queued request from looking authoritative before SQLite accepts it.
+		_clan_name_confirm.disabled=true
+
+
 func _refresh_clan()->void:
+	var clan_id:=int(_stats.get("clan_id",0))
+	if _clan_create_button!=null:
+		_clan_create_button.visible=clan_id==0
+		_clan_create_button.disabled=clan_id!=0 or int(_stats.get("pending_clan_sequence",0))!=0
+	if clan_id>0 and _clan_name_dialog.visible:
+		_close_clan_name()
+	elif _clan_name_dialog.visible:
+		_update_clan_name_action()
 	var header=clan_window.get_node_or_null("ClanHeader")
 	if header is Label:
 		(header as Label).text=("%s\nID %d　團長 %d\n公告：%s"%[
-			str(_stats.get("clan_name","")),int(_stats.get("clan_id",0)),
+			str(_stats.get("clan_name","")),clan_id,
 			int(_stats.get("clan_leader_actor_id",0)),
 			str(_stats.get("clan_announcement","")) if not str(_stats.get("clan_announcement","")).is_empty() else "（無）"
-		]) if int(_stats.get("clan_id",0))>0 else "尚未加入戰團"
+		]) if clan_id>0 else "尚未加入戰團"
 	_clear_rows(_clan_rows)
 	var members:Dictionary=_stats.get("clan_members",{})
 	var ids:Array=members.keys();ids.sort()

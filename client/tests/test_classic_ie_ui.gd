@@ -47,6 +47,16 @@ class FriendRestoreSession:
 		target=target_actor_id
 		return queue_ok
 
+class ClanCreateSession:
+	extends RefCounted
+	var creates:=0
+	var name:=""
+	var queue_ok:=true
+	func clan_create(value:String)->bool:
+		creates+=1
+		name=value
+		return queue_ok
+
 func _fail(reason: String) -> void:
 	push_error("CLASSIC_IE_UI_FAIL "+reason)
 	quit(1)
@@ -859,6 +869,79 @@ func _run() -> void:
 	if not world.clan_window.visible or world._clan_rows.get_child_count() != 2:
 		_fail("classic BG_CLUB did not bind clan members")
 		return
+	# HK 061_CLUB_Name: a no-clan create action must collect real player input
+	# before the existing authoritative clan command is queued. The dialog stays
+	# up after queueing and only an authoritative clan snapshot closes it.
+	var real_clan_session=app.session_panel.session
+	var real_clan_latest:Dictionary=app.session_panel._latest.duplicate(true)
+	var clan_create_session:=ClanCreateSession.new()
+	var no_clan:Dictionary=fixture.duplicate(true)
+	no_clan["state"]=State.STATE_IN_WORLD
+	no_clan["clan_id"]=0
+	no_clan["clan_revision"]=0
+	no_clan["clan_leader_actor_id"]=0
+	no_clan["clan_name"]=""
+	no_clan["clan_announcement"]=""
+	no_clan["clan_members"]={}
+	no_clan["pending_clan_sequence"]=0
+	# Isolate this UI flow from the unrelated opportunistic hotkey refresh;
+	# the production session already owns the real hotkey authority path.
+	no_clan["hotkeys_ready"]=true
+	world.apply_snapshot(no_clan)
+	app.session_panel._latest=no_clan.duplicate(true)
+	app.session_panel.session=clan_create_session
+	if not world._clan_create_button.visible or world._clan_create_button.disabled:
+		_fail("no-clan state did not expose the Classic create action")
+		return
+	world._clan_create_button.pressed.emit()
+	var clan_prompt=world._clan_name_dialog.get_node("ClanNamePrompt")
+	var clan_close=world._clan_name_dialog.get_node("ClanNameClose") as TextureButton
+	var clan_help=world._clan_name_dialog.get_node("ClanNameHelp") as TextureButton
+	var clan_confirm=world._clan_name_dialog.get_node("ClanNameConfirm") as TextureButton
+	var clan_confirm_text=world._clan_name_dialog.get_node("ClanNameConfirmText")
+	if (
+		not world._clan_name_dialog.visible or world._clan_name_dialog.get_rect()!=Rect2(272,250,256,100) or
+		clan_close.get_rect()!=Rect2(238,4,16,16) or clan_help.get_rect()!=Rect2(220,4,16,16) or
+		world._clan_name_input.get_rect()!=Rect2(14,53,236,12) or world._clan_name_input.max_length!=10 or
+		clan_prompt.get_rect()!=Rect2(10,29,120,14) or str(clan_prompt.text)!="請輸入將要成立的皇家戰團名字" or
+		clan_confirm.get_rect()!=Rect2(166,73,85,21) or clan_confirm_text.get_rect()!=Rect2(197,77,24,14) or
+		str(clan_confirm_text.text)!="確定"
+	):
+		_fail("061_CLUB_Name source geometry/text drifted from HK ITF")
+		return
+	world._clan_name_input.text="取消測試"
+	clan_close.pressed.emit()
+	if world._clan_name_dialog.visible or clan_create_session.creates!=0:
+		_fail("061_CLUB_Name close submitted a clan instead of cancelling locally")
+		return
+	world._clan_create_button.pressed.emit()
+	world._clan_name_input.text="一"
+	world._update_clan_name_action()
+	if not clan_confirm.disabled:
+		_fail("061_CLUB_Name accepted a one-character clan name")
+		return
+	world._clan_name_input.text="皇家戰團"
+	world._update_clan_name_action()
+	if clan_confirm.disabled:
+		_fail("061_CLUB_Name rejected a valid source-bounded clan name")
+		return
+	clan_confirm.pressed.emit()
+	if clan_create_session.creates!=1 or clan_create_session.name!="皇家戰團" or not world._clan_name_dialog.visible or not clan_confirm.disabled:
+		_fail("061_CLUB_Name confirm did not queue exactly one typed authoritative create intent")
+		return
+	var created_clan:Dictionary=no_clan.duplicate(true)
+	created_clan["clan_id"]=777
+	created_clan["clan_revision"]=1
+	created_clan["clan_leader_actor_id"]=42
+	created_clan["clan_name"]="皇家戰團"
+	created_clan["clan_members"]={42:{"actor_id":42,"role":1,"name":"TestA"}}
+	world.apply_snapshot(created_clan)
+	if world._clan_name_dialog.visible or world._clan_create_button.visible or world._clan_rows.get_child_count()!=1:
+		_fail("authoritative clan snapshot did not close 061_CLUB_Name and refresh Classic members")
+		return
+	app.session_panel.session=real_clan_session
+	app.session_panel._latest=real_clan_latest
+	world.apply_snapshot(fixture)
 	world.secondary_menu.get_node("QuestCommand").pressed.emit()
 	if not world.quest_window.visible or world._quest_title.text != "失落的星鑰" or world._quest_choices.get_child_count() != 2:
 		_fail("classic BG_QUEST_LIST did not bind quest choices")
