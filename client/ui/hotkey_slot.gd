@@ -1,10 +1,24 @@
 extends Control
 
 signal binding_dropped(slot_index:int,payload:Dictionary)
+signal activated(slot_index:int)
 
 var slot_index:int=-1
 var hotkey_drag_payload:Dictionary={}
 var drag_enabled:=true
+var _click_pending:=false
+
+func _gui_input(event:InputEvent)->void:
+	if not event is InputEventMouseButton or event.button_index!=MOUSE_BUTTON_LEFT:
+		return
+	if event.pressed:
+		_click_pending=not hotkey_drag_payload.is_empty()
+		return
+	var activate:=_click_pending and Rect2(Vector2.ZERO,size).has_point(event.position)
+	_click_pending=false
+	if activate and not get_viewport().gui_is_dragging():
+		activated.emit(slot_index)
+		accept_event()
 
 func _get_drag_data(_at_position:Vector2):
 	if (
@@ -12,6 +26,7 @@ func _get_drag_data(_at_position:Vector2):
 		hotkey_drag_payload.is_empty()
 	):
 		return null
+	_click_pending=false
 	var payload:=hotkey_drag_payload.duplicate(true)
 	payload["source_slot"]=slot_index
 	# Original CHotKeyItf::PickButton clears only its local slot state here;

@@ -57,6 +57,8 @@ func _run()->void:
 	_expect(drag_payload is Dictionary and int(drag_payload.get("source_slot",-1))==0,
 		"slot drag carries its original source position")
 	_expect(panel.removed.is_empty(),"picking/cancelling a bound slot does not remove durable binding")
+	slot0._drop_data(Vector2.ZERO,drag_payload)
+	_expect(panel.removed.is_empty() and shell._pending_hotkey_rebind.is_empty(),"dropping back onto original slot does not remove durable binding")
 
 	# ReceiveDropButton sends source Remove only after a valid hotkey destination
 	# accepts the drop. Destination Save waits for that authoritative ACK.
@@ -124,6 +126,20 @@ func _run()->void:
 	shell._handle_hotkey_key(f1)
 	shell._handle_hotkey_key(f7)
 	_expect(panel.recovery_used==[41001,41012,41007],"compact page 2 maps F1 to slot 7 and ignores hidden F7")
+	var click:=InputEventMouseButton.new()
+	click.button_index=MOUSE_BUTTON_LEFT
+	click.position=Vector2(8,8)
+	click.pressed=true
+	slot0._gui_input(click)
+	click.pressed=false
+	slot0._gui_input(click)
+	_expect(panel.recovery_used==[41001,41012,41007,41007],"mouse click uses compact page 2 binding through same action as F1")
+	click.pressed=true
+	slot0._gui_input(click)
+	slot0._get_drag_data(Vector2.ZERO)
+	click.pressed=false
+	slot0._gui_input(click)
+	_expect(panel.recovery_used==[41001,41012,41007,41007],"drag release does not consume or activate the bound item")
 
 	shell.free()
 	if not failed:

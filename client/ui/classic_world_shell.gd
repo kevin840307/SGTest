@@ -655,6 +655,9 @@ func _build_hud()->void:
 		Rect2(4,234,12,12),Rect2(4,261,18,12),Rect2(4,288,18,12),Rect2(4,315,18,12)]
 	for i in 12:
 		var hotkey_label:=_itf_text(hotkey_panel,"Hotkey%d"%i,hotkey_rects[i],9,false)
+		# Fixed ITF key captions are single-line even at F10-F12; wrapping
+		# would move text outside the original twelve-pixel-high row.
+		hotkey_label.autowrap_mode=TextServer.AUTOWRAP_OFF
 		hotkey_label.text="F%d"%(i+1)
 		var slot:=HotkeySlot.new()
 		slot.name="HotkeySlot%d"%i
@@ -663,6 +666,7 @@ func _build_hud()->void:
 		slot.size=Vector2(24,26)
 		slot.mouse_filter=Control.MOUSE_FILTER_STOP
 		slot.binding_dropped.connect(_on_hotkey_binding_dropped)
+		slot.activated.connect(_on_hotkey_slot_activated)
 		var icon:=TextureRect.new()
 		icon.name="Icon"
 		icon.position=Vector2(1,1)
@@ -1628,6 +1632,10 @@ func _toggle_hotkey_size()->void:
 			label.size=Vector2(18 if i>=9 else 12,12)
 	_refresh_hotkeys()
 
+func _on_hotkey_slot_activated(slot_index:int)->void:
+	if _active:
+		_activate_hotkey(slot_index)
+
 func _on_hotkey_binding_dropped(slot_index:int,payload:Dictionary)->void:
 	if _panel==null or slot_index<0 or slot_index>=12:
 		return
@@ -1638,7 +1646,7 @@ func _on_hotkey_binding_dropped(slot_index:int,payload:Dictionary)->void:
 	var data_type:=0 if kind=="item" else 1
 	var source_slot:=int(payload.get("source_slot",-1))
 	if source_slot>=0:
-		if source_slot>=12 or int(_stats.get("pending_hotkey_sequence",0))!=0:
+		if source_slot==slot_index or source_slot>=12 or int(_stats.get("pending_hotkey_sequence",0))!=0:
 			return
 		# Original CHotKeyItf::ReceiveDropButton sends source removal only after a
 		# valid hotkey destination accepts the drop. Keep a cancelled drag durable,

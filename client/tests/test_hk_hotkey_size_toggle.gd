@@ -79,6 +79,8 @@ func _run() -> void:
 			_expect(label.visible and Rect2(label.position, label.size) ==
 				Rect2(4, long_ys[i], 18 if i >= 9 else 12, 12),
 				"expanded F%d source rect" % (i + 1))
+			_expect((label as RichTextLabel).autowrap_mode == TextServer.AUTOWRAP_OFF,
+				"F%d remains a single-line source caption" % (i + 1))
 
 	shell.free()
 	if not failed:
