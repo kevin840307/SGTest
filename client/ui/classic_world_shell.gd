@@ -1060,7 +1060,7 @@ func _build_friend_panel()->void:
 	hud.add_child(friend_panel)
 	_make_movable(friend_panel)
 	_friend_background=_background(friend_panel,"BG_FRIENDLIST_SMALL",friend_panel.size)
-	_texture_button(friend_panel,"FriendAdd","B_LIST_ADD",Vector2(5,7),Vector2(24,24),_open_friend_editor,"新增好友")
+	_texture_button(friend_panel,"FriendAdd","B_LIST_ADD",Vector2(5,7),Vector2(24,24),_restore_selected_friend,"還原好友")
 	_friend_ignore=_texture_button(friend_panel,"FriendIgnore","B_LIST_TO_INGORE",Vector2(31,7),Vector2(24,24),_toggle_selected_friend_ignore,"移至黑名單")
 	_friend_delete=_texture_button(friend_panel,"FriendDelete","B_LIST_DEL",Vector2(71,7),Vector2(24,24),_delete_selected_friend,"移除選取的好友")
 	_friend_edit=_texture_button(friend_panel,"FriendEdit","B_LIST_EDIT",Vector2(97,7),Vector2(24,24),_open_friend_rename,"好友備註")
@@ -1523,15 +1523,22 @@ func _show_ignore_list()->void:
 	_refresh_friend_server()
 	_refresh_friends()
 
-func _toggle_selected_friend_ignore()->void:
-	if _panel==null or _panel.session==null or _friend_selected_actor<=0:
+func _restore_selected_friend()->void:
+	# Old CFriendItf::OnAddPlayer (control 0x8DB / B_LIST_ADD) only acts on
+	# the selected ignored contact. In friend-list mode the original disables
+	# this control; friend invitations come from 040_Rightbox instead.
+	if not _friend_show_ignored or _panel==null or _panel.session==null or _friend_selected_actor<=0:
 		return
-	var queued:bool
-	if _friend_show_ignored:
-		queued=_panel.session.friend_restore(_friend_selected_actor)
-	else:
-		queued=_panel.session.friend_ignore(_friend_selected_actor)
-	if queued:
+	if _panel.session.friend_restore(_friend_selected_actor):
+		_friend_selected_actor=0
+		_update_friend_action()
+
+func _toggle_selected_friend_ignore()->void:
+	# Old control 0xAFC / B_LIST_TO_INGORE is the opposite one-way action:
+	# friend list -> ignore list. It is disabled while viewing ignored contacts.
+	if _friend_show_ignored or _panel==null or _panel.session==null or _friend_selected_actor<=0:
+		return
+	if _panel.session.friend_ignore(_friend_selected_actor):
 		_friend_selected_actor=0
 		_update_friend_action()
 
@@ -3006,11 +3013,15 @@ func _update_friend_action()->void:
 	_friend_action.text="移除" if actor>0 else "新增"
 	_friend_action.tooltip_text="移除好友" if actor>0 else "新增好友"
 	_friend_action.disabled=clean.is_empty() or pending
+	var friend_add:=friend_panel.get_node_or_null("FriendAdd") as TextureButton
+	if friend_add!=null:
+		friend_add.disabled=not _friend_show_ignored or _friend_selected_actor<=0 or pending
+		friend_add.tooltip_text="還原好友"
 	if _friend_delete!=null:
 		_friend_delete.disabled=_friend_show_ignored or _friend_selected_actor<=0 or pending
 	if _friend_ignore!=null:
-		_friend_ignore.disabled=_friend_selected_actor<=0 or pending
-		_friend_ignore.tooltip_text="解除黑名單" if _friend_show_ignored else "移至黑名單"
+		_friend_ignore.disabled=_friend_show_ignored or _friend_selected_actor<=0 or pending
+		_friend_ignore.tooltip_text="移至黑名單"
 	if _friend_edit!=null:
 		_friend_edit.disabled=_friend_selected_actor<=0 or pending
 	_update_friend_rename_action()

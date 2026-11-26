@@ -37,6 +37,16 @@ class FriendInviteSession:
 		target=target_actor_id
 		return queue_ok
 
+class FriendRestoreSession:
+	extends RefCounted
+	var restores:=0
+	var target:=0
+	var queue_ok:=true
+	func friend_restore(target_actor_id:int)->bool:
+		restores+=1
+		target=target_actor_id
+		return queue_ok
+
 func _fail(reason: String) -> void:
 	push_error("CLASSIC_IE_UI_FAIL "+reason)
 	quit(1)
@@ -761,29 +771,42 @@ func _run() -> void:
 	if world._friend_message_panel.visible:
 		_fail("043_FRIEND_MSG close handler did not hide source panel")
 		return
+	var add_button:=world.friend_panel.get_node("FriendAdd") as TextureButton
 	var ignore_button:=world.friend_panel.get_node("FriendIgnore") as TextureButton
 	var ignore_list_button:=world.friend_panel.get_node("IgnoreList") as TextureButton
 	if (
+		add_button==null or add_button.get_rect()!=Rect2(5,7,24,24) or not add_button.disabled or
 		ignore_button==null or ignore_button.get_rect()!=Rect2(31,7,24,24) or
 		ignore_list_button==null or ignore_list_button.get_rect()!=Rect2(154,7,24,24) or ignore_list_button.disabled
 	):
-		_fail("020_FRIENDLIST original ignore controls are not live at source rects")
+		_fail("020_FRIENDLIST original friend/ignore controls are not live at source rect/state")
 		return
 	(world._friend_rows.get_child(0) as Button).pressed.emit()
-	if ignore_button.disabled or ignore_button.tooltip_text!="移至黑名單":
-		_fail("020_FRIENDLIST 2812 did not arm after selecting an authoritative friend")
+	if not add_button.disabled or ignore_button.disabled or ignore_button.tooltip_text!="移至黑名單":
+		_fail("020_FRIENDLIST friend mode did not match Old 0x8DB disabled / 0xAFC enabled state")
 		return
 	ignore_list_button.pressed.emit()
 	if (
 		world._friend_rows.get_child_count()!=1 or
 		str(world._friend_rows.get_child(0).text)!="黑名單玩家" or
-		ignore_button.tooltip_text!="解除黑名單"
+		not ignore_button.disabled or not add_button.disabled
 	):
-		_fail("020_FRIENDLIST ignore-list view did not bind authoritative ignored_friends")
+		_fail("020_FRIENDLIST ignore-list view did not bind authoritative ignored_friends/source states")
 		return
+	(world._friend_rows.get_child(0) as Button).pressed.emit()
+	if add_button.disabled or not ignore_button.disabled or add_button.tooltip_text!="還原好友":
+		_fail("020_FRIENDLIST ignored selection did not arm Old B_LIST_ADD restore control")
+		return
+	var restore_session:=FriendRestoreSession.new()
+	app.session_panel.session=restore_session
+	add_button.pressed.emit()
+	if restore_session.restores!=1 or restore_session.target!=45 or world._friend_editor.visible:
+		_fail("020_FRIENDLIST B_LIST_ADD did not restore selected ignored contact through session authority")
+		return
+	app.session_panel.session=real_session
 	world.friend_panel.get_node("FriendList").pressed.emit()
-	if world._friend_rows.get_child_count()!=2 or ignore_button.tooltip_text!="移至黑名單":
-		_fail("020_FRIENDLIST friend-list view did not restore source-backed contact view")
+	if world._friend_rows.get_child_count()!=2 or not add_button.disabled or ignore_button.tooltip_text!="移至黑名單":
+		_fail("020_FRIENDLIST friend-list view did not restore source-backed contact/control state")
 		return
 	var edit_button:=world.friend_panel.get_node("FriendEdit") as TextureButton
 	(world._friend_rows.get_child(0) as Button).pressed.emit()
