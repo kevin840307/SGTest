@@ -1,5 +1,8 @@
 using SGTest.Server.Npc;
 using SGTest.Server.Map;
+using SGTest.Server.Monster;
+using SGTest.Server.Visibility;
+using System.Text.Json;
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
@@ -42,6 +45,10 @@ internal static class IdentitySessionAuthorizationChecks
             () => CharacterManagementViaAes(root).GetAwaiter().GetResult());
         Checks.Run("AES legacy proof-free choose cannot enter a password-protected owned character",
             () => RejectedCharacterSelection(root,protectedOwned:true).GetAwaiter().GetResult());
+        Checks.Run("AES source-backed empty-equipment combat admission survives relogin and equipped state fails closed",
+            () => SourceBackedEmptyEquipmentCombatAdmission(root).GetAwaiter().GetResult());
+        Checks.Run("AES source-backed formal character sends normal attack through authoritative monster pipeline",
+            () => SourceBackedNormalAttackEndToEnd(root).GetAwaiter().GetResult());
     }
 
     private static async Task CharacterManagementViaAes(string root)
@@ -1111,6 +1118,287 @@ internal static class IdentitySessionAuthorizationChecks
             await world.StopAsync();
         }
         finally{Directory.Delete(identityRoot,true);}
+    }
+
+    private static async Task SourceBackedNormalAttackEndToEnd(string root)
+    {
+        string identityRoot=TempRoot();
+        try
+        {
+            const int mapId=122;
+            string mapDir=Checks.Fixture(root,mapId,12,12,(_,_)=>0);
+            var grid=BlockingGrid.Load(mapDir,mapId);
+            string populationPath=Path.Combine(mapDir,"population-source-combat.json");
+            File.WriteAllText(populationPath,JsonSerializer.Serialize(new
+            {
+                version=5,kind="verified_monster_target_runtime",map_id=mapId,
+                stats_verified=true,target_combat_ready=true,ai_ready=false,
+                definitions=new[] { new {
+                    id=1,name="SourceCombatTarget",sprite="EN001A",
+                    atlas="Enemy/EN001A/atlas.json",
+                    stats=new {
+                        level=3,max_hp=100,defense_power=0,
+                        magic_defense_power=0,dodge_rate=0,respawn_ticks=90
+                    }}},
+                spawns=new[]{new{source_index=0,source_flags=7,
+                    definition=1,p=new[]{40,24}}}
+            }));
+            var runtime=new MonsterRuntime(
+                grid,MonsterPopulationCatalog.LoadVerified(populationPath,mapId,grid));
+            var monsters=new MonsterWorldCoordinator([runtime],
+                normalAttackRoll:()=>0,
+                normalAttackDamageRoll:exclusiveMax=>exclusiveMax==20?10:0);
+
+            await using var world=new ServerWorldHost(
+                [grid],options:new WorldHostOptions(PublishIdleTicks:true));
+            await world.StartAsync();
+            using var store=new SqliteIdentityStore(Path.Combine(identityRoot,"identity.db"));
+            await store.InitializeAsync();
+            const string username="formal_attack_user";
+            const string password="Formal-Attack-Password-123!";
+            long account=(await store.CreateAccountAsync(username,password)).AccountId;
+            long characterId=(await store.CreateCharacterAsync(
+                account,0,"FormalFighter",new CharacterSpawn(mapId,24,24)))
+                .Character?.CharacterId??throw new Exception("formal attack character missing");
+            await store.SetCharacterCombatProfileAsync(characterId,
+                new CharacterCombatProfileData(
+                    CombatProfileTrust.ProfileOnlyVerified,
+                    "old-server:CreateCharPara+SGOPlayer::UpdateParam",
+                    Race:0,Career:0,Strength:5,Dexterity:5,Constitution:5,Wisdom:5,
+                    Level:3,CurrentHp:100,MaxHp:100,
+                    Attack:14,Defense:3,Hit:19,Dodge:19,
+                    AttackRange:0,AttackCooldownTicks:0,
+                    CurrentMp:50,MaxMp:50));
+
+            var combat=new PlayerCombatSettlement(store);
+            var router=new WorldResultRouter(
+                new WorldResultRouterOptions(AttackRequestCapacity:8));
+            var pump=new WorldAoiPump(router,monsters:monsters);
+            var authorization=new IdentitySessionAuthorization(
+                store,world,combat:combat);
+            using var stop=new CancellationTokenSource();
+            Task routing=router.RunAsync(world.Results);
+            Task pumping=pump.RunAsync(stop.Token);
+
+            var session=await StartRoutedSession(authorization,world,router);
+            try
+            {
+                await session.Stream.WriteAsync(
+                    WireProtocol.EncodeAuthRequest(new(username,password)));
+                await session.Stream.FlushAsync();
+                Checks.Require(WireProtocol.TryDecodeAuthResult(
+                        await ReadFrameAsync(session.Stream),out var auth)&&
+                    auth.Status==AuthWireStatus.Success,
+                    "formal normal attack auth failed");
+                Checks.Require(WireProtocol.TryDecodeCharacterList(
+                        await ReadFrameAsync(session.Stream),out var list)&&
+                    list.Characters.Single().CharacterId==characterId,
+                    "formal normal attack character list mismatch");
+                await CharacterChooseTestHarness.ChooseAsync(session.Stream,characterId);
+                await session.Stream.FlushAsync();
+                Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                        await ReadFrameAsync(session.Stream),out var choose)&&
+                    choose.Status==CharacterChooseWireStatus.Success,
+                    "formal normal attack choose failed");
+
+                PlayerCombatStateWire? vitals=null;
+                WorldReadyWire? ready=null;
+                MonsterStateWire? target=null;
+                using(var startupTimeout=
+                    new CancellationTokenSource(TimeSpan.FromSeconds(4)))
+                {
+                    while(vitals is null||ready is null||target is null)
+                    {
+                        byte[] frame=await ReadFrameAsync(
+                            session.Stream,startupTimeout.Token);
+                        if(WireProtocol.TryDecodePlayerCombatState(frame,out var combatState))
+                            vitals=combatState;
+                        else if(WireProtocol.TryDecodeWorldReady(frame,out var worldReady))
+                            ready=worldReady;
+                        else if(WireProtocol.TryDecodeMonsterState(
+                            frame,out var kind,out var monster)&&
+                            kind==WireOpcode.MonsterSpawn)
+                            target=monster;
+                    }
+                }
+                Checks.Require(vitals is { CombatEnabled:true }&&
+                    vitals.Value.MapEpoch==choose.MapEpoch,
+                    "formal ProfileOnlyVerified character was not combat-enabled");
+                Checks.Require(target is { CurrentHp:100 }&&
+                    target.Value.X==40&&target.Value.Y==24,
+                    "formal normal attack target spawn mismatch");
+
+                await session.Stream.WriteAsync(WireProtocol.EncodeWorldReadyAck(
+                    new(choose.MapEpoch,ready!.Value.ServerTick)));
+                await session.Stream.WriteAsync(WireProtocol.EncodeNormalAttack(
+                    new(choose.MapEpoch,1,target!.Value.EntityId)));
+                await session.Stream.FlushAsync();
+
+                NormalAttackResultWire? result=null;
+                MonsterStateWire? delta=null;
+                using(var attackTimeout=
+                    new CancellationTokenSource(TimeSpan.FromSeconds(4)))
+                {
+                    while(result is null||delta is null)
+                    {
+                        byte[] frame=await ReadFrameAsync(
+                            session.Stream,attackTimeout.Token);
+                        if(WireProtocol.TryDecodeNormalAttackResult(
+                            frame,out var attack)&&attack.AttackSequence==1)
+                            result=attack;
+                        else if(WireProtocol.TryDecodeMonsterState(
+                            frame,out var kind,out var monster)&&
+                            kind==WireOpcode.MonsterDelta)
+                            delta=monster;
+                    }
+                }
+                Checks.Require(result is { Status:NormalAttackStatus.Applied }&&
+                    result.Value.Damage>0&&
+                    result.Value.CurrentHp==100-result.Value.Damage&&
+                    result.Value.TargetEntityId==target.Value.EntityId,
+                    "formal normal attack did not return authoritative damage");
+                Checks.Require(delta is { } changed&&
+                    changed.EntityId==result.Value.TargetEntityId&&
+                    changed.Revision==result.Value.TargetRevision&&
+                    changed.CurrentHp==result.Value.CurrentHp,
+                    "formal normal attack monster delta did not match authority");
+            }
+            finally
+            {
+                await session.Stream.DisposeAsync();
+                session.Client.Dispose();
+                await session.ServerTask.WaitAsync(TimeSpan.FromSeconds(3));
+                stop.Cancel();
+                await pumping.WaitAsync(TimeSpan.FromSeconds(3));
+                await world.StopAsync();
+                await routing.WaitAsync(TimeSpan.FromSeconds(3));
+            }
+        }
+        finally
+        {
+            Directory.Delete(identityRoot,true);
+        }
+    }
+
+    private static async Task SourceBackedEmptyEquipmentCombatAdmission(string root)
+    {
+        string identityRoot=TempRoot();
+        try
+        {
+            const int mapId=121;
+            string mapDir=Checks.Fixture(root,mapId,5,5,(_,_)=>0);
+            var grid=BlockingGrid.Load(mapDir,mapId);
+            await using var world=new ServerWorldHost([grid]);
+            await world.StartAsync();
+            using var store=new SqliteIdentityStore(Path.Combine(identityRoot,"identity.db"));
+            await store.InitializeAsync();
+
+            const string username="source_combat_user";
+            const string password="Source-Combat-Password-123!";
+            long account=(await store.CreateAccountAsync(username,password)).AccountId;
+            long characterId=(await store.CreateCharacterAsync(
+                account,0,"SourceFighter",new CharacterSpawn(mapId,8,8)))
+                .Character?.CharacterId??throw new Exception("source-combat character missing");
+
+            var durable=new CharacterCombatProfileData(
+                CombatProfileTrust.ProfileOnlyVerified,
+                "old-server:CreateCharPara+SGOPlayer::UpdateParam",
+                Race:0,Career:0,Strength:5,Dexterity:5,Constitution:5,Wisdom:5,
+                Level:3,CurrentHp:100,MaxHp:100,Attack:14,Defense:3,Hit:19,Dodge:19,
+                AttackRange:0,AttackCooldownTicks:0,CurrentMp:50,MaxMp:50);
+            await store.SetCharacterCombatProfileAsync(characterId,durable);
+
+            long generation=await store.AllocateLootWorldGenerationAsync();
+            var drop=await store.CreateTrustedGroundDropAsync(new(
+                mapId,8,8,8121,
+                SqliteIdentityStore.ComposeLootDeathRevision(generation,1),
+                0,3701,1,LootSourceTrust.SyntheticTest,
+                "combat-admission-negative-equipment"));
+            var claim=await store.ClaimGroundDropAsync(new TrustedPickupContext(
+                characterId,SqliteIdentityStore.ComposePickupConnectionEpoch(generation,1),
+                1,1,mapId,8,8),drop.DropId);
+            Checks.Require(claim.Status==PickupStatus.Granted&&claim.ItemUid>0,
+                "source-combat negative equipment seed failed");
+
+            IReadOnlyDictionary<int,EquipmentRule> rules=
+                new Dictionary<int,EquipmentRule>{{3701,new(3701,4)}};
+            var combat=new PlayerCombatSettlement(store);
+            var router=new WorldResultRouter();
+            var authorization=new IdentitySessionAuthorization(
+                store,world,combat:combat,pickupWorldGeneration:generation,
+                equipmentRules:rules);
+            Task routing=router.RunAsync(world.Results);
+
+            Checks.Require(
+                SourceVerifiedUnarmedCombatRules.AttackCooldownTicks(world.TickHz)==63,
+                "source-backed 25fps attack cadence was not translated to 30Hz");
+            Checks.Require(
+                SourceVerifiedUnarmedCombatRules.TryPromoteEmptyEquipment(
+                    durable,0,world.TickHz,out var promoted)&&
+                promoted.Trust==CombatProfileTrust.Verified&&
+                promoted.AttackRange==45&&promoted.AttackCooldownTicks==63,
+                "source-backed empty-equipment promotion mismatch");
+            Checks.Require(
+                !SourceVerifiedUnarmedCombatRules.TryPromoteEmptyEquipment(
+                    durable,1,world.TickHz,out _),
+                "equipped ProfileOnlyVerified character escaped fail-closed admission");
+
+            async Task LoginAndAssert(bool expectedCombat,string phase)
+            {
+                var session=await StartRoutedSession(authorization,world,router);
+                await session.Stream.WriteAsync(
+                    WireProtocol.EncodeAuthRequest(new(username,password)));
+                await session.Stream.FlushAsync();
+                Checks.Require(WireProtocol.TryDecodeAuthResult(
+                        await ReadFrameAsync(session.Stream),out var auth)&&
+                    auth.Status==AuthWireStatus.Success,phase+" auth failed");
+                Checks.Require(WireProtocol.TryDecodeCharacterList(
+                        await ReadFrameAsync(session.Stream),out var list)&&
+                    list.Characters.Single().CharacterId==characterId,
+                    phase+" character list mismatch");
+                await CharacterChooseTestHarness.ChooseAsync(session.Stream,characterId);
+                await session.Stream.FlushAsync();
+                Checks.Require(WireProtocol.TryDecodeCharacterChooseResult(
+                        await ReadFrameAsync(session.Stream),out var choose)&&
+                    choose.Status==CharacterChooseWireStatus.Success,
+                    phase+" choose failed");
+                Checks.Require(WireProtocol.TryDecodePlayerCombatState(
+                        await ReadFrameAsync(session.Stream),out var vitals)&&
+                    vitals.MapEpoch==choose.MapEpoch&&
+                    vitals.CurrentHp==100&&vitals.MaxHp==100&&
+                    vitals.CurrentMp==50&&vitals.MaxMp==50&&
+                    vitals.CombatEnabled==expectedCombat,
+                    phase+" authoritative combat admission mismatch");
+
+                await session.Stream.DisposeAsync();
+                session.Client.Dispose();
+                await session.ServerTask.WaitAsync(TimeSpan.FromSeconds(3));
+            }
+
+            await LoginAndAssert(true,"first login");
+            await LoginAndAssert(true,"relogin");
+
+            var persisted=await store.GetCharacterCombatProfileAsync(characterId);
+            Checks.Require(
+                persisted is not null&&
+                persisted.Data.Trust==CombatProfileTrust.ProfileOnlyVerified&&
+                persisted.Data.AttackRange==0&&persisted.Data.AttackCooldownTicks==0,
+                "session-local combat promotion mutated durable profile");
+
+            var equipped=await store.EquipInventoryItemAsync(
+                new TrustedEquipmentContext(characterId,901,1,1),
+                claim.ItemUid,rules);
+            Checks.Require(equipped.Status==EquipmentTransferStatus.Applied,
+                "source-combat negative equipment was not equipped");
+            await LoginAndAssert(false,"equipped relogin");
+
+            await world.StopAsync();
+            await routing.WaitAsync(TimeSpan.FromSeconds(3));
+        }
+        finally
+        {
+            Directory.Delete(identityRoot,true);
+        }
     }
 
     private static async Task InvalidPasswordRejected(string root)

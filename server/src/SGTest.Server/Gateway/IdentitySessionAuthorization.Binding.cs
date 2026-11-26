@@ -347,11 +347,30 @@ public sealed partial class IdentitySessionAuthorization
         }
         CharacterExperienceState? experience = await _identity.GetCharacterExperienceAsync(
             character.CharacterId, cancellationToken).ConfigureAwait(false);
-        bool combatEnabled = combat?.Data.Trust is
+
+        // Equipment must be known before combat admission. A ProfileOnlyVerified
+        // character may be promoted for this session only when the authoritative
+        // snapshot is empty; unresolved equipment modifiers remain fail-closed.
+        var equipment = await _identity.ListEquippedItemsAsync(
+            character.CharacterId,cancellationToken).ConfigureAwait(false);
+        if(equipment.Count>WireProtocol.EquipmentSnapshotMaxItems)
+            throw new InvalidOperationException(
+                "Character equipment exceeds bounded V1 baseline capacity");
+
+        CharacterCombatProfileData? effectiveCombat = combat?.Data;
+        if(effectiveCombat is { } profileOnly &&
+           _combat is not null &&
+           SourceVerifiedUnarmedCombatRules.TryPromoteEmptyEquipment(
+               profileOnly,equipment.Count,_world.TickHz,out var promoted))
+            effectiveCombat=promoted;
+
+        bool combatEnabled = effectiveCombat?.Trust is
             CombatProfileTrust.Verified or CombatProfileTrust.SyntheticTest;
         TrustedCombatProfile? trustedCombat = !combatEnabled ? null : new(
-            combat!.Data.Attack, combat.Data.Defense, combat.Data.Hit, combat.Data.Dodge,
-            combat.Data.AttackRange, combat.Data.AttackCooldownTicks, combat.Data.Level);
+            effectiveCombat!.Attack, effectiveCombat.Defense,
+            effectiveCombat.Hit, effectiveCombat.Dodge,
+            effectiveCombat.AttackRange, effectiveCombat.AttackCooldownTicks,
+            effectiveCombat.Level);
         CharacterPvpState pvpPresentation =
             await _identity.GetCharacterPvpStateAsync(
                 character.CharacterId,cancellationToken).ConfigureAwait(false);
@@ -381,13 +400,13 @@ public sealed partial class IdentitySessionAuthorization
         bool completed = false;
         try
         {
-            if (combatEnabled && combat is not null && _combat is not null)
+            if (combatEnabled && effectiveCombat is not null && _combat is not null)
             {
-                combatAttached = _combat.TryAttach(snapshot, combat.Data);
+                combatAttached = _combat.TryAttach(snapshot, effectiveCombat);
                 if (!combatAttached)
                     throw new InvalidOperationException(
                         "Combat settlement rejected authenticated character generation");
-                if (combat.Data.CurrentHp == 0)
+                if (effectiveCombat.CurrentHp == 0)
                 {
                     var dead = await _world.TrustedSetCombatDeadAsync(
                         snapshot.ActorId, snapshot.ConnectionEpoch, snapshot.MapEpoch, true)
@@ -416,12 +435,6 @@ public sealed partial class IdentitySessionAuthorization
                 throw new InvalidOperationException(
                     "Character skill book exceeds bounded V1 baseline capacity");
 
-            var equipment = await _identity.ListEquippedItemsAsync(
-                snapshot.ActorId,cancellationToken).ConfigureAwait(false);
-            if(equipment.Count>WireProtocol.EquipmentSnapshotMaxItems)
-                throw new InvalidOperationException(
-                    "Character equipment exceeds bounded V1 baseline capacity");
-
             cancellationToken.ThrowIfCancellationRequested();
             await WriteFrameAsync(tls, WireProtocol.EncodeCharacterChooseResult(new(
                 CharacterChooseWireStatus.Success, snapshot.ActorId, snapshot.MapId,
@@ -432,12 +445,12 @@ public sealed partial class IdentitySessionAuthorization
                     WireProtocol.EncodeGmCapability(new(true)),
                     cancellationToken).ConfigureAwait(false);
 
-            if (combat is not null)
+            if (effectiveCombat is not null)
             {
                 await WriteFrameAsync(tls, WireProtocol.EncodePlayerCombatState(new(
                     snapshot.MapEpoch,
-                    combat.Data.CurrentHp, combat.Data.MaxHp,
-                    combat.Data.CurrentMp, combat.Data.MaxMp,
+                    effectiveCombat.CurrentHp, effectiveCombat.MaxHp,
+                    effectiveCombat.CurrentMp, effectiveCombat.MaxMp,
                     combatEnabled)),
                     cancellationToken).ConfigureAwait(false);
             }
@@ -514,14 +527,14 @@ public sealed partial class IdentitySessionAuthorization
                     cancellationToken).ConfigureAwait(false);
             }
 
-            // Full profile baseline follows the creation baseline. ProfileOnlyVerified
-            // is source-backed for identity/vitals but cannot admit attack range/cadence;
-            // combat handler admission is intentionally decided separately above.
-            if (combat is not null)
+            // Full profile baseline follows the creation baseline. The session-local
+            // empty-equipment promotion exposes the now-verified effective combat fields
+            // without mutating the durable ProfileOnlyVerified record.
+            if (effectiveCombat is not null)
             {
                 await WriteFrameAsync(tls, WireProtocol.EncodePlayerProfileState(
                     CharacterProfileProgressionHandler.BuildState(
-                        combat.Data,snapshot.ActorId,experience?.Experience??0,
+                        effectiveCombat,snapshot.ActorId,experience?.Experience??0,
                         _progressionRules)),
                     cancellationToken).ConfigureAwait(false);
             }
