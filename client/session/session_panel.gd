@@ -212,6 +212,7 @@ func _ready() -> void:
 	# skin switches gameplay layout; no gameplay event or Session is rebuilt.
 	_layout.add_child(status)
 	_layout.add_child(logout_button)
+	inventory_panel.set_action_owner(self)
 	npc_shop_panel.set_actions(Callable(self,"submit_shop_open"),Callable(self,"submit_shop_buy"),Callable(self,"submit_shop_sell"),item_catalog)
 
 	storage_panel.set_actions(Callable(self,"submit_storage_open"),Callable(self,"submit_storage_deposit"),Callable(self,"submit_storage_withdraw"),item_catalog)
@@ -463,6 +464,22 @@ func _cast_area_skill() -> void:
 	if not skill_area_button.disabled:
 		if not submit_area_skill(int(skill_id_input.value)):
 			skill_status.text = "技能未送出；請檢查角色狀態或佇列"
+
+
+func submit_recovery_use(item_uid:int) -> bool:
+	var items:Dictionary=_latest.get("inventory_items",{})
+	return (
+		active and int(_latest.get("state",-1))==State.STATE_IN_WORLD and
+		bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and
+		bool(_latest.get("combat_available",false)) and not bool(_latest.get("player_dead",false)) and
+		not bool(_latest.get("reconnecting",false)) and not bool(_latest.get("resync_pending",false)) and
+		not bool(_latest.get("waiting_for_new_map",false)) and
+		int(_latest.get("pending_world_ready_ack_epoch",0))==0 and
+		int(_latest.get("last_world_ready_ack_epoch",0))==int(_latest.get("map_epoch",0)) and
+		int(_latest.get("pending_recovery_sequence",0))==0 and
+		int(_latest.get("pending_discard_sequence",0))==0 and item_uid>0 and items.has(item_uid) and
+		int((items[item_uid] as Dictionary).get("quantity",0))>0 and session.use_recovery_item(item_uid)
+	)
 
 
 func submit_hotkey_refresh() -> bool:

@@ -1739,7 +1739,7 @@ func _activate_hotkey(slot_index:int)->bool:
 	var data_type:=int(binding.get("data_type",-1))
 	var data_id:=int(binding.get("data_id",0))
 	if data_type==0 and data_id>0:
-		return _panel.inventory_panel.submit_recovery_use(data_id)
+		return _panel.submit_recovery_use(data_id)
 	if data_type==1 and data_id>0:
 		var learned:Dictionary=_stats.get("skill_book",{})
 		if int(learned.get(data_id,learned.get(str(data_id),0)))<=0:

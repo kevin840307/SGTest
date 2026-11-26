@@ -52,6 +52,8 @@ internal static class Program
             return await RunAutoApproachAttackAsync().ConfigureAwait(false);
         if (args is ["--discard"])
             return await RunDiscardAsync().ConfigureAwait(false);
+        if (args is ["--recovery-hotkey"])
+            return await RecoveryHotkeyLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--storage"])
             return await RunStorageAsync().ConfigureAwait(false);
         if (args is ["--pet"])

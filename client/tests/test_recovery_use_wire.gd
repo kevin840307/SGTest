@@ -2,6 +2,7 @@ extends SceneTree
 const Wire = preload("res://network/wire_codec.gd")
 const World = preload("res://world/world_state.gd")
 const Session = preload("res://session/client_session.gd")
+const SessionPanel = preload("res://session/session_panel.gd")
 const InventoryPanel = preload("res://inventory/inventory_panel.gd")
 
 class RecoverySink:
@@ -129,6 +130,32 @@ func _initialize() -> void:
 		fail("inventory UI blocked an available recovery stack")
 		return
 	panel.queue_free()
+
+	# Classic hotkeys and the inventory button share SessionPanel's world gate.
+	# Verify the formal action accepts a stable world and fail-closes during a
+	# transfer rather than relying on the child panel's older local snapshot.
+	var action_panel = SessionPanel.new()
+	var action_sink := RecoverySink.new()
+	action_panel.active = true
+	action_panel.session = action_sink
+	action_panel._latest = world.snapshot().duplicate(true)
+	if not action_panel.submit_recovery_use(7001) or action_sink.calls != 1:
+		fail("SessionPanel recovery action rejected a stable authoritative world")
+		return
+	action_panel._latest.waiting_for_new_map = true
+	if action_panel.submit_recovery_use(7001) or action_sink.calls != 1:
+		fail("SessionPanel recovery action crossed a map-transfer barrier")
+		return
+	action_panel._latest.waiting_for_new_map = false
+	var action_items: Dictionary = action_panel._latest.inventory_items
+	var action_item: Dictionary = action_items[7001]
+	action_item.quantity = 0
+	action_items[7001] = action_item
+	action_panel._latest.inventory_items = action_items
+	if action_panel.submit_recovery_use(7001) or action_sink.calls != 1:
+		fail("SessionPanel recovery action accepted an empty stack")
+		return
+	action_panel.free()
 	if not world.mark_recovery_use_sent(1,7001) or world.mark_recovery_use_sent(2,7001):
 		fail("one outstanding item action requirement failed")
 		return
@@ -172,5 +199,5 @@ func _initialize() -> void:
 	if world.apply_frame(bad) or int(world.state) != World.STATE_FAILED:
 		fail("server recovery response for wrong ItemUID accepted")
 		return
-	print("RECOVERY_USE_WIRE_PASS golden=28/45 auth=PASS once=PASS quantity=PASS hp=PASS map_epoch=PASS spoof=FAIL_CLOSED empty_stack=FAIL_CLOSED session_and_ui=PASS")
+	print("RECOVERY_USE_WIRE_PASS golden=28/45 auth=PASS once=PASS quantity=PASS hp=PASS map_epoch=PASS spoof=FAIL_CLOSED empty_stack=FAIL_CLOSED session_and_ui=PASS shared_action_gate=PASS")
 	quit(0)

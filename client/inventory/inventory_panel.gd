@@ -5,6 +5,7 @@ var _latest := {}
 var _active := false
 var _in_world := false
 var _session
+var _action_owner
 var _item_catalog
 
 const INVENTORY_PAGE_SIZE := 80
@@ -110,6 +111,10 @@ func reset() -> void:
 	_update_equipment_ui()
 
 
+func set_action_owner(owner) -> void:
+	_action_owner = owner
+
+
 func apply_snapshot(snapshot: Dictionary, active: bool, in_world: bool, session, item_catalog) -> void:
 	_latest = snapshot
 	_active = active
@@ -121,7 +126,9 @@ func apply_snapshot(snapshot: Dictionary, active: bool, in_world: bool, session,
 
 
 func submit_recovery_use(item_uid: int) -> bool:
-	return _active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and bool(_latest.get("combat_available",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("resync_pending",false)) and int(_latest.get("pending_recovery_sequence",0)) == 0 and int(_latest.get("pending_discard_sequence",0)) == 0 and item_uid > 0 and (_latest.get("inventory_items",{}) as Dictionary).has(item_uid) and int(((_latest.get("inventory_items",{}) as Dictionary)[item_uid] as Dictionary).get("quantity",0)) > 0 and _session.use_recovery_item(item_uid)
+	if _action_owner != null and _action_owner.has_method("submit_recovery_use"):
+		return bool(_action_owner.submit_recovery_use(item_uid))
+	return _active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and bool(_latest.get("inventory_ready",false)) and bool(_latest.get("combat_available",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("resync_pending",false)) and not bool(_latest.get("waiting_for_new_map",false)) and int(_latest.get("pending_recovery_sequence",0)) == 0 and int(_latest.get("pending_discard_sequence",0)) == 0 and item_uid > 0 and (_latest.get("inventory_items",{}) as Dictionary).has(item_uid) and int(((_latest.get("inventory_items",{}) as Dictionary)[item_uid] as Dictionary).get("quantity",0)) > 0 and _session != null and _session.use_recovery_item(item_uid)
 
 
 func submit_inventory_discard(item_uid: int, quantity: int = 1) -> bool:

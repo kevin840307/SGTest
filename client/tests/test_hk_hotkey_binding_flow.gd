@@ -7,6 +7,7 @@ class FakePanel:
 	extends RefCounted
 	var removed:Array[int]=[]
 	var bound:Array[Array]=[]
+	var recovery_used:Array[int]=[]
 	var bind_allowed:=true
 
 	func submit_hotkey_remove(slot_index:int)->bool:
@@ -18,6 +19,10 @@ class FakePanel:
 		if not bind_allowed:
 			return false
 		bound.append([slot_index,data_type,data_id])
+		return true
+
+	func submit_recovery_use(item_uid:int)->bool:
+		recovery_used.append(item_uid)
 		return true
 
 
@@ -93,9 +98,33 @@ func _run()->void:
 	shell._refresh_hotkeys()
 	_expect(not slot0.drag_enabled,"pending authority disables a second source pick")
 
+	# Real keyboard input must invoke the bound consumable action, including the
+	# long rail's F12 and the compact rail's page remap. Empty/hidden keys no-op.
+	shell._active=true
+	shell._stats["pending_hotkey_sequence"]=0
+	shell._stats["hotkeys"]={
+		0:{"data_type":0,"data_id":41001},
+		6:{"data_type":0,"data_id":41007},
+		11:{"data_type":0,"data_id":41012}
+	}
+	var f1:=InputEventKey.new();f1.keycode=KEY_F1;f1.pressed=true
+	var f12:=InputEventKey.new();f12.keycode=KEY_F12;f12.pressed=true
+	var f2:=InputEventKey.new();f2.keycode=KEY_F2;f2.pressed=true
+	shell._handle_hotkey_key(f1)
+	shell._handle_hotkey_key(f12)
+	shell._handle_hotkey_key(f2)
+	_expect(panel.recovery_used==[41001,41012],"long rail F1/F12 use bound items while empty F2 no-ops")
+
+	shell._toggle_hotkey_size()
+	shell._select_hotkey_page(1)
+	var f7:=InputEventKey.new();f7.keycode=KEY_F7;f7.pressed=true
+	shell._handle_hotkey_key(f1)
+	shell._handle_hotkey_key(f7)
+	_expect(panel.recovery_used==[41001,41012,41007],"compact page 2 maps F1 to slot 7 and ignores hidden F7")
+
 	shell.free()
 	if not failed:
-		print("HK_HOTKEY_BINDING_FLOW_PASS pickup_cancel_safe=true remove_then_move=true overwrite=true authority_gate=true")
+		print("HK_HOTKEY_BINDING_FLOW_PASS pickup_cancel_safe=true remove_then_move=true overwrite=true authority_gate=true real_fkeys=true")
 	quit(1 if failed else 0)
 
 
