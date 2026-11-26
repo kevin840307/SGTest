@@ -64,6 +64,15 @@ func _observe(session, self_id: int, crossmap: bool = false, portal: bool = fals
 		_fail("observer received itself as remote entity", session)
 		return
 	if not crossmap:
+		if not session.friend_add_actor(remote_id):
+			_fail("observer friend invite intent rejected",session)
+			return
+		var friend_pair:=_wait_friend(session,remote_id,7000)
+		if friend_pair.is_empty():
+			_fail("observer did not receive authoritative mutual-friend snapshot %s" %
+				session.snapshot(),session)
+			return
+		print("CLIENT_MULTI_FRIEND_READY role=observer peer=%d" % remote_id)
 		var chat := _wait_nearby_chat(
 			session,remote_id,"MultiHeroTwo",MAX_BOUNDARY_ZH_CHAT,7000)
 		if chat.is_empty() or int(chat.get("chat_sequence",0))!=1 or \
@@ -275,6 +284,19 @@ func _move(session, self_id: int, crossmap: bool = false, portal: bool = false) 
 		if not (seen.get("chat_messages",[]) as Array).is_empty():
 			_fail("actor had unexpected chat before sending",session)
 			return
+		var friend_invite:=_wait_friend_invite(session,remote_id,7000)
+		if friend_invite.is_empty() or str(friend_invite.get("name",""))!="MultiHeroOne":
+			_fail("actor did not receive selected-player friend invite %s" % session.snapshot(),session)
+			return
+		if not session.friend_accept():
+			_fail("actor friend accept intent rejected",session)
+			return
+		var friend_pair:=_wait_friend(session,remote_id,7000)
+		if friend_pair.is_empty():
+			_fail("actor did not receive authoritative mutual-friend snapshot %s" %
+				session.snapshot(),session)
+			return
+		print("CLIENT_MULTI_FRIEND_READY role=actor peer=%d" % remote_id)
 		if not session.send_nearby_chat(MAX_BOUNDARY_ZH_CHAT,2):
 			_fail("actor nearby chat intent rejected",session)
 			return
@@ -690,6 +712,34 @@ func _wait_clan_members(session,count:int,timeout_ms:int)->Dictionary:
 			(value.get("clan_members",{}) as Dictionary).size()==count
 		):
 			return value
+		OS.delay_msec(2)
+	return {}
+
+
+func _wait_friend_invite(session,actor_id:int,timeout_ms:int)->Dictionary:
+	var deadline:=Time.get_ticks_msec()+timeout_ms
+	while Time.get_ticks_msec()<deadline:
+		var value:Dictionary=session.snapshot()
+		if int(value.state)==WorldState.STATE_FAILED:
+			break
+		var invite:Dictionary=value.get("pending_friend_invite",{})
+		if int(invite.get("actor_id",0))==actor_id:
+			return invite
+		OS.delay_msec(2)
+	return {}
+
+
+func _wait_friend(session,actor_id:int,timeout_ms:int)->Dictionary:
+	var deadline:=Time.get_ticks_msec()+timeout_ms
+	while Time.get_ticks_msec()<deadline:
+		var value:Dictionary=session.snapshot()
+		if int(value.state)==WorldState.STATE_FAILED:
+			break
+		var friends:Dictionary=value.get("friends",{})
+		if friends.has(actor_id):
+			var row:Dictionary=friends[actor_id]
+			if bool(row.get("online",false)) and not bool(row.get("ignored",false)):
+				return value
 		OS.delay_msec(2)
 	return {}
 

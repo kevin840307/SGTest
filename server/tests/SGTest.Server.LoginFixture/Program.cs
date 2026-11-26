@@ -1,6 +1,7 @@
 using SGTest.Server.Visibility;
 using SGTest.Server.Skill;
 using SGTest.Server.Clan;
+using SGTest.Server.Friend;
 using SGTest.Server.Party;
 using SGTest.Server.Npc;
 using SGTest.Server.Monster;
@@ -1725,8 +1726,10 @@ internal static class Program
             var parties=new PartyCoordinator();
             var clans=!crossmap&&!portals&&!reconnect
                 ?new ClanCoordinator(store):null;
+            var friends=!crossmap&&!portals&&!reconnect
+                ?new FriendCoordinator(store):null;
             var authorization = new IdentitySessionAuthorization(
-                store, world, auditedPortals, parties:parties,clans:clans);
+                store, world, auditedPortals, parties:parties,clans:clans,friends:friends);
             var aoiPump = new WorldAoiPump(router);
             var routerTask = router.RunAsync(world.Results);
             using var aoiStop = new CancellationTokenSource();
@@ -1833,7 +1836,7 @@ internal static class Program
                 }
                 if (results[0].Reason != AesWireEndReason.CleanEof ||
                     results[1].Reason != AesWireEndReason.CleanEof ||
-                    results[1].CommandsAccepted != (portals ? 9 : crossmap ? 13 : 6) ||
+                    results[1].CommandsAccepted != (portals ? 9 : crossmap ? 13 : 7) ||
                     parties.PartyCount != 0 ||
                     router.Statistics.ActiveSessions != 0 ||
                     router.Statistics.ReceiptsQueued < (crossmap || portals ? 2 : 1) ||

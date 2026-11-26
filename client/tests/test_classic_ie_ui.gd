@@ -27,6 +27,16 @@ class PartyLeaveSession:
 		leaves+=1
 		return queue_ok
 
+class FriendInviteSession:
+	extends RefCounted
+	var invites:=0
+	var target:=0
+	var queue_ok:=true
+	func friend_add_actor(target_actor_id:int)->bool:
+		invites+=1
+		target=target_actor_id
+		return queue_ok
+
 func _fail(reason: String) -> void:
 	push_error("CLASSIC_IE_UI_FAIL "+reason)
 	quit(1)
@@ -364,6 +374,7 @@ func _run() -> void:
 		return
 	world._stats["party_id"]=original_party_id
 	app.session_panel.session=original_session
+	var request_friend:=world._request_menu.get_node("RequestFriend") as TextureButton
 	if (
 		world._party_question.size!=Vector2(469,19) or
 		world._party_question_text.position!=Vector2(9,3) or world._party_question_text.size!=Vector2(382,12) or
@@ -371,16 +382,29 @@ func _run() -> void:
 		(world._party_question.get_node("QuestionNo") as Control).position!=Vector2(444,1) or
 		world._request_menu.size!=Vector2(86,99) or
 		(world._request_menu.get_node("RequestTeam") as Control).position!=Vector2(-1,42) or
-		(world._request_menu.get_node("RequestTeam") as Control).size!=Vector2(86,14)
+		(world._request_menu.get_node("RequestTeam") as Control).size!=Vector2(86,14) or
+		request_friend==null or request_friend.position!=Vector2(-1,57) or request_friend.size!=Vector2(86,14) or
+		request_friend.pressed.get_connections().is_empty()
 	):
-		_fail("HK 026_TEAM / 040_Rightbox / 044_QUESTION_BOX geometry drifted q=%s/%s text=%s/%s yes=%s no=%s right=%s team=%s/%s"%[
+		_fail("HK 026_TEAM / 040_Rightbox / 044_QUESTION_BOX geometry/handlers drifted q=%s/%s text=%s/%s yes=%s no=%s right=%s team=%s/%s friend=%s/%s"%[
 			str(world._party_question.size),str(world._party_question.position),
 			str(world._party_question_text.position),str(world._party_question_text.size),
 			str((world._party_question.get_node("QuestionYes") as Control).position),
 			str((world._party_question.get_node("QuestionNo") as Control).position),
 			str(world._request_menu.size),str((world._request_menu.get_node("RequestTeam") as Control).position),
-			str((world._request_menu.get_node("RequestTeam") as Control).size)])
+			str((world._request_menu.get_node("RequestTeam") as Control).size),
+			str(request_friend.position if request_friend!=null else Vector2.ZERO),
+			str(request_friend.size if request_friend!=null else Vector2.ZERO)])
 		return
+	var friend_invite:=FriendInviteSession.new()
+	var request_real_session=app.session_panel.session
+	app.session_panel.session=friend_invite
+	world.open_player_request_menu(77,Vector2(200,200))
+	request_friend.pressed.emit()
+	if friend_invite.invites!=1 or friend_invite.target!=77 or world._request_menu.visible:
+		_fail("040_Rightbox ID3015 did not route selected-player friend invite through ClientSession authority")
+		return
+	app.session_panel.session=request_real_session
 	var system_controls := {
 		"CloseWindow":[Vector2(270,1),Vector2(16,16)],
 		"QualityDown":[Vector2(144,34),Vector2(17,17)],

@@ -1914,9 +1914,10 @@ func _build_party()->void:
 	_texture_button(_party_question,"QuestionYes","B_OK_BUTTON",Vector2(424,1),Vector2(16,16),_accept_party_invite,"接受")
 	_texture_button(_party_question,"QuestionNo","CLOSESCREEN",Vector2(444,1),Vector2(16,16),_reject_party_invite,"拒絕")
 
-	# 040_Rightbox.itf is created at the clicked player's runtime x/y. 3016
-	# (0xBC8) is CReqMenuItf::OnTeam; other rows keep original art/rects but
-	# remain unbound until their own authoritative slices are implemented.
+	# 040_Rightbox.itf is created at the clicked player's runtime x/y. Paradise
+	# CReqMenuItf::MessageMap proves 3016 (0xBC8)=OnTeam and 3015
+	# (0xBC7)=OnFriend. Keep the remaining source rows unbound until their own
+	# authoritative slices are implemented.
 	_request_menu.name="PlayerRequestMenu"
 	_request_menu.size=Vector2(86,99)
 	_request_menu.visible=false
@@ -1927,8 +1928,9 @@ func _build_party()->void:
 		["Trade",0.0,"交易"],["Transfer",15.0,"傳送"],["Buy",28.0,"購買"],
 		["Team",42.0,"組隊"],["Friend",57.0,"好友"],["Clan",70.0,"社團"],["Extra",84.0,"更多"]]
 	for row in rows:
-		var callback:=_request_team if str(row[0])=="Team" else Callable()
-		_texture_button(_request_menu,"Request"+str(row[0]),"B_RIGHTBOX_BUTTON",Vector2(-1,float(row[1])),Vector2(86,14),callback,str(row[2]))
+		var action:=str(row[0])
+		var callback:=_request_team if action=="Team" else (_request_friend if action=="Friend" else Callable())
+		_texture_button(_request_menu,"Request"+action,"B_RIGHTBOX_BUTTON",Vector2(-1,float(row[1])),Vector2(86,14),callback,str(row[2]))
 
 func _build_clan()->void:
 	clan_window=_window("ClanWindow","BG_CLUB",Vector2(263,360),Vector2(269,113))
@@ -2774,6 +2776,13 @@ func _request_team()->void:
 	close_player_request_menu()
 	if target>0 and _panel!=null and _panel.session!=null:
 		_panel.session.party_invite(target)
+
+
+func _request_friend()->void:
+	var target:=_request_menu_actor
+	close_player_request_menu()
+	if target>0 and _panel!=null and _panel.session!=null:
+		_panel.session.friend_add_actor(target)
 
 func _refresh_clan()->void:
 	var header=clan_window.get_node_or_null("ClanHeader")
