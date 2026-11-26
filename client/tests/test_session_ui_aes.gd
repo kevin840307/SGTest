@@ -517,8 +517,8 @@ func check_skill_ui(panel, stub, classic_shell) -> void:
 		fail("Durable skill receipt did not release the UI gate")
 		return
 
-	# The real Classic F1 path must arm one source-backed SetPreUseSkill-style
-	# action, not permanently switch the diagnostic monster-click mode.
+	# The real Classic F1 path must arm a scoped pre-use action instead of
+	# permanently switching the diagnostic monster-click mode.
 	panel.skill_target_mode.button_pressed = false
 	classic_shell._active = true
 	classic_shell._panel = panel

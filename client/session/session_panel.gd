@@ -92,9 +92,10 @@ var _last_manage_revision := -1
 var _respawn_queued_after := -1
 var _skill_queued_after := -1
 var _skill_queued_at_ms := 0
-# Original CSGOUim::SetPreUseSkill is a one-shot target-selection state.
-# Keep it separate from the diagnostic SessionPanel toggle so Classic F-key
-# use cannot leak across a cast, map generation, reconnect or death/resync.
+# Old CHotKeyItf direct-call evidence includes SetPreUseSkill/SetControlMode.
+# SGTest keeps Classic F-key staging separate from the diagnostic persistent
+# toggle and generation-scoped so it cannot leak across a cast/map/reconnect.
+# Exact original cancellation timing still requires native/HK verification.
 var _pre_use_skill_id := 0
 var _pre_use_skill_map_epoch := 0
 const SKILL_RESULT_NAMES = ["成功","未命中","目標不存在","目標死亡","超出距離","障礙阻擋","冷卻中","無法戰鬥","地圖已變更","重複序號","伺服器未核准技能","MP 不足","範圍目標數超限","此地圖禁止玩家 PvP","攻擊者為受保護藍名","目標為受保護藍名","不可對自己施放","伺服器忙碌，請稍後重試"]
@@ -437,8 +438,9 @@ func submit_monster_action(entity_id: int) -> bool:
 		var armed_skill_id := _pre_use_skill_id
 		if not submit_target_skill_id(armed_skill_id,entity_id):
 			return false
-		# SetPreUseSkill is consumed by one accepted target intent. The Server
-		# still decides rule availability, MP, cooldown, range, hit and damage.
+		# Consume SGTest's staged Classic action after one accepted target
+		# intent. The Server still decides rule availability, MP, cooldown,
+		# range, hit and damage.
 		cancel_pre_use_skill()
 		return true
 	if skill_target_mode.button_pressed:
@@ -751,6 +753,7 @@ func disconnect_session() -> void:
 	_respawn_queued_after = -1
 	_skill_queued_after = -1
 	_skill_queued_at_ms = 0
+	cancel_pre_use_skill()
 	skill_target_mode.button_pressed = false
 	skill_status.text = ""
 	pickup_status.text = ""

@@ -1742,16 +1742,20 @@ func _activate_hotkey(slot_index:int)->bool:
 	var data_type:=int(binding.get("data_type",-1))
 	var data_id:=int(binding.get("data_id",0))
 	if data_type==0 and data_id>0:
-		return _panel.inventory_panel.submit_recovery_use(data_id)
+		var used:bool=_panel.inventory_panel.submit_recovery_use(data_id)
+		if used:
+			_panel.cancel_pre_use_skill()
+		return used
 	if data_type==1 and data_id>0:
 		var learned:Dictionary=_stats.get("skill_book",{})
 		if int(learned.get(data_id,learned.get(str(data_id),0)))<=0:
 			return false
-		# Old CHotKeyItf::OnUseSkill calls SetPreUseSkill/SetControlMode for
-		# target selection. Keep that as a one-shot player action instead of
-		# mutating the diagnostic SessionPanel's persistent skill-mode toggle.
-		# Target kind is still not guessed: the next monster click uses the
-		# existing authenticated SkillUse path and Server-owned rule checks.
+		# Old CHotKeyItf::OnUseSkill direct-call evidence includes
+		# SetPreUseSkill/SetControlMode. Keep Classic F-key staging separate
+		# from the diagnostic persistent skill-mode toggle. Exact original
+		# cancellation timing remains native-reference NOT VERIFIED.
+		# Target kind is not guessed: the next monster click uses the existing
+		# authenticated SkillUse path and Server-owned rule checks.
 		return _panel.arm_pre_use_skill(data_id)
 	return false
 
