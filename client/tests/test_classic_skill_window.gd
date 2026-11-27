@@ -46,6 +46,7 @@ func _run() -> void:
 	window.get_node("ScrollDown").pressed.emit()
 	_expect(window.get_node("SkillName0").text == "技能 10101", "scroll jumps by one HK page")
 	var hk_label_loaded: bool = window._labels.has("28101")
+	var hk_icon_loaded: bool = window._icon_frames.has("28101")
 	_expect(window.get_node("SkillName1").text == ("治療術" if hk_label_loaded else "技能 28101"),
 		"last HK page shows source-backed name when present, numeric fallback otherwise")
 	_expect(window.get_node("SkillRow1").tooltip_text != "" if hk_label_loaded else
@@ -91,6 +92,9 @@ func _run() -> void:
 	if hk_label_loaded:
 		_expect(window.get_node("SkillName0").text == "治療術",
 			"HK skill.dat source provides localized display without changing level")
+	if hk_icon_loaded:
+		_expect(window.get_node("SkillIcon0").texture != null,
+			"HK skill.dat field 14 selects a source-backed SKILL_ICON frame")
 	var last_selected := selected
 	window.set_skill_book({28101: 0, 1103: -2})
 	_expect(window._ids.is_empty() and window.get_node("SkillRow0").disabled and
@@ -110,6 +114,15 @@ func _run() -> void:
 		"invalid private label manifest failed open")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(invalid_path))
 
+	var invalid_icon_path := "user://sgtest_skill_icons_invalid_%d.json" % OS.get_process_id()
+	var invalid_icon := FileAccess.open(invalid_icon_path, FileAccess.WRITE)
+	invalid_icon.store_string('{"kind":"hk_skill_icons","version":1,"source_sha256":"' +
+		"0".repeat(64) + '","spr_frame_count":114,"entries":{"28101":114}}')
+	invalid_icon.close()
+	_expect(window._read_skill_icons(invalid_icon_path).is_empty(),
+		"out-of-range private icon manifest fails closed")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(invalid_icon_path))
+
 	window._on_window_input(down)
 	_expect(window._dragging, "background drag restarts")
 	window.hide()
@@ -119,7 +132,7 @@ func _run() -> void:
 		"close and reopen must cancel an unfinished drag")
 
 	window.queue_free()
-	print("CLASSIC_SKILL_WINDOW_PASS exact_rects=PASS rows=8 skill_book=server_owned source_labels=%d drag_release=PASS no_fake_icon=true no_fake_progress=true" % window._labels.size())
+	print("CLASSIC_SKILL_WINDOW_PASS exact_rects=PASS rows=8 skill_book=server_owned source_labels=%d source_icons=%d drag_release=PASS no_fake_progress=true" % [window._labels.size(), window._icon_frames.size()])
 	quit(1 if failed else 0)
 
 

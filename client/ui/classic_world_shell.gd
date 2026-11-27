@@ -1726,7 +1726,14 @@ func _refresh_hotkeys()->void:
 			icon.texture=_photos.photo_for_item(definition,_panel.item_catalog)
 			slot.tooltip_text="F%d｜%s"%[i+1,str(_panel.item_catalog.name_for(definition))]
 		elif data_type==1:
-			slot.tooltip_text="F%d｜技能 %d"%[i+1,data_id]
+			if skill_window!=null and skill_window.has_method("icon_for_skill"):
+				var skill_icon:Variant=skill_window.call("icon_for_skill",data_id)
+				if skill_icon is Texture2D:
+					icon.texture=skill_icon
+			var skill_name:="技能 %d"%data_id
+			if skill_window!=null and skill_window.has_method("display_name_for_skill"):
+				skill_name=str(skill_window.call("display_name_for_skill",data_id))
+			slot.tooltip_text="F%d｜%s"%[i+1,skill_name]
 
 func _handle_hotkey_key(event:InputEvent)->void:
 	if not _active or not (event is InputEventKey) or not event.pressed or event.echo:

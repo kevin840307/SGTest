@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Sync the HK 027_Skill interface sprites into the ignored local UI cache.
+"""Sync the HK skill interface presentation into the ignored local UI cache.
 
-The HK source tree is read-only reference material. This helper only decodes
-loose .spr files and writes PNGs below client/ui/private_ie_hk2/, which is
-ignored by Git.
+The HK source tree is read-only reference material. This helper decodes only
+source-backed presentation sprites and writes PNG/JSON files below
+client/ui/private_ie_hk2/, which is ignored by Git. It never emits gameplay
+skill rules.
 """
 from __future__ import annotations
 
@@ -15,6 +16,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
+from tools.asset_converter.source.hk_skill_icons import export_private_skill_icons
+from tools.asset_converter.source.hk_skill_names import export_private_skill_labels
 from tools.asset_converter.source.runtime_spr import decode_spr
 
 DEFAULT_SOURCE = Path(r"C:\SGO\Stargate Online IE HK\Interface")
@@ -41,6 +44,13 @@ def _decode(source: Path):
     return frames
 
 
+def _source_file(interface: Path, fallback: Path, name: str, suffix: str) -> Path:
+    source = interface / f"{name}.{suffix}"
+    if not source.is_file():
+        source = fallback / f"{name}.{suffix}"
+    return source
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
@@ -59,9 +69,7 @@ def main() -> int:
     }
     fallback_source = args.source.parent / "output" / "Interface"
     for name in (*SINGLE, *MULTI):
-        source = args.source / f"{name}.spr"
-        if not source.is_file():
-            source = fallback_source / f"{name}.spr"
+        source = _source_file(args.source, fallback_source, name, "spr")
         if not source.is_file():
             parser.error(
                 f"HK skill sprite not found in {args.source} or {fallback_source}: "
@@ -87,6 +95,52 @@ def main() -> int:
             f"sha256={_sha256(source)}",
             "source_unchanged=true",
         )
+
+    # Old CHotKeyItf::OnLoadHotKey renders SKILLDATA+7 from this sprite.
+    # Old InitSkillLib maps that byte exactly to skill.dat CSV field 14.
+    icon_source = _source_file(args.source, fallback_source, "SKILL_ICON", "spr")
+    if not icon_source.is_file():
+        parser.error(
+            f"HK skill icon sprite not found in {args.source} or {fallback_source}: "
+            "SKILL_ICON.spr"
+        )
+    icon_frames = _decode(icon_source)
+    if len(icon_frames) != 114:
+        parser.error(f"unexpected HK SKILL_ICON frame count: {len(icon_frames)} != 114")
+    for index, frame in enumerate(icon_frames):
+        if frame.image.size != (24, 24) or (frame.origin_x, frame.origin_y) != (0, 0):
+            parser.error(
+                f"unexpected HK SKILL_ICON frame {index}: "
+                f"size={frame.image.size} origin=({frame.origin_x},{frame.origin_y})"
+            )
+        _write_png(OUTPUT / f"SKILL_ICON_{index:03d}.png", frame.image)
+    print(
+        "HK_SKILL_ICON_SPR",
+        f"frames={len(icon_frames)}",
+        "size=24x24",
+        f"sha256={_sha256(icon_source)}",
+        "source_unchanged=true",
+    )
+
+    skill_dat = _source_file(args.source, fallback_source, "skill", "dat")
+    if not skill_dat.is_file():
+        # Preserve the original filename's common uppercase first letter too.
+        skill_dat = _source_file(args.source, fallback_source, "Skill", "dat")
+    if not skill_dat.is_file():
+        parser.error(
+            f"HK skill.dat not found in {args.source} or {fallback_source}"
+        )
+    label_count, _ = export_private_skill_labels(
+        skill_dat, OUTPUT / "HK_SKILL_LABELS.json")
+    icon_count, _ = export_private_skill_icons(
+        skill_dat, OUTPUT / "HK_SKILL_ICONS.json")
+    print(
+        "HK_SKILL_PRESENTATION_MANIFESTS",
+        f"labels={label_count}",
+        f"icons={icon_count}",
+        f"skill_dat_sha256={_sha256(skill_dat)}",
+        "source_unchanged=true",
+    )
 
     print("HK_SKILL_ASSETS_READY output_git_ignored=true")
     return 0

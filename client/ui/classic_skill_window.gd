@@ -1,7 +1,7 @@
 extends Control
 ## HK 027_Skill.itf presentation. Server SkillBook remains authoritative.
-## Names/icons/proficiency are intentionally not invented when the current
-## snapshot only provides skill_id -> learned level.
+## SkillBook is authoritative for learned skills/levels. HK skill.dat and
+## SKILL_ICON.spr contribute presentation only; proficiency is not invented.
 signal skill_selected(skill_id: int)
 
 const UiTextures = preload("res://ui/ui_texture_loader.gd")
@@ -14,6 +14,8 @@ const ROW_Y := 54.0
 const TEXT_BASELINE := 10.0
 const HK_FONT_BITMAP := PRIVATE + "/HK_SHARED_UI_FONT.fnt"
 const HK_SKILL_LABELS := PRIVATE + "/HK_SKILL_LABELS.json"
+const HK_SKILL_ICONS := PRIVATE + "/HK_SKILL_ICONS.json"
+const HK_SKILL_ICON_COUNT := 114
 
 class ItfText extends Control:
 	var text_font: Font
@@ -31,6 +33,7 @@ class ItfText extends Control:
 var _font: Font
 var _skills: Dictionary = {}
 var _labels: Dictionary = {}
+var _icon_frames: Dictionary = {}
 var _ids: Array = []
 var _page_start := 0
 var _dragging := false
@@ -49,6 +52,7 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_font = _load_hk_font()
 	_labels = _read_skill_labels(HK_SKILL_LABELS)
+	_icon_frames = _read_skill_icons(HK_SKILL_ICONS)
 	_build()
 
 
@@ -99,6 +103,57 @@ func _read_skill_labels(path: String) -> Dictionary:
 			return {}
 		result[key] = {"name": skill_name, "description": description}
 	return result
+
+
+# Presentation-only manifest exported from original HK skill.dat field 14.
+# Missing/malformed data fails closed to no icon and never changes SkillBook.
+func _read_skill_icons(path: String) -> Dictionary:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null or file.get_length() < 2 or file.get_length() > 1048576:
+		return {}
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if not parsed is Dictionary:
+		return {}
+	if parsed.get("kind") != "hk_skill_icons" or parsed.get("version") != 1:
+		return {}
+	if int(parsed.get("spr_frame_count", -1)) != HK_SKILL_ICON_COUNT:
+		return {}
+	var sha: Variant = parsed.get("source_sha256")
+	var entries: Variant = parsed.get("entries")
+	if not sha is String or sha.length() != 64 or not entries is Dictionary:
+		return {}
+	if entries.is_empty() or entries.size() > 4096:
+		return {}
+	var result: Dictionary = {}
+	for key in entries:
+		if not key is String or not key.is_valid_int():
+			return {}
+		var skill_id := int(key)
+		if skill_id <= 0 or skill_id > 65535 or str(skill_id) != key:
+			return {}
+		var raw_frame: Variant = entries[key]
+		if not (raw_frame is int or raw_frame is float):
+			return {}
+		var frame := int(raw_frame)
+		if float(raw_frame) != float(frame) or frame < 0 or frame >= HK_SKILL_ICON_COUNT:
+			return {}
+		result[key] = frame
+	return result
+
+
+func icon_for_skill(skill_id: int) -> Texture2D:
+	if skill_id <= 0:
+		return null
+	var key := str(skill_id)
+	if not _icon_frames.has(key):
+		return null
+	var frame := int(_icon_frames[key])
+	return _texture("SKILL_ICON_%03d" % frame)
+
+
+func display_name_for_skill(skill_id: int) -> String:
+	var label: Dictionary = _labels.get(str(skill_id), {})
+	return str(label.get("name", "技能 %d" % skill_id))
 
 
 func _texture(name: String) -> Texture2D:
@@ -255,8 +310,9 @@ func _refresh() -> void:
 		# Only Server-learned SkillIDs appear. HK skill.dat provides localized
 		# presentation text; unknown IDs retain their numeric fallback.
 		var label: Dictionary = _labels.get(str(skill_id), {})
-		_name_labels[row].text = str(label.get("name", "技能 %d" % skill_id))
+		_name_labels[row].text = display_name_for_skill(skill_id)
 		_level_labels[row].text = str(level)
+		_icon_slots[row].texture = icon_for_skill(skill_id)
 		_row_buttons[row].tooltip_text = str(label.get("description", ""))
 		_row_buttons[row].hotkey_drag_payload = {
 			"hotkey_kind": "skill",

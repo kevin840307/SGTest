@@ -70,6 +70,8 @@ internal static class HotkeyChecks
                     "hotkey_actor","Hotkey-Account-Secret-2026!")).AccountId;
                 actorId=(await store.CreateCharacterAsync(
                     account,0,"HotkeyActor",new(15,100,100))).Character!.CharacterId;
+                await store.SetCharacterSkillLevelAsync(
+                    actorId,28101,3,"hotkey-check");
 
                 using(var connection=new SqliteConnection($"Data Source={db}"))
                 {
@@ -128,6 +130,27 @@ SELECT last_insert_rowid();";
                     moved.Status==HotkeyResultStatus.Applied&&moved.Entries.Count==1&&
                     moved.Entries[0].Slot==10&&moved.Entries[0].DataId==itemUid,
                     "server did not persist moved hotkey binding");
+
+                FeedHotkey(gateway,new HotkeyCommandWire(
+                    3,5,HotkeyCommandAction.Save,9,HotkeyDataType.Skill,28101),
+                    coordinator,router);
+                var skillSaved=DrainSnapshot(gateway);
+                Checks.Require(
+                    skillSaved.Status==HotkeyResultStatus.Applied&&
+                    skillSaved.Entries.Count==2&&
+                    skillSaved.Entries.Any(x=>x.Slot==9&&
+                        x.DataType==HotkeyDataType.Skill&&x.DataId==28101),
+                    "server did not persist learned skill hotkey");
+
+                FeedHotkey(gateway,new HotkeyCommandWire(
+                    3,6,HotkeyCommandAction.Save,8,HotkeyDataType.Skill,28102),
+                    coordinator,router);
+                var skillRejected=DrainSnapshot(gateway);
+                Checks.Require(
+                    skillRejected.Status==HotkeyResultStatus.InvalidBinding&&
+                    skillRejected.Entries.Count==2&&
+                    !skillRejected.Entries.Any(x=>x.Slot==8),
+                    "server accepted unlearned skill hotkey or lost durable bindings");
             }
 
             using(var reopened=new SqliteIdentityStore(db))
@@ -135,10 +158,12 @@ SELECT last_insert_rowid();";
                 await reopened.InitializeAsync();
                 var durable=await reopened.ListCharacterHotkeysAsync(actorId);
                 Checks.Require(
-                    durable.Count==1&&durable[0].Slot==10&&
-                    durable[0].DataType==(int)HotkeyDataType.Item&&
-                    durable[0].DataId==itemUid,
-                    "moved hotkey binding did not survive SQLite reopen");
+                    durable.Count==2&&
+                    durable.Any(x=>x.Slot==10&&
+                        x.DataType==(int)HotkeyDataType.Item&&x.DataId==itemUid)&&
+                    durable.Any(x=>x.Slot==9&&
+                        x.DataType==(int)HotkeyDataType.Skill&&x.DataId==28101),
+                    "item/skill hotkey bindings did not survive SQLite reopen");
 
                 var router=new WorldResultRouter();
                 var relog=Gateway(Actor(actorId,12,4),"HotkeyActor");
@@ -151,9 +176,12 @@ SELECT last_insert_rowid();";
                 var refreshed=DrainSnapshot(relog);
                 Checks.Require(
                     refreshed.Status==HotkeyResultStatus.Applied&&
-                    refreshed.Entries.Count==1&&refreshed.Entries[0].Slot==10&&
-                    refreshed.Entries[0].DataId==itemUid,
-                    "relog refresh did not return durable hotkey binding");
+                    refreshed.Entries.Count==2&&
+                    refreshed.Entries.Any(x=>x.Slot==10&&
+                        x.DataType==HotkeyDataType.Item&&x.DataId==itemUid)&&
+                    refreshed.Entries.Any(x=>x.Slot==9&&
+                        x.DataType==HotkeyDataType.Skill&&x.DataId==28101),
+                    "relog refresh did not return durable item/skill hotkeys");
             }
         }
         finally

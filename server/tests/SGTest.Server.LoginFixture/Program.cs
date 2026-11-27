@@ -54,6 +54,11 @@ internal static class Program
             return await RunDiscardAsync().ConfigureAwait(false);
         if (args is ["--recovery-hotkey"])
             return await RecoveryHotkeyLoginFixture.RunAsync().ConfigureAwait(false);
+        if (args is ["--hotkey-skill"])
+            return await HotkeySkillLoginFixture.RunAsync().ConfigureAwait(false);
+        if (args is ["--hotkey-drag"])
+            return await HotkeySkillLoginFixture.RunAsync(expectCast: false)
+                .ConfigureAwait(false);
         if (args is ["--clan-create"])
             return await ClanCreateLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--storage"])

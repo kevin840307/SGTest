@@ -8,6 +8,7 @@ class FakePanel:
 	var removed:Array[int]=[]
 	var bound:Array[Array]=[]
 	var recovery_used:Array[int]=[]
+	var skills_armed:Array[int]=[]
 	var bind_allowed:=true
 
 	func submit_hotkey_remove(slot_index:int)->bool:
@@ -27,6 +28,10 @@ class FakePanel:
 
 	func cancel_pre_use_skill()->bool:
 		return false
+
+	func arm_pre_use_skill(skill_id:int)->bool:
+		skills_armed.append(skill_id)
+		return true
 
 
 func _init()->void:
@@ -141,9 +146,20 @@ func _run()->void:
 	slot0._gui_input(click)
 	_expect(panel.recovery_used==[41001,41012,41007,41007],"drag release does not consume or activate the bound item")
 
+	# Skill bindings use the same physical F-key path, but only stage skills that
+	# the authoritative SkillBook says are learned. The next monster click is
+	# handled by SessionPanel and emits the authenticated SkillUse intent.
+	shell._toggle_hotkey_size()
+	shell._select_hotkey_page(0)
+	shell._stats["skill_book"]={28101:3}
+	shell._stats["hotkeys"]={0:{"data_type":1,"data_id":28101},1:{"data_type":1,"data_id":99001}}
+	shell._handle_hotkey_key(f1)
+	shell._handle_hotkey_key(f2)
+	_expect(panel.skills_armed==[28101],"F1 stages learned skill while unlearned F2 skill fails closed")
+
 	shell.free()
 	if not failed:
-		print("HK_HOTKEY_BINDING_FLOW_PASS pickup_cancel_safe=true remove_then_move=true overwrite=true authority_gate=true real_fkeys=true")
+		print("HK_HOTKEY_BINDING_FLOW_PASS pickup_cancel_safe=true remove_then_move=true overwrite=true authority_gate=true real_fkeys=true learned_skill_fkey=true")
 	quit(1 if failed else 0)
 
 

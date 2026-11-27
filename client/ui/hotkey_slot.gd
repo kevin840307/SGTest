@@ -13,6 +13,11 @@ func _gui_input(event:InputEvent)->void:
 		return
 	if event.pressed:
 		_click_pending=not hotkey_drag_payload.is_empty()
+		# A populated slot owns this press: otherwise the movable hotkey panel
+		# receives the bubbled event and starts moving the whole strip before
+		# Godot can begin the slot drag. Empty slot space remains panel-draggable.
+		if _click_pending:
+			accept_event()
 		return
 	var activate:=_click_pending and Rect2(Vector2.ZERO,size).has_point(event.position)
 	_click_pending=false
