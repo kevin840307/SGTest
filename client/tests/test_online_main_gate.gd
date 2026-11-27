@@ -35,6 +35,7 @@ var _hold_index := 0
 var _hold_next_msec := 0
 var _hold_large_corrections_before := 0
 var _transfer_cycle := 0
+var _map13_move_start := Vector2.ZERO
 var _chat_proof_seen := false
 var _whisper_proof_seen := false
 var _hud_proof_seen := false
@@ -42,6 +43,9 @@ var _manual_input_required := false
 var _manual_click_seen := false
 var _manual_click_screen := Vector2.ZERO
 var _manual_click_world_start := Vector2.ZERO
+var _real_transfer_mode := false
+var _real_observer_departures := 0
+var _real_observer_returns := 0
 
 
 func _initialize() -> void:
@@ -69,6 +73,7 @@ func _start_online_gate() -> void:
 		_online_gate_fail("invalid_role")
 		return
 	_manual_input_required = OS.get_environment("SGTEST_E2E_REQUIRE_MANUAL_INPUT") == "1"
+	_real_transfer_mode = OS.get_environment("SGTEST_E2E_REAL_TRANSFER") == "1"
 	var username := OS.get_environment("SGTEST_E2E_USERNAME")
 	var password := OS.get_environment("SGTEST_E2E_PASSWORD")
 	OS.set_environment("SGTEST_E2E_PASSWORD","")
@@ -79,7 +84,7 @@ func _start_online_gate() -> void:
 	_app.session_panel.username_input.text = username
 	_app.session_panel.password_input.text = password
 	password = ""
-	_online_gate_deadline = Time.get_ticks_msec() + (120000 if _manual_input_required else 90000)
+	_online_gate_deadline = Time.get_ticks_msec() + (150000 if _real_transfer_mode else (120000 if _manual_input_required else 90000))
 	_online_gate_phase = 0
 	print("ONLINE_MAIN_GATE_START role=",_online_gate_role)
 	_app.session_panel.login()
@@ -106,13 +111,19 @@ func _world_surface_ready(map: int) -> bool:
 	return true
 
 
-func _online_gate_ready(map: int) -> bool:
+func _map_generation_ready(map: int) -> bool:
 	if _app._last_snapshot.is_empty() or not bool(_app._last_snapshot.get("world_ready",false)):
 		return false
-	if int(_app._last_snapshot.get("map_id",0)) != map or _app.world_view.phase != "ready" or _app.world_view.map_id != map:
+	return int(_app._last_snapshot.get("map_id",0)) == map \
+		and _app.world_view.phase == "ready" and _app.world_view.map_id == map \
+		and _world_surface_ready(map)
+
+
+func _online_gate_ready(map: int) -> bool:
+	if not _map_generation_ready(map):
 		return false
 	var expected := Vector2(float(_app._last_snapshot.get("x",0.0)),float(_app._last_snapshot.get("y",0.0)))
-	return _app.world_view.camera.snapshot().focus.distance_to(expected) <= 0.5 and _world_surface_ready(map)
+	return _app.world_view.camera.snapshot().focus.distance_to(expected) <= 0.5
 
 
 func _live_hud_authority_ready() -> bool:
@@ -229,10 +240,176 @@ func _online_gate_tick() -> void:
 			_character_proof_ready = true
 		_app.session_panel.character_choose_password_input.text = "2468"
 		_app.session_panel.choose()
+	if _real_transfer_mode:
+		if _online_gate_role == "observer":
+			_real_transfer_observer()
+		else:
+			_real_transfer_actor()
+		return
 	if _online_gate_role == "observer":
 		_online_gate_observer()
 	else:
 		_online_gate_actor()
+
+
+func _real_npc_ready(spawn_id: int, expected_count: int) -> bool:
+	if _app.world_view.npc_count() != expected_count:
+		return false
+	return _app.world_view._canvas._commands.any(
+		func(c): return str(c.get("actor_id","")) == "npc:%d" % spawn_id)
+
+
+func _real_controller_matches_generation() -> bool:
+	var controller = _app.world_view.local_movement
+	return (
+		controller.ready
+		and controller.actor_id == int(_app._last_snapshot.get("actor_id",0))
+		and controller.map_epoch == int(_app._last_snapshot.get("map_epoch",0))
+	)
+
+
+func _real_transfer_actor() -> void:
+	if _online_gate_phase == 0:
+		if not _map_generation_ready(15) or not _real_npc_ready(46,52):
+			return
+		if not _live_hud_authority_ready():
+			return
+		if not _real_controller_matches_generation():
+			_online_gate_fail("real_map15_controller_generation_mismatch")
+			return
+		print("ONLINE_MAIN_GATE_REAL_READY role=actor map=15 npcs=52 source_portal=46")
+		_online_gate_not_before = Time.get_ticks_msec() + 600
+		_online_gate_phase = 100
+	elif _online_gate_phase == 100 and Time.get_ticks_msec() >= _online_gate_not_before:
+		if not _app.session_panel.submit_npc_interact(46):
+			_online_gate_fail("real_portal_46_enqueue_cycle_%d" % (_transfer_cycle+1))
+			return
+		_online_gate_phase = 101
+	elif _online_gate_phase == 101:
+		if not _map_generation_ready(13) or not _real_npc_ready(1,3):
+			return
+		if not _real_controller_matches_generation():
+			_online_gate_fail("real_map13_controller_generation_mismatch_cycle_%d" % (_transfer_cycle+1))
+			return
+		_map13_move_start = Vector2(
+			float(_app._last_snapshot.get("x",0.0)),
+			float(_app._last_snapshot.get("y",0.0)))
+		_app._begin_ground_navigation(Vector2(2528,2864),Time.get_ticks_msec())
+		if not _app.world_view.local_movement.active:
+			_online_gate_fail("real_map13_local_prediction_not_started_cycle_%d" % (_transfer_cycle+1))
+			return
+		_online_gate_phase = 102
+	elif _online_gate_phase == 102:
+		var at13 := Vector2(
+			float(_app._last_snapshot.get("x",0.0)),
+			float(_app._last_snapshot.get("y",0.0)))
+		var seq13 := int(_app._last_snapshot.get("movement_sequence",0))
+		if (
+			at13.distance_to(_map13_move_start) >= 16.0
+			and _map_generation_ready(13)
+			and seq13 > 0
+			and int(_app._last_snapshot.get("last_receipt_sequence",0)) == seq13
+			and int(_app._last_snapshot.get("last_receipt_status",-1)) == 0
+		):
+			print("ONLINE_MAIN_GATE_REAL_MAP13_MOVE_ACK role=actor cycle=",_transfer_cycle+1,
+				" from=",_map13_move_start," to=",at13)
+			_online_gate_not_before = Time.get_ticks_msec() + 350
+			_online_gate_phase = 103
+	elif _online_gate_phase == 103 and Time.get_ticks_msec() >= _online_gate_not_before:
+		if not _app.session_panel.submit_npc_interact(1):
+			_online_gate_fail("real_portal_1_enqueue_cycle_%d" % (_transfer_cycle+1))
+			return
+		_online_gate_phase = 104
+	elif _online_gate_phase == 104:
+		if not _map_generation_ready(15) or not _real_npc_ready(46,52):
+			return
+		if not _real_controller_matches_generation():
+			_online_gate_fail("real_return_map15_controller_generation_mismatch_cycle_%d" % (_transfer_cycle+1))
+			return
+		_map13_move_start = Vector2(
+			float(_app._last_snapshot.get("x",0.0)),
+			float(_app._last_snapshot.get("y",0.0)))
+		_app._begin_ground_navigation(Vector2(7904,11328),Time.get_ticks_msec())
+		if not _app.world_view.local_movement.active:
+			_online_gate_fail("real_map15_local_prediction_not_started_cycle_%d" % (_transfer_cycle+1))
+			return
+		_online_gate_phase = 105
+	elif _online_gate_phase == 105:
+		var at15 := Vector2(
+			float(_app._last_snapshot.get("x",0.0)),
+			float(_app._last_snapshot.get("y",0.0)))
+		var seq15 := int(_app._last_snapshot.get("movement_sequence",0))
+		if (
+			at15.distance_to(_map13_move_start) >= 16.0
+			and _map_generation_ready(15)
+			and seq15 > 0
+			and int(_app._last_snapshot.get("last_receipt_sequence",0)) == seq15
+			and int(_app._last_snapshot.get("last_receipt_status",-1)) == 0
+		):
+			print("ONLINE_MAIN_GATE_REAL_MAP15_MOVE_ACK role=actor cycle=",_transfer_cycle+1,
+				" from=",_map13_move_start," to=",at15)
+			_transfer_cycle += 1
+			if _transfer_cycle >= TRANSFER_CYCLES:
+				print("ONLINE_MAIN_GATE_REAL_TRANSFER_STRESS_PASS role=actor cycles=",_transfer_cycle)
+				_online_gate_finish(true,"")
+				return
+			_online_gate_not_before = Time.get_ticks_msec() + 600
+			_online_gate_phase = 106
+	elif _online_gate_phase == 106 and Time.get_ticks_msec() >= _online_gate_not_before:
+		if not _app.session_panel.submit_npc_interact(46):
+			_online_gate_fail("real_portal_46_enqueue_cycle_%d" % (_transfer_cycle+1))
+			return
+		_online_gate_phase = 101
+
+
+func _real_transfer_observer() -> void:
+	var entities: Dictionary = _app._last_snapshot.get("entities",{})
+	var own_id := int(_app._last_snapshot.get("actor_id",0))
+	if _online_gate_phase == 0:
+		if not _map_generation_ready(15) or not _real_npc_ready(46,52):
+			return
+		if not _live_hud_authority_ready():
+			return
+		print("ONLINE_MAIN_GATE_REAL_READY role=observer map=15 npcs=52 source_portal=46")
+		_online_gate_phase = 1
+	elif _online_gate_phase == 1:
+		for raw_id in entities.keys():
+			var id := int(raw_id)
+			if id == own_id:
+				continue
+			if not _app.world_view._canvas._commands.any(
+					func(c): return str(c.get("actor_id","")) == str(id)):
+				continue
+			_online_gate_remote_id = id
+			print("ONLINE_MAIN_GATE_REAL_REMOTE_PRESENT role=observer actor=",id)
+			_online_gate_phase = 2
+			return
+	elif _online_gate_phase == 2:
+		if not entities.has(_online_gate_remote_id):
+			_real_observer_departures += 1
+			print("ONLINE_MAIN_GATE_REAL_DESPAWN role=observer cycle=",_real_observer_departures,
+				" actor=",_online_gate_remote_id)
+			_online_gate_phase = 3
+	elif _online_gate_phase == 3 and entities.has(_online_gate_remote_id):
+		var remote_count := 0
+		for raw_id in entities.keys():
+			if int(raw_id) != own_id:
+				remote_count += 1
+		if remote_count != 1:
+			_online_gate_fail("real_return_spawn_duplicate_remote_count_%d" % remote_count)
+			return
+		_real_observer_returns += 1
+		print("ONLINE_MAIN_GATE_REAL_RETURN_SPAWN role=observer cycle=",_real_observer_returns,
+			" actor=",_online_gate_remote_id)
+		if _real_observer_returns >= TRANSFER_CYCLES:
+			if _real_observer_departures != TRANSFER_CYCLES:
+				_online_gate_fail("real_aoi_cycle_count_%d_%d" % [
+					_real_observer_departures,_real_observer_returns])
+				return
+			print("ONLINE_MAIN_GATE_REAL_AOI_STRESS_PASS role=observer cycles=",_real_observer_returns)
+			_online_gate_finish(true,"")
+			return
+		_online_gate_phase = 2
 
 
 func _online_gate_observer() -> void:
@@ -526,9 +703,31 @@ func _online_gate_actor() -> void:
 		_online_gate_phase = 5
 	elif _online_gate_phase == 5 and _online_gate_ready(13):
 		print("ONLINE_MAIN_GATE_MAP13 role=actor cycle=",_transfer_cycle+1)
-		_online_gate_not_before = Time.get_ticks_msec() + 350
+		# A new WorldReady must immediately own a fresh movement generation on
+		# both directions, not only after returning to Map15.
+		_map13_move_start = Vector2(
+			float(_app._last_snapshot.get("x",0.0)),
+			float(_app._last_snapshot.get("y",0.0)))
+		var map13_target := Vector2(840,800)
+		_app._begin_ground_navigation(map13_target,Time.get_ticks_msec())
+		if not _app.world_view.local_movement.active:
+			var controller = _app.world_view.local_movement
+			_online_gate_fail("map13_local_prediction_not_started ready_%s epoch_%d actor_%d pos_%s" % [
+				str(controller.ready),controller.map_epoch,controller.actor_id,str(controller.position)
+			])
+			return
 		_online_gate_phase = 6
-	elif _online_gate_phase == 6 and Time.get_ticks_msec() >= _online_gate_not_before:
+	elif _online_gate_phase == 6:
+		var at13 := Vector2(float(_app._last_snapshot.get("x",0.0)),float(_app._last_snapshot.get("y",0.0)))
+		var movement_sequence13 := int(_app._last_snapshot.get("movement_sequence",0))
+		if at13.distance_to(_map13_move_start) >= 16.0 and _map_generation_ready(13) and movement_sequence13 > 0 \
+				and int(_app._last_snapshot.get("last_receipt_sequence",0)) == movement_sequence13 \
+				and int(_app._last_snapshot.get("last_receipt_status",-1)) == 0:
+			print("ONLINE_MAIN_GATE_MAP13_MOVE_ACK role=actor cycle=",_transfer_cycle+1,
+				" from=",_map13_move_start," to=",at13)
+			_online_gate_not_before = Time.get_ticks_msec() + 350
+			_online_gate_phase = 61
+	elif _online_gate_phase == 61 and Time.get_ticks_msec() >= _online_gate_not_before:
 		if not _app.session_panel.submit_npc_interact(1):
 			_online_gate_fail("portal_1_enqueue")
 			return

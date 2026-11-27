@@ -203,7 +203,9 @@ func build() -> void:
 			}],
 			"spawns":[{
 				"definition":1,"source_index":0,"source_flags":7,
-				"p":[820,800] if map_id==15 else [800,800]
+				# Keep the Map13 transfer arrival clear. This gate verifies map
+				# generation/control stability, not repeated combat on the portal.
+				"p":[820,800] if map_id==15 else [880,800]
 			}]
 		}
 		var world := {
@@ -238,7 +240,7 @@ func build() -> void:
 			}],
 			"spawns":[{
 				"source_index":0,"source_flags":7,"definition":1,
-				"p":[820,800] if map_id == 15 else [800,800]
+				"p":[820,800] if map_id == 15 else [880,800]
 			}],
 			"test_only":true
 		}
