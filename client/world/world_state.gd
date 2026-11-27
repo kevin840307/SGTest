@@ -1086,12 +1086,15 @@ func mark_hotkey_sent(
 		state!=STATE_IN_WORLD or not world_ready or resync_pending or
 		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
 		last_world_ready_ack_epoch!=map_epoch or pending_hotkey_sequence!=0 or
-		sequence<=hotkey_sequence or sequence>0xffffffff or action<1 or action>3 or
+		sequence<=hotkey_sequence or sequence>0xffffffff or action<1 or action>4 or
 		slot<0 or slot>=WireCodec.HOTKEY_MAX_SLOTS
 	):
 		return false
 	if action==1:
 		if data_type<0 or data_type>1 or data_id<=0:
+			return false
+	elif action==4:
+		if data_type!=0 or data_id<1 or data_id>WireCodec.HOTKEY_MAX_SLOTS or data_id-1==slot:
 			return false
 	elif data_type!=0 or data_id!=0:
 		return false

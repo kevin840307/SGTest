@@ -59,6 +59,9 @@ internal static class Program
         if (args is ["--hotkey-drag"])
             return await HotkeySkillLoginFixture.RunAsync(expectCast: false)
                 .ConfigureAwait(false);
+        if (args is ["--hotkey-swap"])
+            return await HotkeySkillLoginFixture.RunAsync(
+                expectCast: false, expectSwap: true).ConfigureAwait(false);
         if (args is ["--clan-create"])
             return await ClanCreateLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--storage"])

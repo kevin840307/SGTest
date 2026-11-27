@@ -14,13 +14,21 @@ public static partial class WireProtocol
     public static byte[] EncodeHotkeyCommand(HotkeyCommandWire value)
     {
         if(value.MapEpoch<=0||value.HotkeySequence==0||
-           value.Action is < HotkeyCommandAction.Save or > HotkeyCommandAction.Refresh||
+           value.Action is < HotkeyCommandAction.Save or > HotkeyCommandAction.Swap||
            value.Slot>=HotkeyMaximumSlots)
             throw new ArgumentOutOfRangeException(nameof(value));
         if(value.Action==HotkeyCommandAction.Save)
         {
             if(value.DataType is < HotkeyDataType.Item or > HotkeyDataType.Skill||
                value.DataId<=0)
+                throw new ArgumentOutOfRangeException(nameof(value));
+        }
+        else if(value.Action==HotkeyCommandAction.Swap)
+        {
+            // Keep the fixed-size command wire: DataId is destination_slot+1.
+            if(value.DataType!=HotkeyDataType.Item||
+               value.DataId is <1 or >HotkeyMaximumSlots||
+               value.DataId-1==value.Slot)
                 throw new ArgumentOutOfRangeException(nameof(value));
         }
         else if(value.DataType!=HotkeyDataType.Item||value.DataId!=0)

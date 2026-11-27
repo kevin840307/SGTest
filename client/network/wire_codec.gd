@@ -2863,10 +2863,14 @@ static func decode_friend_invite(frame:PackedByteArray)->Dictionary:
 
 static func encode_hotkey_command(
 		epoch:int,sequence:int,action:int,slot:int=0,data_type:int=0,data_id:int=0)->PackedByteArray:
-	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>3 or slot<0 or slot>=HOTKEY_MAX_SLOTS:
+	if epoch<=0 or sequence<=0 or sequence>0xffffffff or action<1 or action>4 or slot<0 or slot>=HOTKEY_MAX_SLOTS:
 		return PackedByteArray()
 	if action==1:
 		if data_type<0 or data_type>1 or data_id<=0:
+			return PackedByteArray()
+	elif action==4:
+		# Keep the formal 31-byte command wire stable: data_id is destination+1.
+		if data_type!=0 or data_id<1 or data_id>HOTKEY_MAX_SLOTS or data_id-1==slot:
 			return PackedByteArray()
 	elif data_type!=0 or data_id!=0:
 		return PackedByteArray()

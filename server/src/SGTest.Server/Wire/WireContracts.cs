@@ -180,7 +180,7 @@ public enum FriendResultStatus : byte
     TargetUnavailable=6,InviteMissing=7,TargetHasPendingInvite=8
 }
 public enum FriendInviteState : byte { Request=0, Accepted=1, Rejected=2, Cancelled=3 }
-public enum HotkeyCommandAction : byte { Save=1, Remove=2, Refresh=3 }
+public enum HotkeyCommandAction : byte { Save=1, Remove=2, Refresh=3, Swap=4 }
 public enum HotkeyDataType : byte { Item=0, Skill=1 }
 public enum HotkeyResultStatus : byte { Applied=0, InvalidBinding=1 }
 public enum PetCommandAction : byte { Summon=1, Recall=2, Refresh=3, Equip=4, Unequip=5 }

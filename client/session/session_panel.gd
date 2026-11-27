@@ -543,6 +543,10 @@ func submit_hotkey_remove(slot:int) -> bool:
 	return active and bool(_latest.get("world_ready",false)) and not bool(_latest.get("reconnecting",false)) and int(_latest.get("pending_hotkey_sequence",0))==0 and session.hotkey_remove(slot)
 
 
+func submit_hotkey_swap(source_slot:int,destination_slot:int) -> bool:
+	return active and bool(_latest.get("world_ready",false)) and not bool(_latest.get("reconnecting",false)) and int(_latest.get("pending_hotkey_sequence",0))==0 and session.hotkey_swap(source_slot,destination_slot)
+
+
 func submit_pickup_drop(drop_id: int) -> bool:
 	return active and not bool(_latest.get("reconnecting",false)) and bool(_latest.get("world_ready",false)) and not bool(_latest.get("player_dead",false)) and not bool(_latest.get("resync_pending",false)) and int(_latest.get("pending_pickup_sequence",0)) == 0 and drop_id > 0 and session.pickup_ground_drop(drop_id)
 

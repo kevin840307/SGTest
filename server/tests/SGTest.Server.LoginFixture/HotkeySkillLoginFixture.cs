@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using SGTest.Server.Combat;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
@@ -15,7 +16,7 @@ internal static class HotkeySkillLoginFixture
 {
     internal const int SkillId = 28101;
 
-    internal static async Task<int> RunAsync(bool expectCast = true)
+    internal static async Task<int> RunAsync(bool expectCast = true, bool expectSwap = false)
     {
         string root = Path.Combine(Path.GetTempPath(),
             "sgtest_hotkey_skill_login_" + Guid.NewGuid().ToString("N"));
@@ -80,6 +81,22 @@ internal static class HotkeySkillLoginFixture
             await store.SetCharacterSkillLevelAsync(
                 characterId, SkillId, 3, "ci:tls-hotkey-skill-fixture")
                 .ConfigureAwait(false);
+            long itemUid = 0;
+            if (expectSwap)
+            {
+                using var connection = new SqliteConnection($"Data Source={Path.Combine(root, "identity.db")}");
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = @"INSERT INTO item_instances(
+character_id,item_definition_id,quantity,source_drop_id,durability_raw,
+enhancement_level,source_kind,source_reference,created_unix_ms)
+VALUES($actor,1001,1,NULL,NULL,0,2,'hotkey-swap-fixture',$now);
+SELECT last_insert_rowid();";
+                command.Parameters.AddWithValue("$actor", characterId);
+                command.Parameters.AddWithValue(
+                    "$now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                itemUid = Convert.ToInt64(command.ExecuteScalar());
+            }
             await store.SetCharacterCombatProfileAsync(characterId,
                 new CharacterCombatProfileData(
                     CombatProfileTrust.SyntheticTest,
@@ -142,22 +159,39 @@ internal static class HotkeySkillLoginFixture
                     .ConfigureAwait(false);
                 int expectedHp = expectCast ? 60 : 100;
                 int expectedMp = expectCast ? 1 : 2;
-                int expectedSlot = expectCast ? 0 : 1;
                 if (monster.CurrentHp != expectedHp || monster.MaxHp != 100 ||
-                    profile?.Data.CurrentMp != expectedMp || profile.Data.MaxMp != 2 ||
-                    hotkeys.Count != 1 || hotkeys[0].Slot != expectedSlot ||
-                    hotkeys[0].DataType != 1 || hotkeys[0].DataId != SkillId)
+                    profile?.Data.CurrentMp != expectedMp || profile.Data.MaxMp != 2)
                     throw new InvalidOperationException(
-                        $"hotkey-skill persistence mismatch monster=" +
+                        $"hotkey-skill combat mismatch monster=" +
                         $"{monster.CurrentHp}/{monster.MaxHp} " +
-                        $"mp={profile?.Data.CurrentMp}/{profile?.Data.MaxMp} " +
-                        $"hotkeys={hotkeys.Count} expected_slot={expectedSlot}");
+                        $"mp={profile?.Data.CurrentMp}/{profile?.Data.MaxMp}");
 
-                Console.WriteLine(
-                    $"HOTKEY_SKILL_FIXTURE_PASS skill_id={SkillId} " +
-                    $"monster_hp={monster.CurrentHp}/{monster.MaxHp} " +
-                    $"player_mp={profile!.Data.CurrentMp}/{profile.Data.MaxMp} " +
-                    $"hotkey_slot={expectedSlot} relog=true native_drag={!expectCast}");
+                if (expectSwap)
+                {
+                    if (hotkeys.Count != 2 ||
+                        !hotkeys.Any(x => x.Slot == 0 && x.DataType == 0 && x.DataId == itemUid) ||
+                        !hotkeys.Any(x => x.Slot == 1 && x.DataType == 1 && x.DataId == SkillId))
+                        throw new InvalidOperationException(
+                            $"hotkey-swap persistence mismatch hotkeys={hotkeys.Count} " +
+                            $"item_uid={itemUid}");
+                    Console.WriteLine(
+                        $"HOTKEY_SWAP_FIXTURE_PASS skill_id={SkillId} item_uid={itemUid} " +
+                        $"slot0=item slot1=skill relog=true");
+                }
+                else
+                {
+                    int expectedSlot = expectCast ? 0 : 1;
+                    if (hotkeys.Count != 1 || hotkeys[0].Slot != expectedSlot ||
+                        hotkeys[0].DataType != 1 || hotkeys[0].DataId != SkillId)
+                        throw new InvalidOperationException(
+                            $"hotkey-skill persistence mismatch hotkeys={hotkeys.Count} " +
+                            $"expected_slot={expectedSlot}");
+                    Console.WriteLine(
+                        $"HOTKEY_SKILL_FIXTURE_PASS skill_id={SkillId} " +
+                        $"monster_hp={monster.CurrentHp}/{monster.MaxHp} " +
+                        $"player_mp={profile!.Data.CurrentMp}/{profile.Data.MaxMp} " +
+                        $"hotkey_slot={expectedSlot} relog=true native_drag={!expectCast}");
+                }
                 Console.Out.Flush();
                 return 0;
             }

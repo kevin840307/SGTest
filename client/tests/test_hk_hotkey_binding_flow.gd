@@ -7,6 +7,7 @@ class FakePanel:
 	extends RefCounted
 	var removed:Array[int]=[]
 	var bound:Array[Array]=[]
+	var swapped:Array[Array]=[]
 	var recovery_used:Array[int]=[]
 	var skills_armed:Array[int]=[]
 	var bind_allowed:=true
@@ -20,6 +21,10 @@ class FakePanel:
 		if not bind_allowed:
 			return false
 		bound.append([slot_index,data_type,data_id])
+		return true
+
+	func submit_hotkey_swap(source_slot:int,destination_slot:int)->bool:
+		swapped.append([source_slot,destination_slot])
 		return true
 
 	func submit_recovery_use(item_uid:int)->bool:
@@ -98,8 +103,16 @@ func _run()->void:
 	_expect(shell._pending_hotkey_rebind.is_empty(),"rejected remove discards queued destination")
 	shell._stats["last_hotkey_status"]=0
 
-	# Inventory/skill-window drops have no source slot and remain direct saves,
-	# including replacement of an existing destination slot.
+	# Occupied hotkey-to-hotkey drops are Scheduler-v20 atomic exchanges, while
+	# Inventory/skill-window drops have no source slot and remain direct saves.
+	shell._stats["hotkeys"]={
+		0:{"data_type":1,"data_id":99001},
+		1:{"data_type":0,"data_id":1234}
+	}
+	shell._hotkey_slots[1]._drop_data(Vector2.ZERO,drag_payload)
+	_expect(panel.swapped==[[0,1]],"occupied destination uses one authoritative swap command")
+	_expect(panel.removed==[0],"swap does not issue a destructive source remove first")
+
 	var slot2=shell._hotkey_slots[2]
 	slot2._drop_data(Vector2.ZERO,{"hotkey_kind":"item","data_id":1234})
 	_expect(panel.bound==[[6,1,99001],[2,0,1234]],"external drag directly saves/overwrites destination")
@@ -159,7 +172,7 @@ func _run()->void:
 
 	shell.free()
 	if not failed:
-		print("HK_HOTKEY_BINDING_FLOW_PASS pickup_cancel_safe=true remove_then_move=true overwrite=true authority_gate=true real_fkeys=true learned_skill_fkey=true")
+		print("HK_HOTKEY_BINDING_FLOW_PASS pickup_cancel_safe=true remove_then_move=true atomic_swap=true overwrite=true authority_gate=true real_fkeys=true learned_skill_fkey=true")
 	quit(1 if failed else 0)
 
 

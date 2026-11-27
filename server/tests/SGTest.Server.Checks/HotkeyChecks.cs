@@ -32,6 +32,13 @@ internal static class HotkeyChecks
                 WireProtocol.EncodeHotkeyCommand(refresh),out decoded)&&decoded==refresh,
             "hotkey refresh wire roundtrip failed");
 
+        var swap=new HotkeyCommandWire(
+            7,3,HotkeyCommandAction.Swap,11,HotkeyDataType.Item,1);
+        Checks.Require(
+            WireProtocol.TryDecodeHotkeyCommand(
+                WireProtocol.EncodeHotkeyCommand(swap),out decoded)&&decoded==swap,
+            "hotkey swap wire roundtrip failed");
+
         var snapshot=new HotkeySnapshotWire(
             7,2,HotkeyResultStatus.Applied,
             [
@@ -143,7 +150,20 @@ SELECT last_insert_rowid();";
                     "server did not persist learned skill hotkey");
 
                 FeedHotkey(gateway,new HotkeyCommandWire(
-                    3,6,HotkeyCommandAction.Save,8,HotkeyDataType.Skill,28102),
+                    3,6,HotkeyCommandAction.Swap,10,HotkeyDataType.Item,10),
+                    coordinator,router);
+                var swapped=DrainSnapshot(gateway);
+                Checks.Require(
+                    swapped.Status==HotkeyResultStatus.Applied&&
+                    swapped.Entries.Count==2&&
+                    swapped.Entries.Any(x=>x.Slot==10&&
+                        x.DataType==HotkeyDataType.Skill&&x.DataId==28101)&&
+                    swapped.Entries.Any(x=>x.Slot==9&&
+                        x.DataType==HotkeyDataType.Item&&x.DataId==itemUid),
+                    "server did not atomically exchange occupied hotkey slots");
+
+                FeedHotkey(gateway,new HotkeyCommandWire(
+                    3,7,HotkeyCommandAction.Save,8,HotkeyDataType.Skill,28102),
                     coordinator,router);
                 var skillRejected=DrainSnapshot(gateway);
                 Checks.Require(
@@ -160,10 +180,10 @@ SELECT last_insert_rowid();";
                 Checks.Require(
                     durable.Count==2&&
                     durable.Any(x=>x.Slot==10&&
-                        x.DataType==(int)HotkeyDataType.Item&&x.DataId==itemUid)&&
+                        x.DataType==(int)HotkeyDataType.Skill&&x.DataId==28101)&&
                     durable.Any(x=>x.Slot==9&&
-                        x.DataType==(int)HotkeyDataType.Skill&&x.DataId==28101),
-                    "item/skill hotkey bindings did not survive SQLite reopen");
+                        x.DataType==(int)HotkeyDataType.Item&&x.DataId==itemUid),
+                    "swapped item/skill hotkeys did not survive SQLite reopen");
 
                 var router=new WorldResultRouter();
                 var relog=Gateway(Actor(actorId,12,4),"HotkeyActor");
@@ -178,10 +198,10 @@ SELECT last_insert_rowid();";
                     refreshed.Status==HotkeyResultStatus.Applied&&
                     refreshed.Entries.Count==2&&
                     refreshed.Entries.Any(x=>x.Slot==10&&
-                        x.DataType==HotkeyDataType.Item&&x.DataId==itemUid)&&
+                        x.DataType==HotkeyDataType.Skill&&x.DataId==28101)&&
                     refreshed.Entries.Any(x=>x.Slot==9&&
-                        x.DataType==HotkeyDataType.Skill&&x.DataId==28101),
-                    "relog refresh did not return durable item/skill hotkeys");
+                        x.DataType==HotkeyDataType.Item&&x.DataId==itemUid),
+                    "relog refresh did not return swapped durable hotkeys");
             }
         }
         finally

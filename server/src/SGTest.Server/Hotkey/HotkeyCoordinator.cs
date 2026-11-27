@@ -43,6 +43,13 @@ public sealed class HotkeyCoordinator
         else if(request.Action==HotkeyCommandAction.Remove)
             await _identity.RemoveCharacterHotkeyAsync(
                 request.ActorId,request.Slot).ConfigureAwait(false);
+        else if(request.Action==HotkeyCommandAction.Swap)
+        {
+            int destination=checked((int)request.DataId-1);
+            if(!await _identity.SwapCharacterHotkeysAsync(
+                    request.ActorId,request.Slot,destination).ConfigureAwait(false))
+                status=HotkeyResultStatus.InvalidBinding;
+        }
 
         await QueueSnapshotAsync(binding,request.HotkeySequence,status,router)
             .ConfigureAwait(false);

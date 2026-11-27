@@ -640,6 +640,10 @@ func hotkey_remove(slot:int)->bool:
 	return _queue_hotkey_intent(2,slot,0,0,snapshot())
 
 
+func hotkey_swap(source_slot:int,destination_slot:int)->bool:
+	return _queue_hotkey_intent(4,source_slot,0,destination_slot+1,snapshot())
+
+
 func friend_reject()->bool:
 	var current:=snapshot()
 	var invite:Dictionary=current.get("pending_friend_invite",{})
@@ -871,11 +875,14 @@ func _queue_hotkey_intent(
 		int(current.get("pending_world_ready_ack_epoch",0))!=0 or
 		int(current.get("last_world_ready_ack_epoch",0))!=int(current.get("map_epoch",0)) or
 		int(current.get("pending_hotkey_sequence",0))!=0 or
-		action<1 or action>3 or slot<0 or slot>=WireCodec.HOTKEY_MAX_SLOTS
+		action<1 or action>4 or slot<0 or slot>=WireCodec.HOTKEY_MAX_SLOTS
 	):
 		return false
 	if action==1:
 		if data_type<0 or data_type>1 or data_id<=0:
+			return false
+	elif action==4:
+		if data_type!=0 or data_id<1 or data_id>WireCodec.HOTKEY_MAX_SLOTS or data_id-1==slot:
 			return false
 	elif data_type!=0 or data_id!=0:
 		return false

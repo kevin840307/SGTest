@@ -59,6 +59,80 @@ ON CONFLICT(character_id,slot) DO UPDATE SET
         },cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<bool> SwapCharacterHotkeysAsync(
+        long characterId,int firstSlot,int secondSlot,
+        CancellationToken cancellationToken=default)
+    {
+        ThrowIfDisposed();
+        if(characterId<=0||firstSlot is <0 or >=12||
+           secondSlot is <0 or >=12||firstSlot==secondSlot)
+            throw new ArgumentOutOfRangeException(nameof(characterId));
+        return await Task.Run(() =>
+        {
+            using var connection=Open();
+            using var tx=connection.BeginTransaction();
+
+            using var read=connection.CreateCommand();
+            read.Transaction=tx;
+            read.CommandText=@"SELECT slot,data_type,data_id
+FROM character_hotkeys
+WHERE character_id=$actor AND slot IN ($first,$second)
+ORDER BY slot;";
+            read.Parameters.AddWithValue("$actor",characterId);
+            read.Parameters.AddWithValue("$first",firstSlot);
+            read.Parameters.AddWithValue("$second",secondSlot);
+            int? firstType=null,secondType=null;
+            long? firstData=null,secondData=null;
+            using(var reader=read.ExecuteReader())
+            {
+                while(reader.Read())
+                {
+                    int slot=reader.GetInt32(0);
+                    if(slot==firstSlot)
+                    {
+                        firstType=reader.GetInt32(1);
+                        firstData=reader.GetInt64(2);
+                    }
+                    else if(slot==secondSlot)
+                    {
+                        secondType=reader.GetInt32(1);
+                        secondData=reader.GetInt64(2);
+                    }
+                }
+            }
+            if(firstType is null||firstData is null||
+               secondType is null||secondData is null)
+            {
+                tx.Rollback();
+                return false;
+            }
+
+            using var update=connection.CreateCommand();
+            update.Transaction=tx;
+            update.CommandText=@"UPDATE character_hotkeys SET
+ data_type=CASE slot WHEN $first THEN $second_type ELSE $first_type END,
+ data_id=CASE slot WHEN $first THEN $second_data ELSE $first_data END,
+ updated_unix_ms=$now
+WHERE character_id=$actor AND slot IN ($first,$second);";
+            update.Parameters.AddWithValue("$actor",characterId);
+            update.Parameters.AddWithValue("$first",firstSlot);
+            update.Parameters.AddWithValue("$second",secondSlot);
+            update.Parameters.AddWithValue("$first_type",firstType.Value);
+            update.Parameters.AddWithValue("$first_data",firstData.Value);
+            update.Parameters.AddWithValue("$second_type",secondType.Value);
+            update.Parameters.AddWithValue("$second_data",secondData.Value);
+            update.Parameters.AddWithValue(
+                "$now",DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            if(update.ExecuteNonQuery()!=2)
+            {
+                tx.Rollback();
+                return false;
+            }
+            tx.Commit();
+            return true;
+        },cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task RemoveCharacterHotkeyAsync(
         long characterId,int slot,CancellationToken cancellationToken=default)
     {

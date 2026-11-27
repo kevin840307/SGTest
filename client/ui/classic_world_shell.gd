@@ -1648,6 +1648,14 @@ func _on_hotkey_binding_dropped(slot_index:int,payload:Dictionary)->void:
 	if source_slot>=0:
 		if source_slot==slot_index or source_slot>=12 or int(_stats.get("pending_hotkey_sequence",0))!=0:
 			return
+		var bindings:Dictionary=_stats.get("hotkeys",{})
+		if bindings.has(slot_index):
+			# Scheduler v20 requires occupied-slot exchange in addition to the Old
+			# replacement flow. Keep it Server-authoritative and atomic so neither
+			# binding can disappear between multiple Client commands.
+			if _panel.submit_hotkey_swap(source_slot,slot_index):
+				_hotkey_refresh_requested=true
+			return
 		# Original CHotKeyItf::ReceiveDropButton sends source removal only after a
 		# valid hotkey destination accepts the drop. Keep a cancelled drag durable,
 		# then sequence destination Save behind the authoritative Remove snapshot.
