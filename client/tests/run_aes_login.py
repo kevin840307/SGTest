@@ -47,6 +47,8 @@ def main() -> int:
                         help="run real AES ClientSession durable inventory discard E2E")
     parser.add_argument("--recovery-hotkey", action="store_true",
                         help="run original hotbar F1 -> authoritative recovery -> HUD/inventory -> relog E2E")
+    parser.add_argument("--classic-inventory", action="store_true",
+                        help="run 021_COMMAND -> 023_ITEM row click -> authoritative recovery -> relog E2E")
     parser.add_argument("--clan-create", action="store_true",
                         help="run Classic 061 clan-name keyboard input -> authoritative create -> relog E2E")
     parser.add_argument("--storage", action="store_true",
@@ -76,7 +78,7 @@ def main() -> int:
     parser.add_argument("--appearance", action="store_true",
                         help="create with authoritative appearance choices and verify durable relogin")
     args = parser.parse_args()
-    if args.app_ui and (args.multi or args.multi_reconnect or args.crossmap or args.portal or args.reconnect or args.combat or args.target_combat or args.target_combat_miss or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.recovery_hotkey or args.clan_create or args.storage or args.pet or args.mecha or args.equipment or args.bank or args.repair or args.enhancement or args.quest or args.trade or args.player_shop or args.pvp or args.auto_attack or args.register or args.appearance):
+    if args.app_ui and (args.multi or args.multi_reconnect or args.crossmap or args.portal or args.reconnect or args.combat or args.target_combat or args.target_combat_miss or args.combat_observer or args.skill_aoe or args.skill_aoe_observer or args.discard or args.recovery_hotkey or args.classic_inventory or args.clan_create or args.storage or args.pet or args.mecha or args.equipment or args.bank or args.repair or args.enhancement or args.quest or args.trade or args.player_shop or args.pvp or args.auto_attack or args.register or args.appearance):
         parser.error("--app-ui uses the single-client login fixture")
     if args.ui_screenshot and not args.app_ui:
         parser.error("--ui-screenshot requires --app-ui")
@@ -111,6 +113,8 @@ def main() -> int:
         return run_discard(args, repo, fixture, env)
     if args.recovery_hotkey:
         return run_recovery_hotkey(args, repo, fixture, env)
+    if args.classic_inventory:
+        return run_recovery_hotkey(args, repo, fixture, env, classic_inventory=True)
     if args.clan_create:
         return run_clan_create(args, repo, fixture, env)
     if args.storage:
@@ -379,7 +383,7 @@ def run_auto_attack(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
                 server.kill()
 
 
-def run_recovery_hotkey(args, repo: Path, fixture: Path, env: dict[str, str]) -> int:
+def run_recovery_hotkey(args, repo: Path, fixture: Path, env: dict[str, str], *, classic_inventory=False) -> int:
     server = subprocess.Popen(
         ["dotnet", "run", "--project", str(fixture), "-c", "Release",
          "--no-build", "--", "--recovery-hotkey"],
@@ -415,15 +419,23 @@ def run_recovery_hotkey(args, repo: Path, fixture: Path, env: dict[str, str]) ->
         if match is None:
             raise RuntimeError("malformed recovery-hotkey fixture readiness: " + ready)
         port = match.group(1)
+        client_script = (
+            "res://tests/test_client_classic_inventory_aes.gd"
+            if classic_inventory else "res://tests/test_client_recovery_hotkey_aes.gd")
+        client_marker = (
+            "CLIENT_CLASSIC_INVENTORY_AES_PASS"
+            if classic_inventory else "CLIENT_RECOVERY_HOTKEY_AES_PASS")
         client = subprocess.run(
             [args.godot, "--headless", "--path", str(repo / "client"),
-             "--script", "res://tests/test_client_recovery_hotkey_aes.gd", "--", port],
+             "--script", client_script, "--", port],
             cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             timeout=max(1.0, deadline - time.monotonic()))
         print(client.stdout, end="")
-        if client.returncode != 0 or "CLIENT_RECOVERY_HOTKEY_AES_PASS" not in client.stdout:
-            raise RuntimeError("Godot recovery-hotkey AES test failed")
+        if client.returncode != 0 or client_marker not in client.stdout:
+            raise RuntimeError(
+                "Godot Classic inventory AES test failed"
+                if classic_inventory else "Godot recovery-hotkey AES test failed")
         server.wait(timeout=max(1.0, deadline - time.monotonic()))
         output = "\n".join(lines)
         if server.returncode != 0 or "RECOVERY_HOTKEY_FIXTURE_PASS" not in output:
@@ -431,9 +443,14 @@ def run_recovery_hotkey(args, repo: Path, fixture: Path, env: dict[str, str]) ->
         for line in lines:
             if line.startswith("RECOVERY_HOTKEY_FIXTURE_"):
                 print(line)
-        print("GODOT_CSHARP_AES_RECOVERY_HOTKEY_E2E_PASS "
-              "aes_cbc=true input_event_f1=true authoritative_hotkey=true "
-              "recovery_receipt=true hud_inventory=true relog_persistence=true")
+        if classic_inventory:
+            print("GODOT_CSHARP_AES_CLASSIC_INVENTORY_E2E_PASS "
+                  "aes_cbc=true command_021=true item_023=true row_click=true "
+                  "server_recovery=true hud_inventory=true relog_persistence=true")
+        else:
+            print("GODOT_CSHARP_AES_RECOVERY_HOTKEY_E2E_PASS "
+                  "aes_cbc=true input_event_f1=true authoritative_hotkey=true "
+                  "recovery_receipt=true hud_inventory=true relog_persistence=true")
         return 0
     except Exception as error:
         print("AES_RECOVERY_HOTKEY_RUNNER_FAIL", error, file=sys.stderr)

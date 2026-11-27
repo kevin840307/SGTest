@@ -2524,6 +2524,14 @@ func _inventory_matches_tab(item:Dictionary,equipped:bool)->bool:
 		4:return category in ["horse","horsebattery","ride"]
 	return false
 
+func _classic_item_definition_desc(a:Dictionary,b:Dictionary)->bool:
+	# Original Paradise CItemItf::FilterList QuickSorts PlayerItemData with
+	# CSGOMap::CompareItem, whose comparator is (b.item_id - a.item_id).
+	# Keep equal definitions equivalent instead of inventing a secondary key.
+	var a_item:Dictionary=a.get("item",{})
+	var b_item:Dictionary=b.get("item",{})
+	return int(a_item.get("item_definition_id",0))>int(b_item.get("item_definition_id",0))
+
 func _social_snapshot_changed(section:String,keys:Array)->bool:
 	var signature:Dictionary={}
 	for key in keys:
@@ -2575,7 +2583,7 @@ func _refresh_inventory()->void:
 			var item:Dictionary=inventory_items[raw_uid]
 			if _inventory_matches_tab(item,false):
 				candidates.append({"uid":int(raw_uid),"item":item})
-		candidates.sort_custom(func(a:Dictionary,b:Dictionary):return int(a.uid)<int(b.uid))
+		candidates.sort_custom(_classic_item_definition_desc)
 		for i in mini(7,candidates.size()):
 			var entry:Dictionary=candidates[i];var uid:=int(entry.uid);var item:Dictionary=entry.item
 			var id:=int(item.get("item_definition_id",0))
@@ -2596,7 +2604,7 @@ func _refresh_inventory()->void:
 		var item:Dictionary=inventory_items[raw_uid]
 		if _inventory_matches_tab(item,false):
 			entries.append({"uid":int(raw_uid),"item":item})
-	entries.sort_custom(func(a:Dictionary,b:Dictionary):return int(a.uid)<int(b.uid))
+	entries.sort_custom(_classic_item_definition_desc)
 	var scroll_offset:=_set_inventory_scroll_buttons(entries.size())
 	for i in range(scroll_offset,mini(scroll_offset+ITEM_ROW_COUNT,entries.size())):
 		var entry:Dictionary=entries[i]

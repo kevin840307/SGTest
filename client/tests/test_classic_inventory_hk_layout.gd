@@ -51,7 +51,9 @@ func _run() -> void:
 		return
 	var items:Dictionary={}
 	for uid in range(1,19):
-		items[uid]={"item_definition_id":uid,"quantity":uid}
+		# Deliberately make definition IDs distinct from inventory UIDs. Original
+		# CItemItf::FilterList sorts by CSGOMap::CompareItem (definition ID desc).
+		items[uid]={"item_definition_id":1000+uid,"quantity":uid}
 	shell._stats={"inventory_items":items,"equipment_items":{}}
 	shell._refresh_inventory()
 	if shell._inventory_rows.get_child_count()!=16 or not up.disabled or down.disabled:
@@ -59,8 +61,8 @@ func _run() -> void:
 		return
 	var first:=shell._inventory_rows.get_child(0) as Button
 	var last:=shell._inventory_rows.get_child(15) as Button
-	if first==null or last==null or not first.text.contains("Item 1") or not last.text.contains("Item 16"):
-		_fail(shell,"top page item window is not UID-sorted 1..16")
+	if first==null or last==null or not first.text.contains("Item 1018") or not last.text.contains("Item 1003"):
+		_fail(shell,"top page did not preserve original definition-id descending order")
 		return
 	shell._scroll_inventory(100)
 	if int(inv.get_meta("item_scroll",-1))!=2 or up.disabled or not down.disabled:
@@ -68,8 +70,8 @@ func _run() -> void:
 		return
 	first=shell._inventory_rows.get_child(0) as Button
 	last=shell._inventory_rows.get_child(15) as Button
-	if first==null or last==null or not first.text.contains("Item 3") or not last.text.contains("Item 18"):
-		_fail(shell,"bottom page did not expose items 3..18")
+	if first==null or last==null or not first.text.contains("Item 1016") or not last.text.contains("Item 1001"):
+		_fail(shell,"bottom page did not expose original sorted tail 1016..1001")
 		return
 	shell._scroll_inventory(-100)
 	if int(inv.get_meta("item_scroll",-1))!=0 or not up.disabled or down.disabled:
