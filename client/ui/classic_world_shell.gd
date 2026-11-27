@@ -154,6 +154,11 @@ var _settings_bgm_level:=10
 var _settings_sfx_level:=10
 var _settings_high_fps:=true
 var _settings_battle_mode:=0
+var _system_action_blocker:=Control.new()
+var _system_action_question:=Control.new()
+var _system_action_question_text:=RichTextLabel.new()
+var _system_action:=0 # 0=none, 1=back to server/login, 2=exit game
+var _system_action_previous_focus:Control
 var _skin_switch_visible:=false
 var _windows:Array[Control]=[]
 
@@ -545,6 +550,13 @@ func _process(_delta:float)->void:
 
 
 func _unhandled_key_input(event:InputEvent)->void:
+	if _system_action_blocker.visible:
+		if event.is_action_pressed("ui_accept"):
+			_confirm_system_action()
+		elif event.is_action_pressed("ui_cancel"):
+			_cancel_system_action()
+		get_viewport().set_input_as_handled()
+		return
 	if _party_leave_blocker.visible:
 		if event.is_action_pressed("ui_accept"):
 			_confirm_party_leave()
@@ -2711,15 +2723,40 @@ func _build_settings()->void:
 	_texture_button(settings_window,"SfxUp","ADD_POINT",Vector2(148,102),Vector2(16,16),_change_sfx.bind(1),"提高音效")
 	_itf_text(settings_window,"BattleModeLabel",Rect2(12,139,48,12),10).text="戰鬥模式"
 	_settings_battle_value=_itf_text(settings_window,"BattleModeValue",Rect2(91,139,79,11),10,true)
-	var battle_left:=_texture_button(settings_window,"BattleModeLeft","B_PVP_LEFT",Vector2(69,136),Vector2(17,17),Callable(),"戰鬥模式由伺服器規則決定")
-	var battle_right:=_texture_button(settings_window,"BattleModeRight","B_PVP_RIGHT",Vector2(177,137),Vector2(15,15),Callable(),"戰鬥模式由伺服器規則決定")
-	for button in [battle_left,battle_right]:
-		button.disabled=true
-		button.texture_disabled=button.texture_normal
-	_texture_button(settings_window,"BackToServer","YELLOW_BUTTON",Vector2(27,168),Vector2(85,21),_logout_to_login,"回選擇伺服器")
-	_texture_button(settings_window,"ExitGame","YELLOW_BUTTON",Vector2(125,168),Vector2(85,21),func():get_tree().quit(),"離開遊戲")
+	# Paradise CSystemMenuItf::OnPKDOWN/OnPKUP mutates a local 0..2 PKMode
+	# profile value with wraparound. SaveProfile persists it under PKMode/Mode.
+	_texture_button(settings_window,"BattleModeLeft","B_PVP_LEFT",Vector2(69,136),Vector2(17,17),_change_battle_mode.bind(-1),"上一個戰鬥模式")
+	_texture_button(settings_window,"BattleModeRight","B_PVP_RIGHT",Vector2(177,137),Vector2(15,15),_change_battle_mode.bind(1),"下一個戰鬥模式")
+	_texture_button(settings_window,"BackToServer","YELLOW_BUTTON",Vector2(27,168),Vector2(85,21),_open_system_action_question.bind(1),"回選擇伺服器")
+	_texture_button(settings_window,"ExitGame","YELLOW_BUTTON",Vector2(125,168),Vector2(85,21),_open_system_action_question.bind(2),"離開遊戲")
 	_itf_text(settings_window,"BackToServerText",Rect2(32,172,72,12),10,true).text="回選擇伺服器"
 	_itf_text(settings_window,"ExitGameText",Rect2(141,172,48,12),10,true).text="離開遊戲"
+
+	# CSystemMenuItf::OnSelectServer/OnExit create CYesNoBox with the default
+	# 010_MESSAGE01.itf, then CenterScreen. Reuse the exact 256x119 source
+	# geometry and original BG_MESSAGE / YELLOW_BUTTON art for both actions.
+	_system_action_blocker.name="SystemActionModalBlocker"
+	_system_action_blocker.position=Vector2.ZERO
+	_system_action_blocker.size=BASE_SIZE
+	_system_action_blocker.visible=false
+	_system_action_blocker.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_system_action_blocker)
+	_system_action_question.name="SystemActionQuestion"
+	_system_action_question.position=Vector2(272,240)
+	_system_action_question.size=Vector2(256,119)
+	_system_action_question.mouse_filter=Control.MOUSE_FILTER_STOP
+	_system_action_blocker.add_child(_system_action_question)
+	_background(_system_action_question,"BG_MESSAGE",_system_action_question.size)
+	_system_action_question_text=_itf_text(
+		_system_action_question,"SystemActionQuestionText",Rect2(15,11,231,71),12)
+	_texture_button(
+		_system_action_question,"SystemActionConfirm","YELLOW_BUTTON",Vector2(38,93),Vector2(85,21),
+		_confirm_system_action,"確定")
+	_texture_button(
+		_system_action_question,"SystemActionCancel","YELLOW_BUTTON",Vector2(138,93),Vector2(85,21),
+		_cancel_system_action,"取消")
+	_itf_text(_system_action_question,"SystemActionConfirmText",Rect2(69,97,24,12),12,true).text="確定"
+	_itf_text(_system_action_question,"SystemActionCancelText",Rect2(169,97,24,12),12,true).text="取消"
 	_settings_skin_label=_classic_label(settings_window,"UiLabel",Rect2(9,18,80,12),9,false)
 	_settings_skin_label.text="介面風格"
 	_settings_picker.name="UiProfilePickerSettings"
@@ -2755,6 +2792,7 @@ func _load_system_settings()->void:
 		_settings_bgm_level=clampi(int(config.get_value("audio","bgm",_settings_bgm_level)),0,10)
 		_settings_sfx_level=clampi(int(config.get_value("audio","sfx",_settings_sfx_level)),0,10)
 		_settings_high_fps=bool(config.get_value("display","high_fps",_settings_high_fps))
+		_settings_battle_mode=clampi(int(config.get_value("combat","battle_mode",_settings_battle_mode)),0,2)
 	_apply_audio_level("BGM",_settings_bgm_level)
 	_apply_audio_level("SFX",_settings_sfx_level)
 	Engine.max_fps=50 if _settings_high_fps else 25
@@ -2764,13 +2802,15 @@ func _save_system_settings()->void:
 	config.set_value("audio","bgm",_settings_bgm_level)
 	config.set_value("audio","sfx",_settings_sfx_level)
 	config.set_value("display","high_fps",_settings_high_fps)
+	config.set_value("combat","battle_mode",_settings_battle_mode)
 	config.save(LOCAL_SETTINGS_PATH)
 
 func _refresh_system_settings()->void:
 	if _settings_bgm_value!=null:_settings_bgm_value.text=str(_settings_bgm_level)
 	if _settings_sfx_value!=null:_settings_sfx_value.text=str(_settings_sfx_level)
 	if _settings_quality_value!=null:_settings_quality_value.text="ON" if _settings_high_fps else "OFF"
-	if _settings_battle_value!=null:_settings_battle_value.text="一般模式"
+	if _settings_battle_value!=null:
+		_settings_battle_value.text=["一般模式","團隊戰鬥模式","任意戰鬥模式"][_settings_battle_mode]
 
 func _change_bgm(delta:int)->void:
 	_settings_bgm_level=clampi(_settings_bgm_level+delta,0,10)
@@ -2790,9 +2830,48 @@ func _set_high_fps(enabled:bool)->void:
 	_refresh_system_settings()
 	_save_system_settings()
 
-func _logout_to_login()->void:
+func _change_battle_mode(delta:int)->void:
+	# Original OnPKUP/OnPKDOWN wraps 0..2 rather than clamping.
+	_settings_battle_mode=posmod(_settings_battle_mode+delta,3)
+	_refresh_system_settings()
+	_save_system_settings()
+
+func system_battle_mode()->int:
+	return _settings_battle_mode
+
+func _open_system_action_question(action:int)->void:
+	if action not in [1,2] or _system_action_blocker.visible:
+		return
+	_system_action=action
+	_system_action_question_text.text="你要進入其他伺服器？" if action==1 else "你決定離開系統？"
+	_system_action_previous_focus=get_viewport().gui_get_focus_owner()
+	_system_action_blocker.show()
+	_system_action_blocker.move_to_front()
+
+func _close_system_action_question(restore_focus:bool)->void:
+	_system_action_blocker.hide()
+	_system_action=0
+	if restore_focus and is_instance_valid(_system_action_previous_focus) and _system_action_previous_focus.is_inside_tree():
+		_system_action_previous_focus.grab_focus()
+	_system_action_previous_focus=null
+
+func _cancel_system_action()->void:
+	_close_system_action_question(true)
+
+func _confirm_system_action()->void:
+	if _system_action not in [1,2]:
+		return
+	var action:=_system_action
+	_close_system_action_question(false)
+	_save_system_settings()
 	settings_window.hide()
-	if _panel!=null:_panel.disconnect_session()
+	# Both original confirmation paths first leave the active world/session.
+	# SessionPanel owns the actual ClientSession stop and Main reacts by clearing
+	# the authoritative world/AOI presentation before we return or terminate.
+	if _panel!=null:
+		_panel.disconnect_session()
+	if action==2:
+		get_tree().quit()
 
 func set_skin_switch_visible(enabled:bool)->void:
 	# Developer-only profile switching must never move or cover the decoded
@@ -2840,6 +2919,7 @@ func set_world_active(active:bool)->void:
 		_inventory_render_initialized=false
 		_inventory_render_signature.clear()
 		_social_render_signatures.clear()
+		_close_system_action_question(false)
 		_close_party_leave_question(false)
 		_party_question.hide()
 		_party_question_actor=0

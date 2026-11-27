@@ -474,6 +474,8 @@ func _run() -> void:
 		"BgmUp":[Vector2(175,69),Vector2(16,16)],
 		"SfxDown":[Vector2(94,102),Vector2(17,17)],
 		"SfxUp":[Vector2(148,102),Vector2(16,16)],
+		"BattleModeLeft":[Vector2(69,136),Vector2(17,17)],
+		"BattleModeRight":[Vector2(177,137),Vector2(15,15)],
 		"BackToServer":[Vector2(27,168),Vector2(85,21)],
 		"ExitGame":[Vector2(125,168),Vector2(85,21)],
 	}
@@ -482,6 +484,9 @@ func _run() -> void:
 		var expected:Array=system_controls[control_name]
 		if control==null or control.position!=expected[0] or control.size!=expected[1]:
 			_fail("HK 029_SYSTEM control rect drifted: "+str(control_name))
+			return
+		if control is TextureButton and (control as TextureButton).pressed.get_connections().is_empty():
+			_fail("HK 029_SYSTEM control handler missing: "+str(control_name))
 			return
 	if (
 		(world.settings_window.get_node("BgmLabel") as RichTextLabel).text!="背景音樂音量" or
@@ -492,6 +497,21 @@ func _run() -> void:
 		(world.settings_window.get_node("ExitGameText") as RichTextLabel).text!="離開遊戲"
 	):
 		_fail("HK 029_SYSTEM fixed labels drifted from original text")
+		return
+	var system_yes:=world._system_action_question.get_node_or_null("SystemActionConfirm") as TextureButton
+	var system_no:=world._system_action_question.get_node_or_null("SystemActionCancel") as TextureButton
+	if (
+		world._system_action_question.position!=Vector2(272,240) or
+		world._system_action_question.size!=Vector2(256,119) or
+		world._system_action_question_text.position!=Vector2(15,11) or
+		world._system_action_question_text.size!=Vector2(231,71) or
+		system_yes==null or system_yes.position!=Vector2(38,93) or system_yes.size!=Vector2(85,21) or
+		system_no==null or system_no.position!=Vector2(138,93) or system_no.size!=Vector2(85,21) or
+		system_yes.pressed.get_connections().is_empty() or system_no.pressed.get_connections().is_empty() or
+		(world._system_action_question.get_node("SystemActionConfirmText") as RichTextLabel).text!="確定" or
+		(world._system_action_question.get_node("SystemActionCancelText") as RichTextLabel).text!="取消"
+	):
+		_fail("HK 010_MESSAGE01 System confirmation geometry/handlers drifted")
 		return
 	# 018_EMOTION_BIG.ITF is a 242x30 floating two-page picker. The 12
 	# selection icons are original 24x24 EMOTIONAL_ICON frames; no substitute art.
