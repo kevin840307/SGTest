@@ -41,7 +41,11 @@ func _launch() -> void:
 	if _role not in ["observer", "actor"]:
 		_fail("invalid_role")
 		return
-	_deadline = Time.get_ticks_msec() + 115000
+	var timeout_ms:=115000
+	var configured_timeout:=OS.get_environment("SGTEST_CLAN_GATE_TIMEOUT_MS")
+	if configured_timeout.is_valid_int():
+		timeout_ms=maxi(60000,int(configured_timeout))
+	_deadline = Time.get_ticks_msec() + timeout_ms
 	_phase = 0
 	_begin_login()
 	print("ONLINE_CLAN_GATE_START role=", _role)

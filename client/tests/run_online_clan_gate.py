@@ -102,10 +102,11 @@ def main() -> int:
                 if "CHARACTER_CREATED" not in out:
                     raise RuntimeError("character provisioning failed for " + username)
 
+            host_seconds = max(120, int(args.timeout) + 30)
             host = subprocess.Popen(
                 ["dotnet", str(host_dll), "serve", "--content", str(content),
                  "--identity", str(database), "--bind", "127.0.0.1", "--port", "0",
-                 "--max-connections", "8", "--max-per-address", "4", "--seconds", "120"],
+                 "--max-connections", "8", "--max-per-address", "4", "--seconds", str(host_seconds)],
                 cwd=repo, env=env, text=True, encoding="utf-8", errors="replace",
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
             processes.append(host)
@@ -122,6 +123,7 @@ def main() -> int:
                 client_env = env.copy()
                 client_env["SGTEST_E2E_USERNAME"] = username
                 client_env["SGTEST_E2E_PASSWORD"] = PASSWORD
+                client_env["SGTEST_CLAN_GATE_TIMEOUT_MS"] = str(max(60_000, int((args.timeout - 10) * 1000)))
                 command = [args.godot]
                 if not args.native:
                     command.append("--headless")
