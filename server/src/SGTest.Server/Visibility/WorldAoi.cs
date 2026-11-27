@@ -1707,7 +1707,7 @@ public sealed class WorldAoi
 
     private static MechaWorldStateUpdate UnmountedMecha(MechaWorldStateUpdate source) =>
         new(source.OwnerActorId,source.OwnerConnectionEpoch,source.OwnerMapEpoch,
-            false,0,0,0);
+            false,0,0,0,0,0);
 
     private static bool SameMechaIdentity(
         MechaWorldStateUpdate left,MechaWorldStateUpdate right) =>
@@ -1717,7 +1717,9 @@ public sealed class WorldAoi
         left.Mounted==right.Mounted&&
         left.MechaUid==right.MechaUid&&
         left.DefinitionId==right.DefinitionId&&
-        left.Level==right.Level;
+        left.Level==right.Level&&
+        left.WeaponDefinitionId==right.WeaponDefinitionId&&
+        left.EngineDefinitionId==right.EngineDefinitionId;
 
     private bool Within(ActorSnapshot viewer, ActorSnapshot actor, bool alreadyVisible)
     {

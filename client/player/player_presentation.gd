@@ -694,7 +694,13 @@ func actors_at(now_usec: int) -> Array:
 				sampled = actor.history.sample(now_usec,PositionHistory.DEFAULT_DELAY_TICKS,REMOTE_MAX_PREDICTION_TICKS,REMOTE_MAX_PREDICTION_PIXELS)
 		if not sampled.is_finite():
 			sampled = Vector2(float(value.x),float(value.y))
-		result.append({"id":str(id),"p":sampled,"parts":parts})
+		result.append({
+			"id":str(id),"p":sampled,"parts":parts,
+			"presentation_action":action,"presentation_facing":facing,
+			"presentation_elapsed_updates":(
+				walk_elapsed_usec*50/1000000 if action=="NR" else elapsed),
+			"appearance":value.get("appearance",{}).duplicate(true)
+		})
 	return result
 
 

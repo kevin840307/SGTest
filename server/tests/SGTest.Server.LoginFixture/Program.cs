@@ -70,6 +70,8 @@ internal static class Program
             return await PetLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--mecha"])
             return await MechaLoginFixture.RunAsync().ConfigureAwait(false);
+        if (args is ["--mecha-main-seed", var mechaSeedDb, var mechaSeedAppearance])
+            return await MechaMainSeed.RunAsync(mechaSeedDb,mechaSeedAppearance).ConfigureAwait(false);
         if (args is ["--equipment"])
             return await EquipmentLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--equipment-main-seed", var seedDb, var seedAppearance])

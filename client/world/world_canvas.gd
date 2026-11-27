@@ -5,12 +5,16 @@ const PaletteHue = preload("res://player/palette_hue.gd")
 const UiTextureLoader = preload("res://ui/ui_texture_loader.gd")
 const HK_MISS_TEXTURE := "res://ui/private_ie_hk2/MISS.png"
 const HK_MISS_ORIGIN := Vector2(-7.0,0.0)
+const HK_RIDING_BG := "res://ui/private_ie_hk2/BG_DRIVE_COMPLEX_BAR.png"
+const HK_RIDING_WP_PREFIX := "res://ui/private_ie_hk2/WP_"
+const HK_RIDING_RECT := Rect2(10,5,77,3)
 
 var _commands: Array = []
 var _ground_markers: Array = []
 var _combat_labels: Array = []
 var _player_labels: Array = []
 var _chat_bubbles: Array = []
+var _mecha_energy_bars: Array = []
 var _palette_textures: Dictionary = {}
 var _palette_jobs: Dictionary = {}
 var _palette_generation := 1
@@ -34,12 +38,13 @@ func _ready() -> void:
 func present(
 		commands: Array, ground_markers: Array = [],
 		combat_labels: Array = [], player_labels: Array = [],
-		chat_bubbles: Array = []) -> void:
+		chat_bubbles: Array = [], mecha_energy_bars: Array = []) -> void:
 	_commands = commands
 	_ground_markers = ground_markers
 	_combat_labels = combat_labels
 	_player_labels = player_labels
 	_chat_bubbles = chat_bubbles
+	_mecha_energy_bars = mecha_energy_bars
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	for command in _commands:
 		_request_palette(
@@ -53,6 +58,7 @@ func clear() -> void:
 	_combat_labels = []
 	_player_labels = []
 	_chat_bubbles = []
+	_mecha_energy_bars = []
 	_palette_generation += 1
 	_palette_textures.clear()
 	# Active WorkerThreadPool tasks cannot be cancelled. Keep stale jobs until
@@ -174,6 +180,38 @@ func _draw() -> void:
 		draw_string(font,at+Vector2(1,1),name_text,
 			HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color(0.0,0.0,0.0,0.92))
 		draw_string(font,at,name_text,HORIZONTAL_ALIGNMENT_LEFT,-1,16,name_color)
+
+	# CRidingTPItf::OnUpdate (Paradise.exe 0x0049DCEC) anchors the riding
+	# progress surface to the local player's world position:
+	# x = worldX - GetNameStrlen()/2 - 30, y = worldY - 149.
+	# 087_DRIVE_COMPLEX_BAR.itf then places WP at local 10,5,77x3.
+	for bar in _mecha_energy_bars:
+		var feet:Vector2=bar.get("p",Vector2.INF)
+		var maximum:=int(bar.get("maximum",0))
+		if not feet.is_finite() or maximum<=0:
+			continue
+		var riding_bg:=UiTextureLoader.get_texture(HK_RIDING_BG)
+		if riding_bg==null:
+			continue
+		var riding_name:=str(bar.get("name",""))
+		var name_width:=font.get_string_size(
+			riding_name,HORIZONTAL_ALIGNMENT_LEFT,-1,16).x
+		var top_left:=Vector2(feet.x-name_width*0.5-30.0,feet.y-149.0)
+		draw_texture(riding_bg,top_left)
+		var ratio:=clampf(float(int(bar.get("current",0)))/float(maximum),0.0,1.0)
+		if ratio<=0.0:
+			continue
+		var wp_index:=int(Time.get_ticks_msec()/70)%18
+		var wp:=UiTextureLoader.get_texture(HK_RIDING_WP_PREFIX+str(wp_index)+".png")
+		if wp==null:
+			continue
+		var dest:=Rect2(
+			top_left+HK_RIDING_RECT.position,
+			Vector2(HK_RIDING_RECT.size.x*ratio,HK_RIDING_RECT.size.y))
+		var source:=Rect2(
+			Vector2.ZERO,
+			Vector2(float(wp.get_width())*ratio,float(wp.get_height())))
+		draw_texture_rect_region(wp,dest,source,Color.WHITE,false,true)
 
 	# Original speaking-balloon styles are private HK source sprites. They are
 	# drawn in the same world Canvas so they follow interpolation without adding

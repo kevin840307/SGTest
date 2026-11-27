@@ -13,24 +13,41 @@ from .layout import select_groups
 from ..source.convert_assets import sidecar_document
 
 
-def audit_archive(source: Path, archive: Path) -> dict:
+def audit_archive(source: Path, archive: Path, allow_filtered: bool = False) -> dict:
     source,archive=Path(source).resolve(),Path(archive).resolve()
     index_path=archive/'index.json'
     index=json.loads(index_path.read_text(encoding='utf-8'))
     if not isinstance(index,dict):raise ValueError('invalid index document type')
-    expected=select_groups(source)
+    all_expected=select_groups(source)
     rows=index.get('groups',[])
     recorded={row['group'] for row in rows}
     indexed={row['group']:row for row in rows}
     errors=[]
     if len(rows)!=len(recorded):
         errors.append({'index':'duplicate source group records'})
-    if index.get('status')!='complete' or index.get('source_scope')!='all SPR' or index.get('errors'):
-        errors.append({'index':'full, error-free completed index required'})
-    wanted={key.as_posix() for key in expected}
-    if recorded!=wanted or index.get('groups_expected')!=len(wanted):
-        errors.append({'index':'source group set differs','missing':sorted(wanted-recorded),
-                       'extra':sorted(recorded-wanted)})
+    filtered=index.get('source_scope')=='filtered'
+    if index.get('status')!='complete' or index.get('errors'):
+        errors.append({'index':'error-free completed index required'})
+    if filtered:
+        if not allow_filtered:
+            errors.append({'index':'full completed index required'})
+        wanted_all={key.as_posix() for key in all_expected}
+        unknown=recorded-wanted_all
+        if unknown:
+            errors.append({'index':'filtered archive contains unknown source groups',
+                           'extra':sorted(unknown)})
+        if index.get('groups_expected')!=len(recorded):
+            errors.append({'index':'filtered group count differs'})
+        expected={key:paths for key,paths in all_expected.items()
+                  if key.as_posix() in recorded}
+    else:
+        if index.get('source_scope')!='all SPR':
+            errors.append({'index':'full or explicitly filtered source scope required'})
+        expected=all_expected
+        wanted={key.as_posix() for key in expected}
+        if recorded!=wanted or index.get('groups_expected')!=len(wanted):
+            errors.append({'index':'source group set differs','missing':sorted(wanted-recorded),
+                           'extra':sorted(recorded-wanted)})
     counts={'groups':0,'sources':0,'frames':0,'pages':0,'rgba_bytes':0,'png_bytes':0}
     for key,paths in expected.items():
         folder=archive/'sprites'/key
@@ -82,27 +99,28 @@ def audit_archive(source: Path, archive: Path) -> dict:
         except (OSError,ValueError,KeyError,TypeError,IndexError,StopIteration) as error:
             errors.append({'group':key.as_posix(),'error':str(error)})
     sidecars={'.act':0,'.sif':0,'draw_order':0}
-    for path in source.rglob('*'):
-        if not path.is_file():continue
-        suffix=path.suffix.casefold()
-        if suffix in ('.act','.sif'):
-            kind,extension=suffix,suffix+'.json'
-        elif path.name.casefold().endswith('draworder.dat'):
-            kind,extension='draw_order','.draw_order.json'
-        else:continue
-        relative=path.relative_to(source)
-        target=archive/'sidecars'/relative.parent/(path.stem+extension)
-        try:
-            data=json.loads(target.read_text(encoding='utf-8'))
-            if data!=sidecar_document(path,source,kind):
-                raise ValueError('sidecar differs from decoded source metadata')
-            sidecars[kind]+=1
-        except (OSError,ValueError,TypeError) as error:
-            errors.append({'source':relative.as_posix(),'error':str(error)})
-    for kind,count in sidecars.items():
-        declared=index.get('sidecars',{}).get(kind,{})
-        if declared.get('found')!=count or declared.get('ok')!=count:
-            errors.append({'sidecar':kind,'error':'verified count differs from index'})
+    if not filtered:
+        for path in source.rglob('*'):
+            if not path.is_file():continue
+            suffix=path.suffix.casefold()
+            if suffix in ('.act','.sif'):
+                kind,extension=suffix,suffix+'.json'
+            elif path.name.casefold().endswith('draworder.dat'):
+                kind,extension='draw_order','.draw_order.json'
+            else:continue
+            relative=path.relative_to(source)
+            target=archive/'sidecars'/relative.parent/(path.stem+extension)
+            try:
+                data=json.loads(target.read_text(encoding='utf-8'))
+                if data!=sidecar_document(path,source,kind):
+                    raise ValueError('sidecar differs from decoded source metadata')
+                sidecars[kind]+=1
+            except (OSError,ValueError,TypeError) as error:
+                errors.append({'source':relative.as_posix(),'error':str(error)})
+        for kind,count in sidecars.items():
+            declared=index.get('sidecars',{}).get(kind,{})
+            if declared.get('found')!=count or declared.get('ok')!=count:
+                errors.append({'sidecar':kind,'error':'verified count differs from index'})
     return {'status':'pass' if not errors else 'failed', 'counts':counts,'expected_groups':len(expected),
             'index_sha256':hashlib.sha256(index_path.read_bytes()).hexdigest(),
             'decoder_sha256':DECODER_SHA256,'sidecars':index.get('sidecars',{}),

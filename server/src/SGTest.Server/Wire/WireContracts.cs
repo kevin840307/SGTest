@@ -833,7 +833,8 @@ public sealed record MechaEquipmentSnapshotWire(
     long ReceiverMapEpoch,IReadOnlyList<MechaEquipmentEntryWire> Items);
 public readonly record struct MechaPresentationWire(
     long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
-    long OwnerMapEpoch,bool Mounted,long MechaUid,int DefinitionId,int Level);
+    long OwnerMapEpoch,bool Mounted,long MechaUid,int DefinitionId,int Level,
+    int WeaponDefinitionId=0,int EngineDefinitionId=0);
 public readonly record struct PlayerEquipmentPresentationWire(
     long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
     long OwnerMapEpoch,uint Revision,bool Present,

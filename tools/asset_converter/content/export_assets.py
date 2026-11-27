@@ -21,6 +21,7 @@ from ..source.runtime_spr import unwrap_cde
 from ..source.scenery import compile_scenery_action
 from .animation_definition import compile_definition
 from .runtime_animation_semantics import logical_views
+from .mecha_source_semantics import logical_views_for_group as mecha_logical_views
 from .asset_paths import sprite_asset_id, source_sprite_manifest
 
 
@@ -158,10 +159,13 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
     source, archive, assets = source.resolve(), archive.resolve(), assets.resolve()
     if any(assets == root or assets.is_relative_to(root) or root.is_relative_to(assets) for root in (source,archive)):
         raise ValueError('asset output overlaps source/archive')
-    audit = audit_archive(source,archive)
-    if audit['status'] != 'pass':
-        raise ValueError('complete archive audit failed: '+json.dumps(audit['errors'][:3]))
     index = json.loads((archive/'index.json').read_text(encoding='utf-8'))
+    filtered_archive=index.get('source_scope')=='filtered'
+    if filtered_archive and asset_ids is None:
+        raise ValueError('filtered archive publication requires explicit selected asset IDs')
+    audit = audit_archive(source,archive,allow_filtered=filtered_archive)
+    if audit['status'] != 'pass':
+        raise ValueError('archive audit failed: '+json.dumps(audit['errors'][:3]))
     groups = index['groups']
     if asset_ids is not None:
         available = {sprite_asset_id(row['group'])[0] for row in groups}
@@ -275,6 +279,12 @@ def publish(source: Path, archive: Path, assets: Path, asset_ids: set[str] | Non
                 act_timelines[clip] = timeline
                 semantics = {'status':'normalized_scenery_act','timing_verified':True,
                              'direction_mapping_verified':False,'timing_scope':'default_25_only'}
+        elif group_parts[0] in ('ma','ms'):
+            try:
+                views, mecha_semantics = mecha_logical_views(group,clips,source)
+                semantics = mecha_semantics
+            except (ValueError,KeyError,OSError) as error:
+                semantics['reason'] = str(error)
         elif ((len(group_parts) == 4 and group_parts[0] == 'player'
                and group_parts[1] in PLAYER_ACT_CONTROLLERS
                and group_parts[2] == 'standard')

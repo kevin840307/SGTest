@@ -12,7 +12,8 @@ namespace SGTest.Server.Mecha;
 /// </summary>
 public readonly record struct MechaWorldStateUpdate(
     long OwnerActorId,long OwnerConnectionEpoch,long OwnerMapEpoch,
-    bool Mounted,long MechaUid,int DefinitionId,int Level);
+    bool Mounted,long MechaUid,int DefinitionId,int Level,
+    int WeaponDefinitionId=0,int EngineDefinitionId=0);
 
 /// <summary>
 /// Server-authoritative Mecha roster, mount lifecycle and physical equipment
@@ -48,7 +49,7 @@ public sealed class MechaCoordinator
             binding,ToSnapshot(binding.MapEpoch,mechas)));
         EnsureQueued(router.QueueMechaEquipmentSnapshot(
             binding,ToEquipmentSnapshot(binding.MapEpoch,equipment)));
-        EnsureWorldPosted(router,ToWorldUpdate(binding,mechas));
+        EnsureWorldPosted(router,ToWorldUpdate(binding,mechas,equipment));
     }
 
     public async Task HandleAsync(TrustedMechaCommand request,WorldResultRouter router)
@@ -113,8 +114,9 @@ public sealed class MechaCoordinator
         EnsureQueued(router.QueueMechaEquipmentSnapshot(
             after,ToEquipmentSnapshot(after.MapEpoch,equipment)));
         if(request.Action is MechaCommandAction.Mount or
-           MechaCommandAction.Dismount or MechaCommandAction.Refresh)
-            EnsureWorldPosted(router,ToWorldUpdate(after,mechas));
+           MechaCommandAction.Dismount or MechaCommandAction.Refresh or
+           MechaCommandAction.Equip or MechaCommandAction.Unequip)
+            EnsureWorldPosted(router,ToWorldUpdate(after,mechas,equipment));
     }
 
     public bool TryDetach(ConnectionBinding binding,WorldResultRouter router)
@@ -124,7 +126,7 @@ public sealed class MechaCoordinator
             return false;
         return router.TryPostMechaWorldState(new(
             binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,
-            false,0,0,0));
+            false,0,0,0,0,0));
     }
 
     private MechaSnapshotWire ToSnapshot(
@@ -143,14 +145,19 @@ public sealed class MechaCoordinator
             x.EnhancementLevel,x.DurabilityRaw??-1)).ToArray());
 
     private static MechaWorldStateUpdate ToWorldUpdate(
-        ConnectionBinding binding,IReadOnlyList<MechaInstanceRecord> mechas)
+        ConnectionBinding binding,IReadOnlyList<MechaInstanceRecord> mechas,
+        IReadOnlyList<MechaEquippedItem> equipment)
     {
         var mounted=mechas.SingleOrDefault(x=>x.IsMounted);
-        return mounted is null
-            ?new(binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,
-                false,0,0,0)
-            :new(binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,
-                true,mounted.MechaUid,mounted.DefinitionId,mounted.Level);
+        if(mounted is null)
+            return new(binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,
+                false,0,0,0,0,0);
+        int weapon=equipment.FirstOrDefault(x=>
+            x.MechaUid==mounted.MechaUid&&x.SlotId==1)?.ItemDefinitionId??0;
+        int engine=equipment.FirstOrDefault(x=>
+            x.MechaUid==mounted.MechaUid&&x.SlotId==2)?.ItemDefinitionId??0;
+        return new(binding.ActorId,binding.ConnectionEpoch,binding.MapEpoch,
+            true,mounted.MechaUid,mounted.DefinitionId,mounted.Level,weapon,engine);
     }
 
     private static void EnsureWorldPosted(

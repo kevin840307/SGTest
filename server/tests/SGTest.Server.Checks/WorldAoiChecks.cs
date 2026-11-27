@@ -239,13 +239,25 @@ internal static class WorldAoiChecks
 
         aoi.ApplyMechaState(new MechaWorldStateUpdate(
             owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,
-            true,9201,7002,7));
+            true,9201,7002,7,7101,7201));
         var ownerMount=Drain(aoi,owner);
         var peerMount=Drain(aoi,peer);
         Require(ownerMount is [var own]&&own.Kind==AoiEventKind.MechaState&&
-            own.Mecha is {Mounted:true,MechaUid:9201,DefinitionId:7002,Level:7}&&
+            own.Mecha is {
+                Mounted:true,MechaUid:9201,DefinitionId:7002,Level:7,
+                WeaponDefinitionId:7101,EngineDefinitionId:7201}&&
             peerMount is [var seen]&&seen.Mecha==own.Mecha&&Drain(aoi,far).Length==0,
             "mounted Mecha presentation was not scoped to player visibility");
+
+        aoi.ApplyMechaState(new MechaWorldStateUpdate(
+            owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,
+            true,9201,7002,7,7102,7202));
+        var ownerEquip=Drain(aoi,owner).Single(x=>x.Kind==AoiEventKind.MechaState);
+        var peerEquip=Drain(aoi,peer).Single(x=>x.Kind==AoiEventKind.MechaState);
+        Require(ownerEquip.Mecha is {
+                MechaUid:9201,WeaponDefinitionId:7102,EngineDefinitionId:7202}&&
+            peerEquip.Mecha==ownerEquip.Mecha,
+            "mounted Mecha equipment presentation did not update visible peer");
 
         var movedPeer=peer with {X=600,EntityRevision=2};
         Move(aoi,2,movedPeer);

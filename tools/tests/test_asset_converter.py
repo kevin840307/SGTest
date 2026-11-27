@@ -21,6 +21,7 @@ from asset_converter.source.runtime_spr import decode_spr as runtime_decode
 from PIL import Image
 from asset_converter.source.extract_client import audit_sprite_coverage
 from asset_converter.content.asset_paths import sprite_asset_id
+from asset_converter.atlas.layout import group_key
 from asset_converter.content.export_assets import PLAYER_PART_ASSETS
 
 
@@ -38,13 +39,17 @@ class Settings:
 
 
 class ConverterTests(unittest.TestCase):
-    def test_verified_mecha_source_families_are_not_left_under_legacy_data(self):
+    def test_verified_mecha_source_families_are_grouped_by_part_not_action_facing(self):
+        ma_group = group_key(Path("MA/Standard/A_MA01_NS1"))
+        ms_group = group_key(Path("MS/Standard/MSBody01_NR8"))
+        self.assertEqual(ma_group.as_posix(),"MA/Standard/A_MA01")
+        self.assertEqual(ms_group.as_posix(),"MS/Standard/MSBody01")
         self.assertEqual(
-            sprite_asset_id("MA/Standard/A_MA01_NS1"),
-            ("mecha/ma/standard/a_ma01_ns1","mecha_ma_source"))
+            sprite_asset_id(ma_group.as_posix()),
+            ("mecha/ma/standard/a_ma01","mecha_ma_source"))
         self.assertEqual(
-            sprite_asset_id("MS/Standard/MSBody01_NS1"),
-            ("mecha/ms/standard/msbody01_ns1","mecha_ms_source"))
+            sprite_asset_id(ms_group.as_posix()),
+            ("mecha/ms/standard/msbody01","mecha_ms_source"))
         self.assertEqual(
             sprite_asset_id("SR/fixture"),
             ("data/legacy/sr/fixture","legacy_sr"))

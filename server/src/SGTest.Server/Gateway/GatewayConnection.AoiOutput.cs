@@ -149,7 +149,8 @@ public sealed partial class GatewayConnection
                     frame=WireProtocol.EncodeMechaPresentation(new(
                         evt.ReceiverMapEpoch,evt.Tick,mecha.OwnerActorId,
                         mecha.OwnerConnectionEpoch,mecha.OwnerMapEpoch,
-                        mecha.Mounted,mecha.MechaUid,mecha.DefinitionId,mecha.Level));
+                        mecha.Mounted,mecha.MechaUid,mecha.DefinitionId,mecha.Level,
+                        mecha.WeaponDefinitionId,mecha.EngineDefinitionId));
                     break;
                 case AoiEventKind.PlayerEquipmentState when evt.PlayerEquipment is { } equipment:
                     frame=WireProtocol.EncodePlayerEquipmentPresentation(new(

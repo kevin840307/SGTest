@@ -6,11 +6,21 @@ additional pages of the same asset when a single <=4096 atlas cannot fit.
 from __future__ import annotations
 from collections import defaultdict
 from pathlib import Path
+import re
 
 def group_key(relative: Path) -> Path:
     category = relative.parts[0].casefold()
-    stem = (relative.stem.split("_", 1)[0]
-            if category in ("enemy", "player") else relative.stem)
+    if category in ("enemy", "player"):
+        stem = relative.stem.split("_", 1)[0]
+    elif category in ("ma", "ms"):
+        # MA/MS store one SPR per action/facing (e.g. B_MA03_NR2 or
+        # B-MSBody00_NA1), but those clips are one paper-doll part controlled
+        # by MAxx.ACT / MS.ACT. Keep them in one runtime atlas so the ACT
+        # timeline and direction mapping can be normalized atomically.
+        stem = re.sub(r"_(?:NS|NR|NA|NB)[1-8]$", "", relative.stem,
+                      flags=re.IGNORECASE)
+    else:
+        stem = relative.stem
     if category == "enemy":
         stem = stem.upper()
     return relative.parent / stem

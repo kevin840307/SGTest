@@ -186,6 +186,15 @@ var _inventory_render_initialized:=false
 # should not destroy their buttons or force the chat viewport to scroll.
 var _social_render_signatures:Dictionary={}
 var _classic_mecha_uid:=0
+var _mecha_window:Control
+var _mecha_info_labels:Dictionary={}
+var _mecha_slot_buttons:Dictionary={}
+var _mecha_battery_rows:=VBoxContainer.new()
+var _mecha_drive_button:TextureButton
+var _mecha_exit_button:TextureButton
+var _mecha_energy_hud:=Control.new()
+var _mecha_energy_clip:Control
+var _mecha_energy_fill:TextureRect
 var _inventory_tab_buttons:Array[TextureButton]=[]
 var _character_labels:Dictionary={}
 var _character_point_buttons:Array[TextureButton]=[]
@@ -336,6 +345,7 @@ func _init()->void:
 	_character_raster_font=_make_character_raster_font()
 	_build_hud()
 	_build_inventory()
+	_build_mecha()
 	_build_character()
 	_build_skill()
 	_build_party()
@@ -349,7 +359,7 @@ func _init()->void:
 	_build_trade()
 	_build_dialog()
 	_build_settings()
-	_windows=[inventory,character,skill_window,party_window,clan_window,shop_window,quest_window,player_shop_window,storage_window,bank_window,repair_window,trade_window,dialog_window,settings_window]
+	_windows=[inventory,_mecha_window,character,skill_window,party_window,clan_window,shop_window,quest_window,player_shop_window,storage_window,bank_window,repair_window,trade_window,dialog_window,settings_window]
 	visible=false
 	set_process(false)
 
@@ -1914,6 +1924,70 @@ func _build_inventory()->void:
 	_equipment_preview.set_occupied(false)
 	_equipment_rows.add_child(_equipment_preview)
 
+func _build_mecha()->void:
+	# 056_Driver_INFO.itf is the authoritative mounted-Mecha detail surface.
+	# Keep source-local geometry; gameplay state below always comes from the
+	# authenticated MechaSnapshot/MechaEquipmentSnapshot reducer.
+	_mecha_window=_window("MechaDriverWindow","BG_DRIVER",Vector2(523,393),Vector2(138,101))
+	var close:=_mecha_window.get_node("CloseWindow") as TextureButton
+	close.position=Vector2(500,1)
+	close.size=Vector2(16,16)
+	for pair in [
+		["名　稱",Rect2(9,37,36,12)],["類　形",Rect2(9,53,36,12)],
+		["能　源",Rect2(9,69,36,12)],["等　級",Rect2(10,94,36,12)],
+		["機甲裝備",Rect2(333,30,72,12)],["機甲能源",Rect2(333,310,72,12)]
+	]:
+		var caption:=_itf_text(_mecha_window,"Caption"+str(pair[0]),pair[1],9,false)
+		caption.text=str(pair[0])
+	for spec in [
+		["name",Rect2(50,35,136,15)],["type",Rect2(50,51,136,15)],
+		["energy",Rect2(50,67,136,15)],["level",Rect2(50,92,70,15)],
+		["experience",Rect2(50,108,136,15)]
+	]:
+		var key:=str(spec[0])
+		_mecha_info_labels[key]=_itf_text(_mecha_window,"Mecha"+key.capitalize(),spec[1],9,false)
+	_mecha_drive_button=_texture_button(
+		_mecha_window,"DriveMecha","B_DRIVER01",Vector2(1,330),Vector2(113,23),
+		_submit_selected_mecha_mount,"駕駛")
+	_mecha_exit_button=_texture_button(
+		_mecha_window,"ExitMecha","B_DRIVER02",Vector2(1,360),Vector2(113,23),
+		_submit_selected_mecha_dismount,"機甲脫出")
+	# The original controls expose these fixed captions even when button art is
+	# unavailable during a source-sync failure.
+	var drive_text:=_itf_text(_mecha_window,"DriveText",Rect2(9,336,48,12),9,false)
+	drive_text.text="駕駛"
+	var exit_text:=_itf_text(_mecha_window,"ExitText",Rect2(8,366,72,12),9,false)
+	exit_text.text="機甲脫出"
+	var slot_specs=[
+		[0,"主體",Rect2(200,312,56,22)],
+		[1,"武裝",Rect2(199,339,56,22)],
+		[2,"引擎",Rect2(199,366,56,22)],
+		[3,"強化卡 1",Rect2(262,312,64,22)],
+		[4,"強化卡 2",Rect2(262,340,64,22)],
+		[5,"強化卡 3",Rect2(262,366,64,22)],
+		[6,"守護石",Rect2(280,72,64,22)],
+	]
+	for raw_spec in slot_specs:
+		var spec:Array=raw_spec
+		var slot_id:=int(spec[0]);var label:=str(spec[1]);var rect:Rect2=spec[2]
+		var button:=Button.new()
+		button.name="MechaSlot%d"%slot_id
+		button.position=rect.position;button.size=rect.size
+		button.flat=true;button.focus_mode=Control.FOCUS_NONE
+		button.mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND if slot_id>0 else Control.CURSOR_ARROW
+		button.set_meta("slot_id",slot_id);button.set_meta("item_uid",0)
+		button.text=label
+		button.add_theme_font_size_override("font_size",8)
+		if _character_raster_font!=null:button.add_theme_font_override("font",_character_raster_font)
+		if slot_id>0:button.pressed.connect(_on_mecha_slot_pressed.bind(slot_id))
+		_mecha_window.add_child(button)
+		_mecha_slot_buttons[slot_id]=button
+	_mecha_battery_rows.name="MechaBatteryRows"
+	_mecha_battery_rows.position=Vector2(333,327)
+	_mecha_battery_rows.size=Vector2(176,58)
+	_mecha_battery_rows.add_theme_constant_override("separation",1)
+	_mecha_window.add_child(_mecha_battery_rows)
+
 func _build_character()->void:
 	character=_window("CharacterWindow","BG_CHARACTER_INFO",Vector2(263,397),Vector2(269,95))
 	# 013_Character_INFO.itf coordinates are local to the 263×397 sprite.
@@ -2477,6 +2551,7 @@ func apply_snapshot(snapshot:Dictionary)->void:
 	_refresh_hotkeys()
 	if _inventory_snapshot_changed():
 		_refresh_inventory()
+	_refresh_mecha_window()
 	_refresh_character()
 	_refresh_skill()
 	if _social_snapshot_changed("party",[
@@ -2787,6 +2862,9 @@ func _refresh_inventory()->void:
 func _select_classic_mecha(uid:int)->void:
 	_classic_mecha_uid=uid
 	_refresh_inventory()
+	_refresh_mecha_window()
+	_ensure_window_art(_mecha_window)
+	_mecha_window.show()
 
 func _classic_mecha_slot_name(slot_id:int)->String:
 	match slot_id:
@@ -2801,6 +2879,92 @@ func _submit_classic_mecha_equip(item_uid:int)->void:
 
 func _submit_classic_mecha_unequip(item_uid:int)->void:
 	if _panel!=null:_panel.submit_mecha_unequip(_classic_mecha_uid,item_uid)
+
+func _submit_selected_mecha_mount()->void:
+	if _panel!=null and _classic_mecha_uid>0:
+		_panel.submit_mecha_mount(_classic_mecha_uid)
+
+func _submit_selected_mecha_dismount()->void:
+	if _panel!=null:
+		_panel.submit_mecha_dismount()
+
+func _submit_selected_mecha_charge(item_uid:int)->void:
+	if _panel!=null and _classic_mecha_uid>0 and item_uid>0:
+		_panel.submit_mecha_charge(_classic_mecha_uid,item_uid)
+
+func _on_mecha_slot_pressed(slot_id:int)->void:
+	var button:Button=_mecha_slot_buttons.get(slot_id)
+	if button==null:return
+	var item_uid:=int(button.get_meta("item_uid",0))
+	if item_uid>0:
+		_submit_classic_mecha_unequip(item_uid)
+
+func _refresh_mecha_window()->void:
+	if _mecha_window==null:return
+	var mechas:Dictionary=_stats.get("mecha_instances",{})
+	var mounted:=int(_stats.get("mounted_mecha_uid",0))
+	if _classic_mecha_uid<=0 or not mechas.has(_classic_mecha_uid):
+		_classic_mecha_uid=mounted if mounted>0 and mechas.has(mounted) else 0
+		if _classic_mecha_uid==0 and not mechas.is_empty():
+			var ids:Array=mechas.keys();ids.sort();_classic_mecha_uid=int(ids[0])
+	var selected:Dictionary=mechas.get(_classic_mecha_uid,{})
+	var definition:=int(selected.get("definition_id",0))
+	var meta:Dictionary=_panel.item_catalog.presentation_for(definition) if _panel!=null and definition>0 else {}
+	var display_name:=str(_panel.item_catalog.name_for(definition)) if _panel!=null and definition>0 else ""
+	var mecha_type:=str(meta.get("horse_type",""))
+	var charge:=int(selected.get("battery_charge",0));var capacity:=int(selected.get("battery_capacity",0))
+	(_mecha_info_labels.get("name") as RichTextLabel).text=display_name
+	(_mecha_info_labels.get("type") as RichTextLabel).text=mecha_type
+	(_mecha_info_labels.get("energy") as RichTextLabel).text=("%d/%d"%[charge,capacity]) if capacity>0 else "—"
+	(_mecha_info_labels.get("level") as RichTextLabel).text=str(int(selected.get("level",0))) if not selected.is_empty() else ""
+	(_mecha_info_labels.get("experience") as RichTextLabel).text=("EXP %d"%int(selected.get("experience",0))) if not selected.is_empty() else ""
+	var pending:=int(_stats.get("pending_mecha_sequence",0))!=0
+	_mecha_drive_button.visible=not selected.is_empty() and _classic_mecha_uid!=mounted
+	_mecha_exit_button.visible=not selected.is_empty() and _classic_mecha_uid==mounted
+	_mecha_drive_button.disabled=pending
+	_mecha_exit_button.disabled=pending
+	var equipped_by_slot:Dictionary={}
+	var mecha_equipment:Dictionary=_stats.get("mecha_equipment_items",{})
+	for raw_uid in mecha_equipment:
+		var item:Dictionary=mecha_equipment[raw_uid]
+		if int(item.get("mecha_uid",0))==_classic_mecha_uid:
+			equipped_by_slot[int(item.get("slot_id",0))]=item
+	for raw_slot in _mecha_slot_buttons:
+		var slot_id:=int(raw_slot);var button:Button=_mecha_slot_buttons[raw_slot]
+		button.set_meta("item_uid",0)
+		if slot_id==0:
+			var body_id:=int(meta.get("body_id",0))
+			button.text="主體\n%s"%(_panel.item_catalog.name_for(body_id) if _panel!=null and body_id>0 else "—")
+			button.tooltip_text="機甲主體來自原始機甲定義；不作為 Client gameplay authority"
+			continue
+		var equipped:Dictionary=equipped_by_slot.get(slot_id,{})
+		if equipped.is_empty():
+			button.text=_classic_mecha_slot_name(slot_id)+"\n—"
+			button.tooltip_text="未裝備"
+			continue
+		var item_uid:=int(equipped.get("item_uid",0));var item_definition:=int(equipped.get("item_definition_id",0))
+		button.set_meta("item_uid",item_uid)
+		button.text=_classic_mecha_slot_name(slot_id)+"\n"+(_panel.item_catalog.name_for(item_definition) if _panel!=null else str(item_definition))
+		button.tooltip_text="UID %d｜點擊要求伺服器卸下"%item_uid
+	_clear_rows(_mecha_battery_rows)
+	var inventory_items:Dictionary=_stats.get("inventory_items",{})
+	var batteries:Array=[]
+	if _panel!=null:
+		for raw_uid in inventory_items:
+			var item:Dictionary=inventory_items[raw_uid]
+			var item_definition:=int(item.get("item_definition_id",0))
+			if _panel.item_catalog.category_for(item_definition)=="horsebattery":
+				batteries.append({"uid":int(raw_uid),"item":item})
+	batteries.sort_custom(func(a:Dictionary,b:Dictionary):return int(a.uid)<int(b.uid))
+	for i in mini(3,batteries.size()):
+		var entry:Dictionary=batteries[i];var item:Dictionary=entry.item
+		var item_definition:=int(item.get("item_definition_id",0))
+		var row:=_classic_row(_mecha_battery_rows,"＋ %s ×%d"%[
+			_panel.item_catalog.name_for(item_definition),int(item.get("quantity",1))],18.0,
+			_submit_selected_mecha_charge.bind(int(entry.uid)))
+		row.tooltip_text="補充選中機甲能源；相容性與消耗量由伺服器判定"
+	if batteries.is_empty():
+		_classic_row(_mecha_battery_rows,"背包沒有可用機甲能源",18.0)
 
 func _refresh_classic_mecha_inventory(inventory_items:Dictionary)->void:
 	var mechas:Dictionary=_stats.get("mecha_instances",{})

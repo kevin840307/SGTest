@@ -13,6 +13,7 @@ const AppearanceProfile = preload("res://player/character_appearance_profile.gd"
 const Monsters = preload("res://monster/monster_presentation.gd")
 const Pets = preload("res://pet/pet_presentation.gd")
 const PetVisualCatalog = preload("res://pet/pet_visual_catalog.gd")
+const MechaVisualProfile = preload("res://mecha/mecha_visual_profile.gd")
 const Npcs = preload("res://npc/npc_presentation.gd")
 const PvpNames = preload("res://pvp/pvp_name_presentation.gd")
 const Canvas = preload("res://world/world_canvas.gd")
@@ -44,6 +45,10 @@ var pets := Pets.new()
 var pet_visual_catalog := PetVisualCatalog.new()
 var _pending_pet_assets: Dictionary = {}
 var _loaded_pet_assets: Dictionary = {}
+var mecha_visual_catalog := MechaVisualProfile.new()
+var _pending_mecha_assets: Dictionary = {}
+var _loaded_mecha_assets: Dictionary = {}
+var _mecha_profiles: Dictionary = {}
 var npcs := Npcs.new()
 var pvp_names := PvpNames.new()
 var _player_snapshot := {}
@@ -167,6 +172,9 @@ func clear_map(retain_cache: bool = false) -> void:
 	pets.clear()
 	_pending_pet_assets.clear()
 	_loaded_pet_assets.clear()
+	_pending_mecha_assets.clear()
+	_loaded_mecha_assets.clear()
+	_mecha_profiles.clear()
 	npcs.clear()
 	pvp_names.clear()
 	_player_snapshot = {}
@@ -360,6 +368,151 @@ func _pump_pending_player_profiles() -> Error:
 	return OK
 
 
+func _snapshot_actor_appearance(snapshot: Dictionary,actor_id: int) -> Dictionary:
+	if actor_id<=0:
+		return {}
+	var own_actor:=int(snapshot.get("actor_id",0))
+	var own:Variant=snapshot.get("self_state",{})
+	if actor_id==own_actor:
+		if own is Dictionary:
+			var own_appearance:Variant=own.get("appearance",{})
+			if own_appearance is Dictionary and not own_appearance.is_empty():
+				return own_appearance.duplicate(true)
+		var selected:Variant=snapshot.get("selected_character_appearance",{})
+		if selected is Dictionary and not selected.is_empty():
+			return selected.duplicate(true)
+	var entities:Variant=snapshot.get("entities",{})
+	if entities is Dictionary:
+		for raw_entity in entities.values():
+			if not raw_entity is Dictionary:
+				continue
+			var entity:Dictionary=raw_entity
+			if int(entity.get("actor_id",0))!=actor_id:
+				continue
+			var appearance:Variant=entity.get("appearance",{})
+			if appearance is Dictionary and not appearance.is_empty():
+				return appearance.duplicate(true)
+	return {}
+
+
+func _snapshot_equipment_presentation(snapshot: Dictionary,actor_id: int) -> Dictionary:
+	var values:Variant=snapshot.get("player_equipment_presentations",{})
+	if not values is Dictionary:
+		return {}
+	var value:Variant=values.get(actor_id,values.get(str(actor_id),{}))
+	return value.duplicate(true) if value is Dictionary else {}
+
+
+func _refresh_mecha_profiles(snapshot: Dictionary) -> Error:
+	_mecha_profiles.clear()
+	if snapshot.is_empty() or _loaded_mecha_assets.is_empty():
+		return OK
+	var all_assets:={}
+	for raw_id in _loaded_mecha_assets:
+		var id:=str(raw_id)
+		var asset:Dictionary=store.get_asset(&"world_view",epoch,id)
+		if asset.is_empty():
+			continue
+		all_assets[id]=asset
+	var presentations:Variant=snapshot.get("mecha_presentations",{})
+	if not presentations is Dictionary:
+		return OK
+	for raw_actor in presentations:
+		var actor_id:=int(raw_actor)
+		var presentation:Variant=presentations[raw_actor]
+		if not presentation is Dictionary or not bool(presentation.get("mounted",false)):
+			continue
+		var appearance:=_snapshot_actor_appearance(snapshot,actor_id)
+		if appearance.is_empty():
+			continue
+		var equipment:=_snapshot_equipment_presentation(snapshot,actor_id)
+		var profile=MechaVisualProfile.new()
+		# Reuse the already validated private presentation catalog rather than
+		# parsing the multi-megabyte catalog once per visible actor.
+		profile.item_catalog=mecha_visual_catalog.item_catalog
+		var error:int=profile.configure(all_assets,presentation,appearance,equipment)
+		if error==OK:
+			_mecha_profiles[actor_id]=profile
+		elif error==ERR_INVALID_DATA:
+			return error
+		# Missing optional/runtime assets fail closed to the ordinary human
+		# presentation until those source-backed assets are available.
+	return OK
+
+
+func _request_snapshot_mecha_visuals(snapshot: Dictionary) -> Error:
+	if not show_players or phase!="ready" or epoch<=0:
+		return OK
+	var presentations:Variant=snapshot.get("mecha_presentations",{})
+	if not presentations is Dictionary:
+		_mecha_profiles.clear()
+		return OK
+	for raw_actor in presentations:
+		var actor_id:=int(raw_actor)
+		var presentation:Variant=presentations[raw_actor]
+		if not presentation is Dictionary or not bool(presentation.get("mounted",false)):
+			_mecha_profiles.erase(actor_id)
+			continue
+		var appearance:=_snapshot_actor_appearance(snapshot,actor_id)
+		if appearance.is_empty():
+			continue
+		var equipment:=_snapshot_equipment_presentation(snapshot,actor_id)
+		var ids:Dictionary=mecha_visual_catalog.requested_asset_ids(
+			presentation,appearance,equipment,store)
+		for raw_id in ids:
+			var id:=str(raw_id)
+			if _loaded_mecha_assets.has(id) or _pending_mecha_assets.has(id):
+				continue
+			var error:=store.acquire(&"world_view",epoch,id)
+			if error!=OK:
+				return error
+			_pending_mecha_assets[id]=true
+	return _refresh_mecha_profiles(snapshot)
+
+
+func _pump_pending_mecha_visuals() -> Error:
+	if _pending_mecha_assets.is_empty():
+		return OK
+	var additions:={}
+	for raw_id in _pending_mecha_assets.keys():
+		var id:=str(raw_id)
+		var asset:Dictionary=store.get_asset(&"world_view",epoch,id)
+		if asset.is_empty():
+			continue
+		additions[id]=asset
+	if additions.is_empty():
+		return OK
+	if draw_list.add_actor_assets(additions)!=OK:
+		return ERR_INVALID_DATA
+	for id in additions:
+		_pending_mecha_assets.erase(id)
+		_loaded_mecha_assets[id]=true
+	var error:=_refresh_mecha_profiles(_player_snapshot)
+	if error==OK:
+		_players_dirty=true
+	return error
+
+
+func _apply_mecha_presentations(actor_rows:Array)->void:
+	for index in actor_rows.size():
+		var actor:Variant=actor_rows[index]
+		if not actor is Dictionary:
+			continue
+		var actor_id:=int(actor.get("id","0"))
+		var profile=_mecha_profiles.get(actor_id)
+		if profile==null:
+			continue
+		var parts:Array=profile.parts_at(
+			str(actor.get("presentation_action","NS")),
+			int(actor.get("presentation_facing",1)),
+			int(actor.get("presentation_elapsed_updates",0)))
+		if parts.is_empty():
+			continue
+		var replaced:Dictionary=actor.duplicate(true)
+		replaced["parts"]=parts
+		actor_rows[index]=replaced
+
+
 func _request_snapshot_pet_visuals(snapshot: Dictionary) -> Error:
 	if phase != "ready" or epoch <= 0 or pet_visual_catalog.definitions.is_empty():
 		return OK
@@ -409,6 +562,10 @@ func _process(_delta: float) -> void:
 	# Only presentation resource work runs here. Future network/reducer must
 	# have a separate owner/scheduler; this is never a world simulation tick.
 	store.pump(2)
+	if phase=="ready" and not _pending_mecha_assets.is_empty():
+		if _pump_pending_mecha_visuals()!=OK:
+			_fail("機甲外觀素材資料無法顯示")
+			return
 	if phase == "ready" and not _pending_pet_assets.is_empty():
 		if _pump_pending_pet_visuals() != OK:
 			_fail("寵物外觀素材資料無法顯示")
@@ -512,6 +669,9 @@ func _process(_delta: float) -> void:
 		if not _player_snapshot.is_empty() and _request_snapshot_pet_visuals(_player_snapshot) != OK:
 			_fail("寵物外觀素材載入失敗")
 			return
+		if not _player_snapshot.is_empty() and _request_snapshot_mecha_visuals(_player_snapshot)!=OK:
+			_fail("機甲外觀素材載入失敗")
+			return
 		_show_hk_place_name()
 		status_changed.emit("地圖 " + str(map_id) + "｜地圖檢視・尚未連線")
 	if phase == "ready":
@@ -590,7 +750,9 @@ func present() -> void:
 	_terrain.set_view_rect(rect)
 	var actors: Array = npcs.actors_at(rect)
 	if show_players:
-		actors.append_array(players.actors_at(now_usec))
+		var player_actors:Array=players.actors_at(now_usec)
+		_apply_mecha_presentations(player_actors)
+		actors.append_array(player_actors)
 		actors.append_array(monsters.actors_at(now_usec))
 		# Pet presentation consumes the same authoritative snapshot/interpolation
 		# path. actors_at remains empty until a source-backed visual binding exists.
@@ -705,12 +867,33 @@ func present() -> void:
 			"text":str(bubble.text),
 		})
 	_chat_balloons=active_bubbles
+	var mecha_energy_bars:Array=[]
+	var mounted_uid:=int(_player_snapshot.get("mounted_mecha_uid",0))
+	var own_actor:=int(_player_snapshot.get("actor_id",0))
+	if mounted_uid>0 and own_actor>0:
+		var mechas:Variant=_player_snapshot.get("mecha_instances",{})
+		var mounted:Variant=(
+			mechas.get(mounted_uid,mechas.get(str(mounted_uid),{}))
+			if mechas is Dictionary else {})
+		if mounted is Dictionary and int(mounted.get("battery_capacity",0))>0:
+			var feet:=players.position_at(own_actor,now_usec)
+			var own_name:=""
+			for raw_label in name_labels:
+				if raw_label is Dictionary and int(raw_label.get("actor_id",0))==own_actor:
+					own_name=str(raw_label.get("text",""))
+					break
+			if feet.is_finite():
+				mecha_energy_bars.append({
+					"p":feet,"name":own_name,
+					"current":int(mounted.get("battery_charge",0)),
+					"maximum":int(mounted.get("battery_capacity",0))
+				})
 	if (draw_list.skipped_actors>0 or draw_list.skipped_parts>0 or draw_list.skipped_frames>0) and Time.get_ticks_msec()>=_next_draw_warning_msec:
 		_next_draw_warning_msec = Time.get_ticks_msec()+5000
 		push_warning("WORLD_ACTOR_RENDER_SKIPPED map=%d actors=%d parts=%d frames=%d remaining=%d details=%s" % [
 			map_id,draw_list.skipped_actors,draw_list.skipped_parts,draw_list.skipped_frames,
 			draw_commands.size(),str(draw_list.invalid_actor_examples)])
-	_canvas.present(draw_commands,markers,combat_labels,name_labels,chat_bubbles)
+	_canvas.present(draw_commands,markers,combat_labels,name_labels,chat_bubbles,mecha_energy_bars)
 	_players_dirty = false
 	_last_rect = rect
 	_last_update = update
@@ -771,6 +954,9 @@ func set_player_snapshot(snapshot: Dictionary) -> void:
 			return
 		if _request_snapshot_pet_visuals(snapshot) != OK:
 			_fail("寵物外觀素材載入失敗")
+			return
+		if _request_snapshot_mecha_visuals(snapshot)!=OK:
+			_fail("機甲外觀素材載入失敗")
 			return
 		var now_usec := Time.get_ticks_usec()
 		if local_movement.ready:

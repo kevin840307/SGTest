@@ -8,8 +8,8 @@ const RESULT_HEX := "3b00000001007c000700000000000000010000000100650000000000000
 const SNAPSHOT_HEX := "5a00000001007d000700000000000000660000000000000002006500000000000000591b0000040000005800000000000000280000006400000066000000000000005a1b000007000000d2040000000000006400000064000000"
 const EQUIPMENT_HEX := "5600000001008000070000000000000002006500000000000000292300000000000001bd1b0000f501000000000000055000000065000000000000002a2300000000000003851c0000f60100000000000002ffffffff"
 const EQUIPMENT_EMPTY_HEX := "120000000100800007000000000000000000"
-const PRESENTATION_HEX := "4100000001007e0007000000000000006300000000000000e9030000000000000b0000000000000007000000000000000166000000000000005a1b000007000000"
-const PRESENTATION_CLEAR_HEX := "4100000001007e0007000000000000006400000000000000e9030000000000000b0000000000000007000000000000000000000000000000000000000000000000"
+const PRESENTATION_HEX := "4900000001007e0007000000000000006300000000000000e9030000000000000b0000000000000007000000000000000166000000000000005a1b000007000000bd1b0000211c0000"
+const PRESENTATION_CLEAR_HEX := "4900000001007e0007000000000000006400000000000000e9030000000000000b00000000000000070000000000000000000000000000000000000000000000000000000000000000"
 
 func _initialize() -> void:
 	var command := Codec.encode_mecha_command(7,1,1,101)
@@ -81,6 +81,8 @@ func _initialize() -> void:
 		int(presentation.owner_actor_id)!=1001 or int(presentation.owner_connection_epoch)!=11 or
 		int(presentation.owner_map_epoch)!=7 or int(presentation.mecha_uid)!=102 or
 		int(presentation.definition_id)!=7002 or int(presentation.level)!=7 or
+		int(presentation.weapon_definition_id)!=7101 or
+		int(presentation.engine_definition_id)!=7201 or
 		Codec.frame_opcode(PRESENTATION_HEX.hex_decode())!=Codec.OPCODE_MECHA_PRESENTATION
 	):
 		_fail("mecha presentation golden rejected")
@@ -137,8 +139,13 @@ func _initialize() -> void:
 		_fail("mecha presentation reducer mount failed")
 		return
 	var presented:Dictionary=state.snapshot().mecha_presentations.get(1001,{})
-	if presented.is_empty() or int(presented.get("mecha_uid",0))!=102 or not bool(presented.get("mounted",false)):
-		_fail("mecha presentation reducer did not publish mounted state")
+	if (
+		presented.is_empty() or int(presented.get("mecha_uid",0))!=102 or
+		not bool(presented.get("mounted",false)) or
+		int(presented.get("weapon_definition_id",0))!=7101 or
+		int(presented.get("engine_definition_id",0))!=7201
+	):
+		_fail("mecha presentation reducer did not publish mounted equipment state")
 		return
 	if not state.apply_frame(PRESENTATION_CLEAR_HEX.hex_decode()) or not state.snapshot().mecha_presentations.is_empty():
 		_fail("mecha presentation reducer did not clear dismount")

@@ -180,6 +180,12 @@ func begin_scope(owner: StringName) -> int:
 	return _epoch
 
 
+func has_asset(asset_id: String) -> bool:
+	# Read-only catalog probe used by source-backed presentation fallbacks.
+	# Map packs remain addressable even when they are not catalog sprite assets.
+	return _catalog.has(asset_id) or (_map_id(asset_id)>0 and FileAccess.file_exists("res://assets/"+asset_id+"/world.json"))
+
+
 func acquire(owner: StringName, epoch: int, asset_id: String) -> Error:
 	if not _scope_valid(owner, epoch):
 		return ERR_INVALID_PARAMETER

@@ -5556,7 +5556,9 @@ func _apply_mecha_presentation(frame:PackedByteArray)->bool:
 		if (
 			int(previous.get("mecha_uid",0))==int(value.mecha_uid) and
 			int(previous.get("definition_id",0))==int(value.definition_id) and
-			int(previous.get("level",0))==int(value.level)
+			int(previous.get("level",0))==int(value.level) and
+			int(previous.get("weapon_definition_id",0))==int(value.weapon_definition_id) and
+			int(previous.get("engine_definition_id",0))==int(value.engine_definition_id)
 		):
 			stale_mecha_presentation_frames+=1
 			last_aoi_tick=maxi(last_aoi_tick,int(value.server_tick))

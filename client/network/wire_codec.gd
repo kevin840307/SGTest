@@ -208,7 +208,7 @@ const MECHA_EQUIPMENT_SNAPSHOT_HEADER_BYTES := 18
 const MECHA_EQUIPMENT_SNAPSHOT_ENTRY_BYTES := 34
 const MECHA_EQUIPMENT_MAX_ITEMS := 384
 const MECHA_EQUIPMENT_SNAPSHOT_MAX_FRAME_BYTES := MECHA_EQUIPMENT_SNAPSHOT_HEADER_BYTES + MECHA_EQUIPMENT_MAX_ITEMS * MECHA_EQUIPMENT_SNAPSHOT_ENTRY_BYTES
-const MECHA_PRESENTATION_FRAME_BYTES := 65
+const MECHA_PRESENTATION_FRAME_BYTES := 73
 const PLAYER_EQUIPMENT_PRESENTATION_FRAME_BYTES := 89
 const PET_ENTITY_SPAWN_FRAME_BYTES := 76
 const PET_ENTITY_DESPAWN_FRAME_BYTES := 56
@@ -3243,6 +3243,8 @@ static func decode_mecha_presentation(frame:PackedByteArray)->Dictionary:
 	var mecha_uid:=reader.get_64()
 	var definition_id:=reader.get_32()
 	var level:=reader.get_32()
+	var weapon_definition_id:=reader.get_32()
+	var engine_definition_id:=reader.get_32()
 	if (
 		epoch<=0 or tick<0 or owner_actor<=0 or owner_connection<=0 or
 		owner_map_epoch<=0 or mounted_raw>1 or reader.get_available_bytes()!=0
@@ -3250,15 +3252,25 @@ static func decode_mecha_presentation(frame:PackedByteArray)->Dictionary:
 		return {}
 	var mounted:=mounted_raw==1
 	if mounted:
-		if mecha_uid<=0 or definition_id<=0 or definition_id>100000000 or level<=0 or level>1000000:
+		if (
+			mecha_uid<=0 or definition_id<=0 or definition_id>100000000 or
+			level<=0 or level>1000000 or weapon_definition_id<0 or
+			weapon_definition_id>100000000 or engine_definition_id<0 or
+			engine_definition_id>100000000
+		):
 			return {}
-	elif mecha_uid!=0 or definition_id!=0 or level!=0:
+	elif (
+		mecha_uid!=0 or definition_id!=0 or level!=0 or
+		weapon_definition_id!=0 or engine_definition_id!=0
+	):
 		return {}
 	return {
 		"receiver_map_epoch":epoch,"server_tick":tick,
 		"owner_actor_id":owner_actor,"owner_connection_epoch":owner_connection,
 		"owner_map_epoch":owner_map_epoch,"mounted":mounted,
-		"mecha_uid":mecha_uid,"definition_id":definition_id,"level":level
+		"mecha_uid":mecha_uid,"definition_id":definition_id,"level":level,
+		"weapon_definition_id":weapon_definition_id,
+		"engine_definition_id":engine_definition_id
 	}
 
 
