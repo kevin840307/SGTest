@@ -168,6 +168,29 @@ public sealed partial class IdentitySessionAuthorization
                     attached=false;
                 }
             }
+            if(attached)
+            {
+                try
+                {
+                    var equipped=await _identity.ListEquippedItemsAsync(
+                        binding.ActorId).ConfigureAwait(false);
+                    if(!router.TryPostPlayerEquipmentWorldState(
+                        PlayerEquipmentWorldStateUpdate.FromEquipped(
+                            binding,0,equipped)))
+                        throw new IOException("Player equipment AOI presentation queue is full");
+                }
+                catch
+                {
+                    lock(bindingGate)
+                    {
+                        if(ReferenceEquals(boundConnection,connection))
+                            boundConnection=null;
+                    }
+                    router.TryDetach(connection);
+                    _trades?.UnregisterGameplayGate(binding,gameplayGate);
+                    attached=false;
+                }
+            }
             if (!attached)
             {
                 if (_combat is not null)
@@ -217,6 +240,8 @@ public sealed partial class IdentitySessionAuthorization
             // World Leave still hides attached Pet/Mecha state and a later attach heals durable state.
             _pets?.TryDetach(binding,router);
             _mechas?.TryDetach(binding,router);
+            router.TryPostPlayerEquipmentWorldState(
+                PlayerEquipmentWorldStateUpdate.Detached(binding));
             if (connection is not null) router.TryDetach(connection);
 
             // Keep the character registered while its final authoritative
@@ -281,7 +306,8 @@ public sealed partial class IdentitySessionAuthorization
             // authenticated socket's existing gameplay lock and DB authority.
             var inventory = new InventoryCommandHandler(
                 _identity, _world, _combat, _equipmentRules,
-                _pickupWorldGeneration, router, gameplayGate);
+                _pickupWorldGeneration, router, gameplayGate,
+                _equipmentCombatRules,_progressionRules);
             var recovery = new PlayerRecoveryHandler(
                 _identity, _world, _combat, _recoveryRules,
                 _pickupWorldGeneration, router, gameplayGate);

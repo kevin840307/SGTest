@@ -28,7 +28,7 @@ public enum AoiEventKind : byte
     MonsterSpawn, MonsterDelta, MonsterDespawn,
     GroundDropSpawn, GroundDropDespawn,
     PetSpawn, PetDelta, PetDespawn, PetAttackVisual, PetSkillVisual,
-    MechaState,
+    MechaState, PlayerEquipmentState,
     PlayerAttackVisual, PlayerSkillVisual, PlayerDamageVisual, PlayerRespawnVisual,
     PvpCombatVisual, PvpSkillVisual
 }
@@ -82,6 +82,7 @@ public readonly record struct AoiEvent(
     GroundDropRecord? GroundDrop = null, long GroundDropId = 0,
     PetWorldPresence? Pet = null,
     MechaWorldStateUpdate? Mecha = null,
+    PlayerEquipmentWorldStateUpdate? PlayerEquipment = null,
     PetAttackVisual? PetAttack = null,
     PetSkillVisual? PetSkill = null,
     PlayerAttackVisual? PlayerAttack = null,
@@ -117,6 +118,7 @@ public sealed class WorldAoi
     private readonly Dictionary<long, GroundDropRecord> _groundDrops = new();
     private readonly Dictionary<long, PetWorldPresence> _petsByOwner = new();
     private readonly Dictionary<long, MechaWorldStateUpdate> _mechasByOwner = new();
+    private readonly Dictionary<long, PlayerEquipmentWorldStateUpdate> _playerEquipmentByOwner = new();
     private readonly Dictionary<long, PetFollowTarget> _petFollowTargets = new();
     private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _groundBuckets = new();
     private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _monsterBuckets = new();
@@ -141,6 +143,7 @@ public sealed class WorldAoi
         public readonly HashSet<long> VisibleGroundDrops = new();
         public readonly Dictionary<long, PetWorldPresence> VisiblePets = new();
         public readonly Dictionary<long, MechaWorldStateUpdate> VisibleMechas = new();
+        public readonly Dictionary<long, PlayerEquipmentWorldStateUpdate> VisiblePlayerEquipment = new();
         public readonly Queue<AoiEvent> Pending = new();
 
         public Observer(ActorSnapshot actor) => Self = actor;
@@ -435,6 +438,49 @@ public sealed class WorldAoi
            owner.MapEpoch==update.OwnerMapEpoch)
             foreach(var observer in _observers.Values)
                 RefreshMecha(observer,owner,_lastTick);
+    }
+
+    public void ApplyPlayerEquipmentState(PlayerEquipmentWorldStateUpdate update)
+    {
+        if(update.OwnerActorId<=0||update.OwnerConnectionEpoch<=0||
+           update.OwnerMapEpoch<=0)
+            throw new InvalidOperationException("Invalid player equipment AOI update");
+        for(int slot=1;slot<=9;slot++)
+        {
+            int definitionId=update.DefinitionForSlot(slot);
+            if(definitionId is <0 or >100000000)
+                throw new InvalidOperationException("Invalid player equipment definition");
+            if(!update.Present&&definitionId!=0)
+                throw new InvalidOperationException("Detached player equipment carried definitions");
+        }
+
+        if(_playerEquipmentByOwner.TryGetValue(update.OwnerActorId,out var previous))
+        {
+            if(update.OwnerConnectionEpoch<previous.OwnerConnectionEpoch||
+               (update.OwnerConnectionEpoch==previous.OwnerConnectionEpoch&&
+                update.OwnerMapEpoch<previous.OwnerMapEpoch)||
+               (update.Present&&update.OwnerConnectionEpoch==previous.OwnerConnectionEpoch&&
+                update.OwnerMapEpoch==previous.OwnerMapEpoch&&
+                update.Revision<previous.Revision))
+                return;
+            if(!update.Present||
+               previous.OwnerConnectionEpoch!=update.OwnerConnectionEpoch||
+               previous.OwnerMapEpoch!=update.OwnerMapEpoch)
+                HidePlayerEquipment(previous);
+        }
+
+        if(!update.Present)
+        {
+            _playerEquipmentByOwner.Remove(update.OwnerActorId);
+            return;
+        }
+
+        _playerEquipmentByOwner[update.OwnerActorId]=update;
+        if(_entities.TryGetValue(update.OwnerActorId,out var owner)&&
+           owner.ConnectionEpoch==update.OwnerConnectionEpoch&&
+           owner.MapEpoch==update.OwnerMapEpoch)
+            foreach(var observer in _observers.Values)
+                RefreshPlayerEquipment(observer,owner,_lastTick);
     }
 
     public int EnqueuePlayerIdentity(PlayerIdentityPresentation identity)
@@ -1076,6 +1122,7 @@ public sealed class WorldAoi
                 RefreshEntity(observer, actor, tick);
                 RefreshPet(observer, actor, tick);
                 RefreshMecha(observer, actor, tick);
+                RefreshPlayerEquipment(observer,actor,tick);
             }
 
         var viewer = new Observer(actor);
@@ -1103,6 +1150,10 @@ public sealed class WorldAoi
            activeMecha.OwnerConnectionEpoch==actor.ConnectionEpoch&&
            activeMecha.OwnerMapEpoch==actor.MapEpoch)
             HideMecha(activeMecha);
+        if(_playerEquipmentByOwner.TryGetValue(actor.ActorId,out var activeEquipment)&&
+           activeEquipment.OwnerConnectionEpoch==actor.ConnectionEpoch&&
+           activeEquipment.OwnerMapEpoch==actor.MapEpoch)
+            HidePlayerEquipment(activeEquipment);
         RemoveBucket(old);
         _entities.Remove(actor.ActorId);
         // After disconnect or a trusted map transfer, the old observer queue is
@@ -1138,6 +1189,7 @@ public sealed class WorldAoi
                 RefreshEntity(observer, actor, tick);
                 RefreshPet(observer, actor, tick);
                 RefreshMecha(observer, actor, tick);
+                RefreshPlayerEquipment(observer,actor,tick);
             }
         if (_observers.TryGetValue(actor.ActorId, out var moving))
         {
@@ -1243,6 +1295,17 @@ public sealed class WorldAoi
                     Mecha:UnmountedMecha(entry.Value)));
             }
         }
+        foreach(var entry in observer.VisiblePlayerEquipment.ToArray())
+        {
+            bool ownerVisible=entry.Key==viewer.ActorId || observer.Visible.ContainsKey(entry.Key);
+            if(!_playerEquipmentByOwner.TryGetValue(entry.Key,out var equipment)||
+               !equipment.Equals(entry.Value)||!ownerVisible)
+            {
+                observer.VisiblePlayerEquipment.Remove(entry.Key);
+                Enqueue(observer,new(AoiEventKind.PlayerEquipmentState,tick,viewer.MapEpoch,
+                    PlayerEquipment:DetachedPlayerEquipment(entry.Value)));
+            }
+        }
 
         // Scan only the bounded map-specific spatial buckets surrounding this
         // observer, not the entire entity dictionaries each movement tick.
@@ -1261,9 +1324,11 @@ public sealed class WorldAoi
                 RefreshEntity(observer, actor, tick);
                 RefreshPet(observer,actor,tick);
                 RefreshMecha(observer,actor,tick);
+                RefreshPlayerEquipment(observer,actor,tick);
             }
         RefreshPet(observer,viewer,tick);
         RefreshMecha(observer,viewer,tick);
+        RefreshPlayerEquipment(observer,viewer,tick);
 
         candidates.Clear();
         for (int bx = minX; bx <= maxX; bx++)
@@ -1573,6 +1638,72 @@ public sealed class WorldAoi
         Enqueue(observer,new(AoiEventKind.MechaState,tick,
             observer.Self.MapEpoch,Mecha:mecha));
     }
+
+    private void HidePlayerEquipment(PlayerEquipmentWorldStateUpdate equipment)
+    {
+        foreach(var observer in _observers.Values)
+            if(observer.VisiblePlayerEquipment.TryGetValue(
+                   equipment.OwnerActorId,out var seen)&&
+               seen.OwnerConnectionEpoch==equipment.OwnerConnectionEpoch&&
+               seen.OwnerMapEpoch==equipment.OwnerMapEpoch)
+            {
+                observer.VisiblePlayerEquipment.Remove(equipment.OwnerActorId);
+                Enqueue(observer,new(AoiEventKind.PlayerEquipmentState,_lastTick,
+                    observer.Self.MapEpoch,
+                    PlayerEquipment:DetachedPlayerEquipment(seen)));
+            }
+    }
+
+    private void RefreshPlayerEquipment(Observer observer,ActorSnapshot owner,long tick)
+    {
+        if(!_playerEquipmentByOwner.TryGetValue(owner.ActorId,out var equipment)||
+           equipment.OwnerConnectionEpoch!=owner.ConnectionEpoch)
+        {
+            if(observer.VisiblePlayerEquipment.Remove(owner.ActorId,out var stale))
+                Enqueue(observer,new(AoiEventKind.PlayerEquipmentState,tick,
+                    observer.Self.MapEpoch,
+                    PlayerEquipment:DetachedPlayerEquipment(stale)));
+            return;
+        }
+
+        if(equipment.OwnerMapEpoch!=owner.MapEpoch)
+        {
+            equipment=equipment with {OwnerMapEpoch=owner.MapEpoch};
+            _playerEquipmentByOwner[owner.ActorId]=equipment;
+        }
+
+        bool ownerVisible=observer.Self.ActorId==owner.ActorId&&
+            observer.Self.ConnectionEpoch==owner.ConnectionEpoch&&
+            observer.Self.MapEpoch==owner.MapEpoch;
+        if(!ownerVisible&&observer.Visible.TryGetValue(owner.ActorId,out var seenOwner))
+            ownerVisible=seenOwner.ConnectionEpoch==owner.ConnectionEpoch&&
+                seenOwner.MapEpoch==owner.MapEpoch;
+        if(!ownerVisible)
+        {
+            if(observer.VisiblePlayerEquipment.Remove(owner.ActorId,out var hidden))
+                Enqueue(observer,new(AoiEventKind.PlayerEquipmentState,tick,
+                    observer.Self.MapEpoch,
+                    PlayerEquipment:DetachedPlayerEquipment(hidden)));
+            return;
+        }
+
+        if(observer.VisiblePlayerEquipment.TryGetValue(owner.ActorId,out var current)&&
+           current.Equals(equipment))
+            return;
+        observer.VisiblePlayerEquipment[owner.ActorId]=equipment;
+        Enqueue(observer,new(AoiEventKind.PlayerEquipmentState,tick,
+            observer.Self.MapEpoch,PlayerEquipment:equipment));
+    }
+
+    private static PlayerEquipmentWorldStateUpdate DetachedPlayerEquipment(
+        PlayerEquipmentWorldStateUpdate source) =>
+        source with
+        {
+            Present=false,
+            HeadDefinitionId=0,LeftHandDefinitionId=0,RightHandDefinitionId=0,
+            BodyDefinitionId=0,LegDefinitionId=0,WeaponDefinitionId=0,
+            ShieldDefinitionId=0,BackDefinitionId=0,CharmDefinitionId=0
+        };
 
     private static MechaWorldStateUpdate UnmountedMecha(MechaWorldStateUpdate source) =>
         new(source.OwnerActorId,source.OwnerConnectionEpoch,source.OwnerMapEpoch,

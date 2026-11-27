@@ -82,6 +82,7 @@ public sealed partial class WorldResultRouter
     private readonly Channel<PlayerDamageSettlement> _playerPvpSkillVisuals;
     private readonly Channel<PetWorldStateUpdate> _petWorldUpdates;
     private readonly Channel<MechaWorldStateUpdate> _mechaWorldUpdates;
+    private readonly Channel<PlayerEquipmentWorldStateUpdate> _playerEquipmentWorldUpdates;
     private readonly WorldResultRouterOptions _options;
     private readonly Action<WorldChangedBatch>? _changedObserver;
     private long _queued, _stale, _changedQueued, _backpressure;
@@ -225,6 +226,14 @@ public sealed partial class WorldResultRouter
                 FullMode=BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations=false
             });
+        _playerEquipmentWorldUpdates = Channel.CreateBounded<PlayerEquipmentWorldStateUpdate>(
+            new BoundedChannelOptions(_options.MaxSessions)
+            {
+                SingleReader=true,
+                SingleWriter=false,
+                FullMode=BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations=false
+            });
     }
 
     public ChannelReader<WorldChangedBatch> ChangedBatches => _changed.Reader;
@@ -252,6 +261,8 @@ public sealed partial class WorldResultRouter
         _petWorldUpdates.Reader;
     public ChannelReader<MechaWorldStateUpdate> MechaWorldUpdates =>
         _mechaWorldUpdates.Reader;
+    public ChannelReader<PlayerEquipmentWorldStateUpdate> PlayerEquipmentWorldUpdates =>
+        _playerEquipmentWorldUpdates.Reader;
 
     public WorldResultRouterStatistics Statistics
     {
@@ -294,6 +305,18 @@ public sealed partial class WorldResultRouter
                 return false;
             }
             return true;
+        }
+    }
+
+    public bool TryUpdateTrustedCombatProfile(
+        ConnectionBinding expected,TrustedCombatProfile? profile)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(expected.ActorId,out var connection)||
+               connection.Binding!=expected)
+                return false;
+            return connection.TryUpdateTrustedCombatProfile(expected,profile);
         }
     }
 

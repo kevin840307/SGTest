@@ -9,6 +9,8 @@ const Photos = preload("res://ui/local_item_photo_cache.gd")
 const WireCodec = preload("res://network/wire_codec.gd")
 const HotkeyDragButton = preload("res://ui/hotkey_drag_button.gd")
 const HotkeySlot = preload("res://ui/hotkey_slot.gd")
+const CharacterPreview = preload("res://player/character_preview.gd")
+const AppearanceProfile = preload("res://player/character_appearance_profile.gd")
 
 const PRIVATE := "res://ui/private_ie_hk2"
 const BASE_SIZE := Vector2(800,600)
@@ -168,10 +170,14 @@ var _hud_anim_frame:=-1
 var _map_title:Label
 var _map_coords:Label
 var _inventory_rows:=VBoxContainer.new()
-var _equipment_rows:=VBoxContainer.new()
+var _equipment_rows:=Control.new()
 var _inventory_item_bg:TextureRect
 var _inventory_equip_bg:TextureRect
 var _inventory_tab:=0
+var _equipment_slot_buttons:Dictionary={}
+var _equipment_slot_icons:Dictionary={}
+var _equipment_preview:=CharacterPreview.new()
+var _asset_store:RefCounted
 # Preserve interactive inventory rows across unchanged AOI/status snapshots.
 # Rebuilding every presentation tick invalidates active item click targets.
 var _inventory_render_signature:Dictionary={}
@@ -1829,12 +1835,84 @@ func _build_inventory()->void:
 	_inventory_rows.size=Vector2(152,432)
 	_inventory_rows.add_theme_constant_override("separation",0)
 	inventory.add_child(_inventory_rows)
+	# 022_equip.itf: nine fixed equipment hit rows occupy the upper-left
+	# paper-doll area. Keep them absolute; a VBox would destroy source rects.
 	_equipment_rows.name="EquippedRows"
-	_equipment_rows.position=Vector2(70,61)
-	_equipment_rows.size=Vector2(153,235)
-	_equipment_rows.add_theme_constant_override("separation",0)
+	_equipment_rows.position=Vector2.ZERO
+	_equipment_rows.size=inventory.size
 	_equipment_rows.hide()
 	inventory.add_child(_equipment_rows)
+	inventory.set_meta("equip_scroll",0)
+	var slot_specs=[
+		[1,"左手",Rect2(44,90,90,24)],
+		[2,"右手",Rect2(44,117,90,24)],
+		[3,"身體",Rect2(44,144,90,24)],
+		[4,"腳部",Rect2(44,171,90,24)],
+		[5,"頭部",Rect2(44,63,90,24)],
+		[6,"武器",Rect2(44,198,90,24)],
+		[7,"盾牌",Rect2(43,224,90,24)],
+		[8,"背部",Rect2(43,252,90,24)],
+		[9,"護符",Rect2(43,278,90,26)],
+	]
+	for raw_spec in slot_specs:
+		var spec:Array=raw_spec
+		var slot_id:=int(spec[0])
+		var slot_name:=str(spec[1])
+		var rect:Rect2=spec[2]
+		var button:=TextureButton.new()
+		button.name="EquipmentSlot%d"%slot_id
+		button.position=rect.position
+		button.size=rect.size
+		button.focus_mode=Control.FOCUS_NONE
+		button.tooltip_text="%s：未裝備"%slot_name
+		button.set_meta("slot_id",slot_id)
+		button.set_meta("slot_name",slot_name)
+		button.set_meta("item_uid",0)
+		button.pressed.connect(_on_equipment_slot_pressed.bind(slot_id))
+		var name_label:=Label.new()
+		name_label.name="SlotName"
+		name_label.position=Vector2.ZERO
+		name_label.size=rect.size
+		name_label.text=slot_name
+		name_label.horizontal_alignment=HORIZONTAL_ALIGNMENT_RIGHT
+		name_label.vertical_alignment=VERTICAL_ALIGNMENT_CENTER
+		name_label.add_theme_font_size_override("font_size",HK_SHARED_FONT_HEIGHT)
+		name_label.add_theme_color_override("font_color",Color("#f9f2d6"))
+		name_label.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		button.add_child(name_label)
+		var icon:=TextureRect.new()
+		icon.name="Icon"
+		icon.position=Vector2(-1,0)
+		icon.size=Vector2(24,24)
+		icon.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode=TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		button.add_child(icon)
+		# 022_equip uses B_RADIO_B.spr (19x19) beside every equipment row.
+		# Keep the source art as the committed-equipment indicator instead of
+		# drawing a font glyph, so the 90x24 hit rect is never changed by theme metrics.
+		var marker:=TextureRect.new()
+		marker.name="EquippedMarker"
+		marker.position=Vector2(27,2)
+		marker.size=Vector2(19,19)
+		marker.texture=_tex("B_RADIO_B_0")
+		marker.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
+		marker.stretch_mode=TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		marker.texture_filter=CanvasItem.TEXTURE_FILTER_NEAREST
+		marker.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		marker.hide()
+		button.add_child(marker)
+		_equipment_slot_buttons[slot_id]=button
+		_equipment_slot_icons[slot_id]=icon
+		_equipment_rows.add_child(button)
+	# CEquipItf::Draw/UpdateFigure1 renders a standing character beside the
+	# source slot rows. This preview shares WorldView's AssetStore; it creates
+	# no second loader/session/reducer.
+	_equipment_preview.name="EquipmentPaperDoll"
+	_equipment_preview.position=Vector2(136,55)
+	_equipment_preview.size=Vector2(100,245)
+	_equipment_preview.set_occupied(false)
+	_equipment_rows.add_child(_equipment_preview)
 
 func _build_character()->void:
 	character=_window("CharacterWindow","BG_CHARACTER_INFO",Vector2(263,397),Vector2(269,95))
@@ -2333,8 +2411,10 @@ func set_skin_switch_visible(enabled:bool)->void:
 		_settings_hint.visible=enabled
 		_settings_hint.text="DEV UI" if enabled else "介面：HK 原版"
 
-func bind_session(panel)->void:
+func bind_session(panel,asset_store:RefCounted=null)->void:
 	_panel=panel
+	_asset_store=asset_store
+	_equipment_preview.bind_store(_asset_store)
 	_inventory_render_initialized=false
 	_social_render_signatures.clear()
 	_refresh_profiles()
@@ -2483,6 +2563,7 @@ func _apply_item_grade_color(button:Button,item_id:int)->void:
 func _change_inventory_tab(index:int)->void:
 	_inventory_tab=clampi(index,0,4)
 	inventory.set_meta("item_scroll",0)
+	inventory.set_meta("equip_scroll",0)
 	var equip_view:=_inventory_tab==1
 	if _inventory_item_bg!=null:_inventory_item_bg.visible=not equip_view
 	if _inventory_equip_bg!=null:
@@ -2490,14 +2571,27 @@ func _change_inventory_tab(index:int)->void:
 		if equip_view and _inventory_equip_bg.texture==null:
 			_inventory_equip_bg.texture=_tex("BG_Equip")
 	_equipment_rows.visible=equip_view
-	_inventory_rows.position=Vector2(39,325) if equip_view else Vector2(42,62)
-	_inventory_rows.size=Vector2(166,165) if equip_view else Vector2(152,432)
+	_equipment_preview.set_occupied(equip_view)
+	# Rebuild the VBox before assigning the 022/023 source rect. Godot caches a
+	# Container minimum size until children change; sizing first can retain the
+	# previous 16-row BG_ITEM minimum (432 px) for one visible frame.
 	_refresh_inventory()
+	_inventory_rows.position=Vector2(39,313) if equip_view else Vector2(42,62)
+	_inventory_rows.size=Vector2(157,189) if equip_view else Vector2(152,432)
+	var up:=inventory.get_node_or_null("InventoryScrollUp") as TextureButton
+	var down:=inventory.get_node_or_null("InventoryScrollDown") as TextureButton
+	if up!=null:up.position=Vector2(204,310) if equip_view else Vector2(204,60)
+	if down!=null:down.position=Vector2(204,466) if equip_view else Vector2(204,459)
 
 func _scroll_inventory(delta:int)->void:
-	if inventory==null or _inventory_tab in [1,2]:
+	if inventory==null or _inventory_tab==2:
 		return
-	inventory.set_meta("item_scroll",int(inventory.get_meta("item_scroll",0))+delta)
+	if _inventory_tab==1:
+		inventory.set_meta(
+			"equip_scroll",int(inventory.get_meta("equip_scroll",0))+delta)
+	else:
+		inventory.set_meta(
+			"item_scroll",int(inventory.get_meta("item_scroll",0))+delta)
 	_refresh_inventory()
 
 func _set_inventory_scroll_buttons(total:int)->int:
@@ -2509,6 +2603,68 @@ func _set_inventory_scroll_buttons(total:int)->int:
 	if up!=null:up.disabled=offset<=0
 	if down!=null:down.disabled=offset>=max_offset
 	return offset
+
+func _set_equipment_scroll_buttons(total:int)->int:
+	var max_offset:=maxi(0,total-7)
+	var offset:=clampi(int(inventory.get_meta("equip_scroll",0)),0,max_offset)
+	inventory.set_meta("equip_scroll",offset)
+	var up:=inventory.get_node_or_null("InventoryScrollUp") as TextureButton
+	var down:=inventory.get_node_or_null("InventoryScrollDown") as TextureButton
+	if up!=null:up.disabled=offset<=0
+	if down!=null:down.disabled=offset>=max_offset
+	return offset
+
+func _on_equipment_slot_pressed(slot_id:int)->void:
+	if _panel==null or not _equipment_slot_buttons.has(slot_id):
+		return
+	var button:=_equipment_slot_buttons[slot_id] as TextureButton
+	var item_uid:=int(button.get_meta("item_uid",0))
+	if item_uid>0:
+		_panel.inventory_panel.submit_equipment_unequip(item_uid)
+
+func _refresh_equipment_slots(equipment_items:Dictionary)->void:
+	var by_slot:Dictionary={}
+	var slot_definitions:Dictionary={}
+	for raw_uid in equipment_items:
+		var item:Dictionary=equipment_items[raw_uid]
+		var slot_id:=int(item.get("slot_id",0))
+		if slot_id<1 or slot_id>9:
+			continue
+		by_slot[slot_id]={"uid":int(raw_uid),"item":item}
+		slot_definitions[slot_id]=int(item.get("item_definition_id",0))
+	for slot_id in range(1,10):
+		var button:=_equipment_slot_buttons.get(slot_id) as TextureButton
+		var icon:=_equipment_slot_icons.get(slot_id) as TextureRect
+		if button==null or icon==null:
+			continue
+		var marker:=button.get_node_or_null("EquippedMarker") as TextureRect
+		if by_slot.has(slot_id):
+			var entry:Dictionary=by_slot[slot_id]
+			var uid:=int(entry.uid)
+			var item:Dictionary=entry.item
+			var definition_id:=int(item.get("item_definition_id",0))
+			var item_name:=str(_panel.item_catalog.name_for(definition_id)) if _panel!=null else "Item %d"%definition_id
+			button.set_meta("item_uid",uid)
+			button.set_meta("item_definition_id",definition_id)
+			button.tooltip_text="%s｜%s｜點擊卸下"%[
+				str(button.get_meta("slot_name","")),item_name]
+			icon.texture=_photos.photo_for_item(definition_id,_panel.item_catalog) if _panel!=null else null
+			if marker!=null:marker.show()
+		else:
+			button.set_meta("item_uid",0)
+			button.set_meta("item_definition_id",0)
+			button.tooltip_text="%s：未裝備"%str(
+				button.get_meta("slot_name",""))
+			icon.texture=null
+			if marker!=null:marker.hide()
+	var base_appearance:Dictionary={}
+	var raw_appearance:Variant=_stats.get("selected_character_appearance",{})
+	if raw_appearance is Dictionary:
+		base_appearance=raw_appearance
+	var presented:=AppearanceProfile.presentation_appearance(
+		base_appearance,slot_definitions)
+	if not presented.is_empty():
+		_equipment_preview.set_appearance(presented)
 
 func _inventory_matches_tab(item:Dictionary,equipped:bool)->bool:
 	if equipped:
@@ -2547,6 +2703,7 @@ func _inventory_snapshot_changed()->bool:
 	var signature:Dictionary={
 		"inventory_items":_stats.get("inventory_items",{}),
 		"equipment_items":_stats.get("equipment_items",{}),
+		"selected_character_appearance":_stats.get("selected_character_appearance",{}),
 		"mecha_instances":_stats.get("mecha_instances",{}),
 		"mecha_equipment_items":_stats.get("mecha_equipment_items",{}),
 		"mounted_mecha_uid":_stats.get("mounted_mecha_uid",0)
@@ -2559,7 +2716,11 @@ func _inventory_snapshot_changed()->bool:
 
 func _refresh_inventory()->void:
 	_clear_rows(_inventory_rows)
-	_clear_rows(_equipment_rows)
+	if _inventory_tab==1:
+		# Apply the 022_equip list viewport after removing 023_ITEM's 16 rows;
+		# otherwise VBox minimum-size keeps the old 432px height for this frame.
+		_inventory_rows.position=Vector2(39,313)
+		_inventory_rows.size=Vector2(157,189)
 	var inventory_items:Dictionary=_stats.get("inventory_items",{})
 	var equipment_items:Dictionary=_stats.get("equipment_items",{})
 	if _inventory_tab==2:
@@ -2567,37 +2728,37 @@ func _refresh_inventory()->void:
 		_refresh_classic_mecha_inventory(inventory_items)
 		return
 	if _inventory_tab==1:
-		_set_inventory_scroll_buttons(0)
-		var equipped_uids:Array=equipment_items.keys();equipped_uids.sort()
-		for i in mini(10,equipped_uids.size()):
-			var uid:=int(equipped_uids[i]);var item:Dictionary=equipment_items[equipped_uids[i]]
-			var id:=int(item.get("item_definition_id",0))
-			var name:=str(_panel.item_catalog.name_for(id)) if _panel!=null else "Item %d"%id
-			var row:=_classic_row(_equipment_rows,name,23.0,_classic_item_action.bind(uid,id,true))
-			_apply_item_grade_color(row,id)
-			row.tooltip_text=(_panel.item_catalog.tooltip_text_for(item)+"\n點擊卸下") if _panel!=null else "點擊卸下｜UID %d"%uid
-		if equipped_uids.is_empty():
-			_classic_row(_equipment_rows,"目前沒有穿戴裝備",23.0)
+		_refresh_equipment_slots(equipment_items)
 		var candidates:Array=[]
 		for raw_uid in inventory_items:
 			var item:Dictionary=inventory_items[raw_uid]
 			if _inventory_matches_tab(item,false):
 				candidates.append({"uid":int(raw_uid),"item":item})
 		candidates.sort_custom(_classic_item_definition_desc)
-		for i in mini(7,candidates.size()):
-			var entry:Dictionary=candidates[i];var uid:=int(entry.uid);var item:Dictionary=entry.item
+		var equip_offset:=_set_equipment_scroll_buttons(candidates.size())
+		for i in range(equip_offset,mini(equip_offset+7,candidates.size())):
+			var entry:Dictionary=candidates[i]
+			var uid:=int(entry.uid)
+			var item:Dictionary=entry.item
 			var id:=int(item.get("item_definition_id",0))
 			var name:=str(_panel.item_catalog.name_for(id)) if _panel!=null else "Item %d"%id
-			var row:=_classic_row(_inventory_rows,"     %s ×%d"%[name,int(item.get("quantity",1))],23.0,_classic_item_action.bind(uid,id,false))
+			var row:=_classic_row(
+				_inventory_rows,"     %s ×%d"%[name,int(item.get("quantity",1))],
+				27.0,_classic_item_action.bind(uid,id,false))
 			_apply_item_grade_color(row,id)
 			if _panel!=null:
-				row.tooltip_text=_panel.item_catalog.tooltip_text_for(item,equipment_items)
-				var photo:=TextureRect.new();photo.texture=_photos.photo_for_item(id,_panel.item_catalog)
-				photo.position=Vector2(1,1);photo.size=Vector2(21,21);photo.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
-				photo.stretch_mode=TextureRect.STRETCH_KEEP_ASPECT_CENTERED;photo.mouse_filter=Control.MOUSE_FILTER_IGNORE
+				row.tooltip_text=_panel.item_catalog.tooltip_text_for(item,equipment_items)+"\n點擊送交伺服器判定裝備槽位"
+				var photo:=TextureRect.new()
+				photo.name="ItemPhoto"
+				photo.texture=_photos.photo_for_item(id,_panel.item_catalog)
+				photo.position=Vector2(1,1)
+				photo.size=Vector2(24,24)
+				photo.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
+				photo.stretch_mode=TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				photo.mouse_filter=Control.MOUSE_FILTER_IGNORE
 				row.add_child(photo)
 		if candidates.is_empty():
-			_classic_row(_inventory_rows,"沒有可穿戴的裝備",23.0)
+			_classic_row(_inventory_rows,"沒有可穿戴的裝備",27.0)
 		return
 	var entries:Array=[]
 	for raw_uid in inventory_items:

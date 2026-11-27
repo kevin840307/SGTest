@@ -15,6 +15,8 @@ internal static class PlayerCombatSettlementChecks
             WireContract);
         Checks.Run("profile-only actor without settlement slot is not treated as dead",
             ProfileOnlyActorIsNotDead);
+        Checks.Run("live equipment profile refresh replaces defense without resetting HP",
+            LiveEquipmentProfileRefresh);
         Checks.Run("committed damage is queued reliably before combat drain completes",
             () => ReliableDelivery(root).GetAwaiter().GetResult());
         Checks.Run("monster hit reservation is nonblocking and emits only after SQLite commit",
@@ -91,6 +93,45 @@ internal static class PlayerCombatSettlementChecks
         finally
         {
             // Close SQLite before deleting the isolated regression fixture.
+            foreach(var suffix in new[]{"","-wal","-shm"})
+                try{File.Delete(db+suffix);}catch{}
+        }
+    }
+
+    private static void LiveEquipmentProfileRefresh()
+    {
+        string db=Path.Combine(Path.GetTempPath(),
+            "combat-live-profile-"+Guid.NewGuid().ToString("N")+".db");
+        try
+        {
+            using var store=new SqliteIdentityStore(db);
+            var settlement=new PlayerCombatSettlement(store,new(Capacity:8));
+            var actor=Actor(92,13,8,4);
+            var baseline=new CharacterCombatProfileData(
+                CombatProfileTrust.SyntheticTest,"ci:equipment-live-profile",
+                Race:0,Career:0,Strength:5,Dexterity:5,Constitution:5,Wisdom:5,
+                Level:1,CurrentHp:100,MaxHp:100,Attack:20,Defense:10,
+                Hit:10,Dodge:3,AttackRange:48,AttackCooldownTicks:15);
+            Checks.Require(settlement.TryAttach(actor,baseline)&&
+                           settlement.TryResume(actor),
+                "live equipment baseline attach");
+            var equipped=baseline with
+            {
+                Level=2,Defense=100,Dodge=9,Attack=31,Hit=14
+            };
+            Checks.Require(settlement.TryApplyLiveProfile(actor,equipped)&&
+                           settlement.CurrentHp(actor)==100,
+                "live equipment profile changed HP or was rejected");
+            Checks.Require(settlement.TryPostMonsterHit(
+                    actor,Attack(actor,42,20,3))==CombatPostStatus.Accepted&&
+                    settlement.CurrentHp(actor)==99,
+                "monster damage still used pre-equipment defense");
+            Checks.Require(!settlement.TryApplyLiveProfile(
+                    actor,equipped with {MaxHp=101,CurrentHp=100}),
+                "live equipment profile admitted max-HP generation drift");
+        }
+        finally
+        {
             foreach(var suffix in new[]{"","-wal","-shm"})
                 try{File.Delete(db+suffix);}catch{}
         }

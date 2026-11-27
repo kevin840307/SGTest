@@ -3,6 +3,7 @@ using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
 using SGTest.Server.Wire;
 using SGTest.Server.World;
+using SGTest.Server.Visibility;
 
 namespace SGTest.Server.Inventory;
 
@@ -17,6 +18,8 @@ internal sealed class InventoryCommandHandler
     private readonly ServerWorldHost _world;
     private readonly PlayerCombatSettlement? _combat;
     private readonly IReadOnlyDictionary<int,EquipmentRule>? _equipmentRules;
+    private readonly IReadOnlyDictionary<int,EquipmentCombatRule>? _equipmentCombatRules;
+    private readonly CharacterProgressionRules? _progressionRules;
     private readonly long _pickupWorldGeneration;
     private readonly WorldResultRouter _router;
     private readonly SemaphoreSlim _gameplayGate;
@@ -24,12 +27,16 @@ internal sealed class InventoryCommandHandler
     internal InventoryCommandHandler(
         SqliteIdentityStore identity, ServerWorldHost world,
         PlayerCombatSettlement? combat, IReadOnlyDictionary<int,EquipmentRule>? equipmentRules,
-        long pickupWorldGeneration, WorldResultRouter router, SemaphoreSlim gameplayGate)
+        long pickupWorldGeneration, WorldResultRouter router, SemaphoreSlim gameplayGate,
+        IReadOnlyDictionary<int,EquipmentCombatRule>? equipmentCombatRules = null,
+        CharacterProgressionRules? progressionRules = null)
     {
         _identity = identity;
         _world = world;
         _combat = combat;
         _equipmentRules = equipmentRules;
+        _equipmentCombatRules = equipmentCombatRules;
+        _progressionRules = progressionRules;
         _pickupWorldGeneration = pickupWorldGeneration;
         _router = router;
         _gameplayGate = gameplayGate;
@@ -130,8 +137,89 @@ internal sealed class InventoryCommandHandler
             if(sent!=GatewaySendStatus.Enqueued)
                 throw new IOException(
                     "Reliable equipment transfer result could not be queued: "+sent);
+            if(result.Status==EquipmentTransferStatus.Applied&&
+               _router.IsCurrentBinding(binding))
+            {
+                var equipped=await _identity.ListEquippedItemsAsync(
+                    request.ActorId).ConfigureAwait(false);
+                var presentation=PlayerEquipmentWorldStateUpdate.FromEquipped(
+                    binding,request.EquipmentSequence,equipped);
+                if(!_router.TryPostPlayerEquipmentWorldState(presentation))
+                    throw new IOException("Player equipment AOI presentation queue is full");
+                await RefreshEquipmentProfileAsync(binding,equipped)
+                    .ConfigureAwait(false);
+            }
         }
         finally { _gameplayGate.Release(); }
+    }
+
+    private async Task RefreshEquipmentProfileAsync(
+        ConnectionBinding binding,IReadOnlyList<EquippedItem> equipped)
+    {
+        if(!_router.IsCurrentBinding(binding))return;
+        var actor=await _world.TrustedGetActorAsync(binding.ActorId)
+            .ConfigureAwait(false);
+        if(actor is not { } current||
+           current.ConnectionEpoch!=binding.ConnectionEpoch||
+           current.MapEpoch!=binding.MapEpoch)
+            return;
+
+        var stored=await _identity.GetCharacterCombatProfileAsync(binding.ActorId)
+            .ConfigureAwait(false);
+        if(stored is null)
+        {
+            if(!_router.TryUpdateTrustedCombatProfile(binding,null))
+                throw new IOException("Committed equipment profile lost current binding");
+            return;
+        }
+
+        CharacterCombatProfileData effective=stored.Data;
+        if(effective.Trust==CombatProfileTrust.ProfileOnlyVerified)
+        {
+            if(SourceVerifiedUnarmedCombatRules.TryPromoteEmptyEquipment(
+                effective,equipped.Count,_world.TickHz,out var unarmed))
+                effective=unarmed;
+            else if(_equipmentCombatRules is not null&&
+                    SourceVerifiedEquipmentCombatRules.TryPromote(
+                        effective,equipped,_equipmentCombatRules,_world.TickHz,
+                        out var equippedCombat))
+                effective=equippedCombat;
+        }
+
+        bool combatEnabled=effective.Trust is
+            CombatProfileTrust.Verified or CombatProfileTrust.SyntheticTest;
+        if(_combat is not null)
+        {
+            if(combatEnabled)
+            {
+                if(!_combat.TryApplyLiveProfile(current,effective))
+                    throw new IOException(
+                        "Committed equipment could not refresh live combat profile");
+            }
+            else
+            {
+                await _combat.SuspendAndDrainAsync(
+                    current.ActorId,current.ConnectionEpoch,current.MapEpoch)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        TrustedCombatProfile? trusted=combatEnabled
+            ?new(effective.Attack,effective.Defense,effective.Hit,effective.Dodge,
+                effective.AttackRange,effective.AttackCooldownTicks,effective.Level)
+            :null;
+        if(!_router.TryUpdateTrustedCombatProfile(binding,trusted))
+            throw new IOException(
+                "Committed equipment could not refresh trusted attack profile");
+
+        var experience=await _identity.GetCharacterExperienceAsync(binding.ActorId)
+            .ConfigureAwait(false);
+        var state=CharacterProfileProgressionHandler.BuildState(
+            effective,binding.ActorId,experience?.Experience??0,_progressionRules);
+        var sent=_router.QueuePlayerProfileState(binding,state);
+        if(sent!=GatewaySendStatus.Enqueued)
+            throw new IOException(
+                "Committed equipment profile state could not be queued: "+sent);
     }
 
     internal async Task HandleDiscardAsync(TrustedInventoryDiscard request)

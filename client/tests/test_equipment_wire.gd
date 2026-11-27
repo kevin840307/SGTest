@@ -1,6 +1,7 @@
 extends SceneTree
 const Wire = preload("res://network/wire_codec.gd")
 const World = preload("res://world/world_state.gd")
+const Profile = preload("res://player/character_appearance_profile.gd")
 const AUTH := "0900000001000B0000"
 const LIST := "1800000001000C00010B000000000000000004004865726F"
 const CHOOSE := "2D00000001000E00000B000000000000000F000000000000000000204000000000000020400100000000000000"
@@ -41,6 +42,32 @@ func new_world():
 		return null
 	return world
 
+func presentation_frame(
+	receiver_map_epoch:int,server_tick:int,owner_actor_id:int,
+	owner_connection_epoch:int,owner_map_epoch:int,revision:int,present:bool,
+	head:int,left:int,right:int,body:int,leg:int,
+	weapon:int=0,shield:int=0,back:int=0,charm:int=0
+)->PackedByteArray:
+	var frame:=PackedByteArray()
+	frame.resize(Wire.PLAYER_EQUIPMENT_PRESENTATION_FRAME_BYTES)
+	frame.encode_s32(0,Wire.PLAYER_EQUIPMENT_PRESENTATION_FRAME_BYTES)
+	frame.encode_u16(4,1)
+	frame.encode_u16(6,Wire.OPCODE_PLAYER_EQUIPMENT_PRESENTATION)
+	frame.encode_s64(8,receiver_map_epoch)
+	frame.encode_s64(16,server_tick)
+	frame.encode_s64(24,owner_actor_id)
+	frame.encode_s64(32,owner_connection_epoch)
+	frame.encode_s64(40,owner_map_epoch)
+	frame.encode_u32(48,revision)
+	frame[52]=1 if present else 0
+	var definitions:=[head,left,right,body,leg,weapon,shield,back,charm]
+	var offset:=53
+	for definition_id in definitions:
+		frame.encode_s32(offset,int(definition_id))
+		offset+=4
+	return frame
+
+
 func _initialize() -> void:
 	if Wire.encode_equipment_equip(9,7,7001).hex_encode().to_upper() != EQUIP or Wire.encode_equipment_unequip(9,7,7001).hex_encode().to_upper() != UNEQUIP:
 		fail("UID-only request golden mismatch")
@@ -51,10 +78,61 @@ func _initialize() -> void:
 	if empty.is_empty() or not bool(empty.complete) or not (empty.items as Array).is_empty() or one.is_empty() or int(one.items[0].item_uid) != 7001 or int(one.items[0].slot_id) != 4 or int(one.items[0].drop_id) != 501 or int(one.items[0].enhancement_level) != 5 or int(one.items[0].durability_raw) != 80 or result.is_empty() or int(result.item_definition_id) != 3701 or int(result.slot_id) != 4:
 		fail("server equipment golden mismatch")
 		return
+	var presentation:=presentation_frame(
+		1,43,11,1,1,1,true,0,18569,18605,18502,18537)
+	var decoded_presentation:=Wire.decode_player_equipment_presentation(presentation)
+	if (
+		decoded_presentation.is_empty() or
+		int(decoded_presentation.slot_definitions[1])!=18569 or
+		int(decoded_presentation.slot_definitions[2])!=18605 or
+		int(decoded_presentation.slot_definitions[3])!=18502 or
+		int(decoded_presentation.slot_definitions[4])!=18537
+	):
+		fail("player equipment presentation decoder")
+		return
+	var base_app:={"race":0,"hair_index":0,"hair_color":1,
+		"body_index":0,"leg_index":0,"sleeve_color":0}
+	var presented:=Profile.presentation_appearance(
+		base_app,decoded_presentation.slot_definitions)
+	var overlays:Dictionary=Profile.definition(presented).get("overlays",{})
+	if (
+		int(presented.get("_equipment_left_color",-9))!=0 or
+		int(presented.get("_equipment_right_color",-9))!=2 or
+		int(presented.get("_equipment_body_color",-9))!=1 or
+		int(presented.get("_equipment_leg_color",-9))!=2 or
+		int((overlays.get(5,[]) as Array)[2])!=0 or
+		int((overlays.get(7,[]) as Array)[2])!=2 or
+		int((overlays.get(9,[]) as Array)[2])!=1 or
+		int((overlays.get(12,[]) as Array)[2])!=2
+	):
+		fail("verified equipment presentation did not preserve independent paper-doll palettes")
+		return
+	if not (Profile.definition(
+		Profile.presentation_appearance(base_app,{})).get(
+			"overlays",{}) as Dictionary).is_empty():
+		fail("authoritative empty equipment kept creation-time clothing overlays")
+		return
 
 	var world = new_world()
 	if world == null or not bool(world.snapshot().equipment_ready):
 		fail("empty equipment login baseline")
+		return
+	if not world.apply_frame(presentation):
+		fail("player equipment presentation reducer")
+		return
+	var presented_state:Dictionary=world.snapshot()
+	if (
+		not (presented_state.player_equipment_presentations as Dictionary).has(11) or
+		int(presented_state.player_equipment_presentations[11].slot_definitions[1])!=18569 or
+		int(presented_state.player_equipment_presentations[11].revision)!=1
+	):
+		fail("player equipment presentation was not stored generation-safely")
+		return
+	var detached:=presentation_frame(
+		1,44,11,1,1,0,false,0,0,0,0,0)
+	if not world.apply_frame(detached) or not (
+		world.snapshot().player_equipment_presentations as Dictionary).is_empty():
+		fail("player equipment presentation detach did not clear reducer")
 		return
 	if not world.mark_equipment_sent(1,1,7001):
 		fail("equip request state")

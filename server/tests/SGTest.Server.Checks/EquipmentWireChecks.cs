@@ -35,6 +35,17 @@ internal static class EquipmentWireChecks
             Checks.Require(resultFrame.Length==WireProtocol.EquipmentTransferResultFrameBytes&&
                 WireProtocol.TryDecodeEquipmentTransferResult(resultFrame,out var resultBack)&&
                 resultBack==result,"equipment result roundtrip");
+
+            var presentation=new PlayerEquipmentPresentationWire(
+                9,77,11,3,5,8,true,
+                0,18569,18605,18502,18537,0,0,0,0);
+            var presentationFrame=WireProtocol.EncodePlayerEquipmentPresentation(presentation);
+            Checks.Require(
+                presentationFrame.Length==WireProtocol.PlayerEquipmentPresentationFrameBytes&&
+                WireProtocol.TryDecodePlayerEquipmentPresentation(
+                    presentationFrame,out var presentationBack)&&
+                presentationBack==presentation,
+                "player equipment presentation roundtrip");
         });
 
         Checks.Run("equipment wire rejects duplicate slots and malformed results", () =>
@@ -69,7 +80,16 @@ internal static class EquipmentWireChecks
                 ]));
             }
             catch(ArgumentOutOfRangeException){badDurability=true;}
-            Checks.Require(duplicate&&badSuccess&&badFailure&&badDurability,
+            bool badPresentation=false;
+            try
+            {
+                WireProtocol.EncodePlayerEquipmentPresentation(new(
+                    9,77,11,3,5,8,false,
+                    0,18569,0,0,0,0,0,0,0));
+            }
+            catch(ArgumentOutOfRangeException){badPresentation=true;}
+            Checks.Require(duplicate&&badSuccess&&badFailure&&badDurability&&
+                badPresentation,
                 "invalid equipment wire payload was admitted");
         });
     }

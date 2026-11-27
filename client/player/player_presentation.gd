@@ -282,6 +282,18 @@ func apply_snapshot(snapshot: Dictionary, now_usec: int) -> void:
 		# Presentation may use authoritative intent state without ever mutating
 		# the reducer snapshot shared with gameplay/UI consumers.
 		var value: Dictionary = (visible[id] as Dictionary).duplicate(true)
+		var equipment_presentations:Variant=snapshot.get("player_equipment_presentations",{})
+		if equipment_presentations is Dictionary and equipment_presentations.has(int(id)):
+			var equipment:Variant=equipment_presentations[int(id)]
+			if equipment is Dictionary:
+				var base_appearance:Dictionary={}
+				var raw_appearance:Variant=value.get("appearance",{})
+				if raw_appearance is Dictionary:
+					base_appearance=raw_appearance
+				var presented:=Profile.presentation_appearance(
+					base_appearance,equipment.get("slot_definitions",{}))
+				if not presented.is_empty():
+					value["appearance"]=presented
 		var tick := int(value.get("server_tick",snapshot.get("last_aoi_tick",-1)))
 		var previous: Dictionary = _actors.get(id,{})
 		if not previous.is_empty():

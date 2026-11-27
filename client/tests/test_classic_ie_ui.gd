@@ -849,9 +849,27 @@ func _run() -> void:
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_inventory.png"))
 	world._change_inventory_tab(1)
-	if not world._inventory_equip_bg.visible or world._inventory_item_bg.visible or world._equipment_rows.get_child_count() != 1:
-		_fail("classic equipment tab did not switch to BG_Equip and bind equipped UID")
+	var equipment_slot_rects:Dictionary={
+		5:Rect2(44,63,90,24),1:Rect2(44,90,90,24),
+		2:Rect2(44,117,90,24),3:Rect2(44,144,90,24),
+		4:Rect2(44,171,90,24),6:Rect2(44,198,90,24),
+		7:Rect2(43,224,90,24),8:Rect2(43,252,90,24),
+		9:Rect2(43,278,90,26)}
+	if (
+		not world._inventory_equip_bg.visible or world._inventory_item_bg.visible or
+		world._equipment_rows.get_child_count()!=10 or
+		world._equipment_preview.get_rect()!=Rect2(136,55,100,245) or
+		(world.inventory.get_node("InventoryScrollUp") as TextureButton).get_rect()!=Rect2(204,310,17,36) or
+		(world.inventory.get_node("InventoryScrollDown") as TextureButton).get_rect()!=Rect2(204,466,17,36) or
+		world._inventory_rows.get_rect()!=Rect2(39,313,157,189)
+	):
+		_fail("022_equip source panel/preview/list geometry drifted preview=%s up=%s down=%s rows=%s children=%d bg=%s/%s" % [str(world._equipment_preview.get_rect()),str((world.inventory.get_node("InventoryScrollUp") as TextureButton).get_rect()),str((world.inventory.get_node("InventoryScrollDown") as TextureButton).get_rect()),str(world._inventory_rows.get_rect()),world._equipment_rows.get_child_count(),str(world._inventory_equip_bg.visible),str(world._inventory_item_bg.visible)])
 		return
+	for slot_id in equipment_slot_rects:
+		var slot:=world._equipment_slot_buttons.get(slot_id) as TextureButton
+		if slot==null or slot.get_rect()!=equipment_slot_rects[slot_id]:
+			_fail("022_equip source slot rect drifted slot=%d actual=%s expected=%s"%[slot_id,str(slot.get_rect()) if slot!=null else "null",str(equipment_slot_rects[slot_id])])
+			return
 	if not directory.is_empty():
 		await _capture(directory.path_join("classic_equipment.png"))
 	world._change_inventory_tab(2)

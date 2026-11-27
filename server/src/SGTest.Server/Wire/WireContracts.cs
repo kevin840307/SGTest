@@ -151,7 +151,8 @@ public enum WireOpcode : ushort
     EmotionVisual = 138,
     FriendMessageCommand = 139,
     HotkeyCommand = 140,
-    HotkeySnapshot = 141
+    HotkeySnapshot = 141,
+    PlayerEquipmentPresentation = 142
 }
 
 public enum ChatChannel : byte { Nearby = 0, World = 1, Warband = 2, Party = 3, Whisper = 4, Emotion = 5, FriendMessage = 6 }
@@ -833,6 +834,12 @@ public sealed record MechaEquipmentSnapshotWire(
 public readonly record struct MechaPresentationWire(
     long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
     long OwnerMapEpoch,bool Mounted,long MechaUid,int DefinitionId,int Level);
+public readonly record struct PlayerEquipmentPresentationWire(
+    long ReceiverMapEpoch,long ServerTick,long OwnerActorId,long OwnerConnectionEpoch,
+    long OwnerMapEpoch,uint Revision,bool Present,
+    int HeadDefinitionId,int LeftHandDefinitionId,int RightHandDefinitionId,
+    int BodyDefinitionId,int LegDefinitionId,int WeaponDefinitionId,
+    int ShieldDefinitionId,int BackDefinitionId,int CharmDefinitionId);
 
 public readonly record struct QuestOpenWire(
     long MapEpoch,uint QuestSequence,int NpcSpawnId);

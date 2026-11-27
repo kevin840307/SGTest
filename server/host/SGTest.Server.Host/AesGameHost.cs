@@ -427,6 +427,7 @@ internal static class AesGameHost
                     verified_shop_count = shops?.Count ?? 0,
                     verified_storage_count = storages?.Count ?? 0,
                     verified_equipment_rule_count = equipmentRules?.Count ?? 0,
+                    verified_equipment_combat_rule_count = equipmentCombatRules?.Count ?? 0,
                     verified_mecha_equipment_rule_count =
                         mechaEquipmentRules?.Count ?? 0,
                     verified_mecha_battery_rule_count =

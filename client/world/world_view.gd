@@ -255,7 +255,9 @@ func _snapshot_profile_definitions(snapshot: Dictionary) -> Dictionary:
 	# ready before the first AOI PlayerIdentity frame arrives.
 	var selected_appearance: Variant = snapshot.get("selected_character_appearance",{})
 	if selected_appearance is Dictionary and not selected_appearance.is_empty():
-		candidates.append({"appearance":selected_appearance})
+		candidates.append({
+			"actor_id":int(snapshot.get("actor_id",0)),
+			"appearance":selected_appearance})
 	var entities_value: Variant = snapshot.get("entities",{})
 	if entities_value is Dictionary:
 		for entity in entities_value.values():
@@ -265,6 +267,18 @@ func _snapshot_profile_definitions(snapshot: Dictionary) -> Dictionary:
 		var appearance: Variant = value.get("appearance",{})
 		if not appearance is Dictionary or appearance.is_empty():
 			continue
+		var equipment_presentations:Variant=snapshot.get("player_equipment_presentations",{})
+		var candidate_actor:=int(value.get("actor_id",0))
+		if (
+			candidate_actor>0 and equipment_presentations is Dictionary and
+			equipment_presentations.has(candidate_actor)
+		):
+			var equipment:Variant=equipment_presentations[candidate_actor]
+			if equipment is Dictionary:
+				var presented:=AppearanceProfile.presentation_appearance(
+					appearance,equipment.get("slot_definitions",{}))
+				if not presented.is_empty():
+					appearance=presented
 		var definition: Dictionary = AppearanceProfile.definition(appearance)
 		if definition.is_empty():
 			continue

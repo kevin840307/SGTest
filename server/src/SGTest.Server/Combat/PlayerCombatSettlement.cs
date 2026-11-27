@@ -197,6 +197,51 @@ public sealed class PlayerCombatSettlement
         }
     }
 
+    public bool TryApplyLiveProfile(
+        ActorSnapshot actor,CharacterCombatProfileData profile)
+    {
+        ValidateActor(actor);
+        ArgumentNullException.ThrowIfNull(profile);
+        if(profile.CurrentHp<0||profile.MaxHp<1||profile.CurrentHp>profile.MaxHp||
+           profile.Level is <1 or >ushort.MaxValue||
+           profile.Defense is <0 or >ushort.MaxValue||
+           profile.Dodge is <0 or >ushort.MaxValue)
+            return false;
+        lock(_gate)
+        {
+            ThrowIfFaulted();
+            if(!_states.TryGetValue(actor.ActorId,out var state))
+            {
+                _states.Add(actor.ActorId,new State
+                {
+                    ConnectionEpoch=actor.ConnectionEpoch,
+                    MapEpoch=actor.MapEpoch,
+                    Level=profile.Level,
+                    Defense=profile.Defense,
+                    Dodge=profile.Dodge,
+                    MaxHp=profile.MaxHp,
+                    CommittedHp=profile.CurrentHp,
+                    ProjectedHp=profile.CurrentHp,
+                    Suspended=false
+                });
+                return true;
+            }
+            if(state.ConnectionEpoch!=actor.ConnectionEpoch||
+               state.MapEpoch!=actor.MapEpoch||state.Closing||
+               state.MaxHp!=profile.MaxHp)
+                return false;
+            state.Level=profile.Level;
+            state.Defense=profile.Defense;
+            state.Dodge=profile.Dodge;
+            // Equipment commands are admitted only after GameplayReady. If an
+            // earlier fail-closed equipment refresh suspended this generation,
+            // its drain is complete before this method is called.
+            if(state.Suspended&&state.Pending==0)
+                state.Suspended=false;
+            return true;
+        }
+    }
+
     public int CurrentHp(ActorSnapshot actor)
     {
         lock (_gate)

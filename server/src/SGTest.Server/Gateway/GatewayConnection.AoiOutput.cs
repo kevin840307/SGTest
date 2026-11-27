@@ -151,6 +151,17 @@ public sealed partial class GatewayConnection
                         mecha.OwnerConnectionEpoch,mecha.OwnerMapEpoch,
                         mecha.Mounted,mecha.MechaUid,mecha.DefinitionId,mecha.Level));
                     break;
+                case AoiEventKind.PlayerEquipmentState when evt.PlayerEquipment is { } equipment:
+                    frame=WireProtocol.EncodePlayerEquipmentPresentation(new(
+                        evt.ReceiverMapEpoch,evt.Tick,equipment.OwnerActorId,
+                        equipment.OwnerConnectionEpoch,equipment.OwnerMapEpoch,
+                        equipment.Revision,equipment.Present,
+                        equipment.HeadDefinitionId,equipment.LeftHandDefinitionId,
+                        equipment.RightHandDefinitionId,equipment.BodyDefinitionId,
+                        equipment.LegDefinitionId,equipment.WeaponDefinitionId,
+                        equipment.ShieldDefinitionId,equipment.BackDefinitionId,
+                        equipment.CharmDefinitionId));
+                    break;
                 case AoiEventKind.PlayerAttackVisual when evt.PlayerAttack is { } attack:
                     frame=WireProtocol.EncodePlayerAttackVisual(new(
                         evt.ReceiverMapEpoch,evt.Tick,

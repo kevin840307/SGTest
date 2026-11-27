@@ -225,6 +225,26 @@ public sealed partial class WorldResultRouter
         return _mechaWorldUpdates.Writer.TryWrite(update);
     }
 
+    public bool TryPostPlayerEquipmentWorldState(PlayerEquipmentWorldStateUpdate update)
+    {
+        if(update.OwnerActorId<=0||update.OwnerConnectionEpoch<=0||
+           update.OwnerMapEpoch<=0)return false;
+        if(!update.Present)
+        {
+            for(int slot=1;slot<=9;slot++)
+                if(update.DefinitionForSlot(slot)!=0)return false;
+        }
+        else
+        {
+            for(int slot=1;slot<=9;slot++)
+            {
+                int definitionId=update.DefinitionForSlot(slot);
+                if(definitionId is <0 or >100000000)return false;
+            }
+        }
+        return _playerEquipmentWorldUpdates.Writer.TryWrite(update);
+    }
+
     public bool TryRequestResync(TrustedWorldResyncRequest request)
     {
         if (request.ActorId <= 0 || request.ConnectionEpoch <= 0 || request.MapEpoch <= 0)

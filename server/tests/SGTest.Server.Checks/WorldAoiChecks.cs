@@ -49,6 +49,8 @@ internal static class WorldAoiChecks
             PetInterest);
         Checks.Run("mounted Mecha presentation follows player AOI and heals transfer generation",
             MechaInterest);
+        Checks.Run("player equipment presentation follows player AOI and clears on detach",
+            PlayerEquipmentInterest);
         Checks.Run("pet attack and skill visuals reach visible remote peers without duplicating owner result",
             PetAttackVisualInterest);
         Checks.Run("player attack visual reaches only viewers seeing attacker and target",
@@ -146,6 +148,83 @@ internal static class WorldAoiChecks
                 x.Pet?.PetUid==9002&&x.Pet?.OwnerMapEpoch==transferred.MapEpoch&&
                 x.Pet?.X==transferred.X&&x.Pet?.Y==transferred.Y),
             "active pet did not heal owner generation/spawn position after transfer");
+    }
+
+    private static void PlayerEquipmentInterest()
+    {
+        var aoi=new WorldAoi(new WorldAoiOptions(
+            EnterHalfWidth:200,EnterHalfHeight:150,ExitMargin:60,BucketSize:64));
+        var owner=Actor(801,15,24,24,connection:31,mapEpoch:7);
+        var peer=Actor(802,15,48,24,connection:32,mapEpoch:8);
+        var far=Actor(803,15,1200,24,connection:33,mapEpoch:9);
+        Life(aoi,1,Join(owner),Join(peer),Join(far));
+        Drain(aoi,owner);Drain(aoi,peer);Drain(aoi,far);
+
+        var first=new PlayerEquipmentWorldStateUpdate(
+            owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,1,true,
+            0,18569,18603,18501,18535,0,0,0,0);
+        aoi.ApplyPlayerEquipmentState(first);
+        var ownEvents=Drain(aoi,owner);
+        var peerEvents=Drain(aoi,peer);
+        Require(ownEvents is [var own]&&
+            own.Kind==AoiEventKind.PlayerEquipmentState&&own.PlayerEquipment==first&&
+            peerEvents is [var seen]&&seen.PlayerEquipment==first&&
+            Drain(aoi,far).Length==0,
+            "equipment presentation was not scoped to player visibility");
+
+        var movedPeer=peer with {X=650,EntityRevision=2};
+        Move(aoi,2,movedPeer);
+        var lost=Drain(aoi,movedPeer);
+        Require(lost.Any(x=>x.Kind==AoiEventKind.PlayerEquipmentState&&
+                x.PlayerEquipment is {Present:false,LeftHandDefinitionId:0,
+                    RightHandDefinitionId:0,BodyDefinitionId:0,LegDefinitionId:0}),
+            "equipment presentation did not clear when observer lost owner visibility");
+
+        var returned=movedPeer with {X=48,EntityRevision=3};
+        Move(aoi,3,returned);
+        Require(Drain(aoi,returned).Any(x=>
+                x.Kind==AoiEventKind.PlayerEquipmentState&&
+                x.PlayerEquipment is {Present:true,Revision:1,BodyDefinitionId:18501}),
+            "equipment presentation did not rebuild after owner re-entered AOI");
+
+        var changed=first with
+        {
+            Revision=2,
+            LeftHandDefinitionId=18570,
+            RightHandDefinitionId=18605,
+            BodyDefinitionId=18502,
+            LegDefinitionId=18537
+        };
+        aoi.ApplyPlayerEquipmentState(changed);
+        Require(Drain(aoi,owner).Single(x=>x.Kind==AoiEventKind.PlayerEquipmentState)
+                .PlayerEquipment==changed&&
+            Drain(aoi,returned).Single(x=>x.Kind==AoiEventKind.PlayerEquipmentState)
+                .PlayerEquipment==changed,
+            "equipment revision did not fan out to visible players");
+
+        aoi.ApplyPlayerEquipmentState(new(
+            owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch,0,false,
+            0,0,0,0,0,0,0,0,0));
+        Require(Drain(aoi,owner).Single(x=>x.Kind==AoiEventKind.PlayerEquipmentState)
+                .PlayerEquipment is {Present:false}&&
+            Drain(aoi,returned).Single(x=>x.Kind==AoiEventKind.PlayerEquipmentState)
+                .PlayerEquipment is {Present:false},
+            "equipment detach did not clear owner and visible peer");
+
+        var persisted=changed with {Revision=3};
+        aoi.ApplyPlayerEquipmentState(persisted);
+        Drain(aoi,owner);Drain(aoi,returned);
+        Life(aoi,4,Leave(owner));
+        Drain(aoi,owner);Drain(aoi,returned);
+        var transferred=owner with
+        {
+            MapId=13,MapEpoch=owner.MapEpoch+1,EntityRevision=1
+        };
+        Life(aoi,5,Join(transferred));
+        Require(Drain(aoi,transferred).Any(x=>
+                x.Kind==AoiEventKind.PlayerEquipmentState&&
+                x.PlayerEquipment is {Present:true,OwnerMapEpoch:8,Revision:3}),
+            "equipment presentation did not heal owner generation after transfer");
     }
 
     private static void MechaInterest()

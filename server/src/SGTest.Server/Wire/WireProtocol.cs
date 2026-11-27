@@ -721,6 +721,7 @@ public static partial class WireProtocol
             139 => WireOpcode.FriendMessageCommand,
             140 => WireOpcode.HotkeyCommand,
             141 => WireOpcode.HotkeySnapshot,
+            142 => WireOpcode.PlayerEquipmentPresentation,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -767,6 +768,7 @@ public static partial class WireProtocol
                 (advertised-MechaEquipmentSnapshotHeaderBytes)%
                     MechaEquipmentSnapshotEntryBytes==0,
             WireOpcode.MechaPresentation => advertised == MechaPresentationFrameBytes,
+            WireOpcode.PlayerEquipmentPresentation => advertised == PlayerEquipmentPresentationFrameBytes,
             WireOpcode.PetCommand => advertised == PetCommandFrameBytes,
             WireOpcode.PetResult => advertised == PetResultFrameBytes,
             WireOpcode.PetSnapshot => advertised >= PetSnapshotHeaderBytes &&

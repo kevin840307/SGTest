@@ -169,7 +169,7 @@ func _ready() -> void:
 	recovered2_auth.skin_requested.connect(_select_recovered2_skin)
 	classic_auth.bind_session(session_panel,world_view.store)
 	recovered2_world.bind_session(session_panel)
-	classic_world.bind_session(session_panel)
+	classic_world.bind_session(session_panel,world_view.store)
 	# Alternative UI selection is intentionally not player-facing right now;
 	# --dev-ui can still expose the same live switch path without reconnecting.
 	classic_world.set_skin_switch_visible(dev_overlay_enabled)
@@ -608,6 +608,11 @@ func _notification(what: int) -> void:
 func _connection_changed(active: bool) -> void:
 	if not active:
 		_cancel_mouse_autorun(false)
+		# A disconnected generation must not remain authoritative to the
+		# source-specific world shells while a new ClientSession is logging in.
+		# SessionPanel already clears its own reducer snapshot; clear Main's
+		# presentation snapshot at the same generation boundary.
+		_last_snapshot = {}
 	for button in _map_buttons:
 		button.disabled = active
 	_held.clear()

@@ -72,6 +72,8 @@ internal static class Program
             return await MechaLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--equipment"])
             return await EquipmentLoginFixture.RunAsync().ConfigureAwait(false);
+        if (args is ["--equipment-main-seed", var seedDb, var seedAppearance])
+            return await EquipmentMainSeed.RunAsync(seedDb,seedAppearance).ConfigureAwait(false);
         if (args is ["--bank"])
             return await BankLoginFixture.RunAsync().ConfigureAwait(false);
         if (args is ["--repair"])

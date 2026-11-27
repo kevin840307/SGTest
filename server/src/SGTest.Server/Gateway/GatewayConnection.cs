@@ -99,7 +99,7 @@ public sealed partial class GatewayConnection
     private long _worldReadyAckedMapEpoch;
     private long _worldReadyAckedTick = -1;
     private bool _resyncPending;
-    private readonly TrustedCombatProfile? _combatProfile;
+    private TrustedCombatProfile? _combatProfile;
     private uint _lastChatSequence;
     private uint _lastPartySequence;
     private uint _lastClanSequence;
@@ -168,6 +168,28 @@ public sealed partial class GatewayConnection
     public ConnectionBinding Binding
     {
         get { lock (_bindingGate) return _binding; }
+    }
+
+    private TrustedCombatProfile? CombatProfileSnapshot()
+    {
+        lock(_bindingGate)return _combatProfile;
+    }
+
+    internal bool TryUpdateTrustedCombatProfile(
+        ConnectionBinding expected,TrustedCombatProfile? profile)
+    {
+        if(profile is { } value&&
+           (value.Attack<0||value.Defense<0||value.Hit<0||value.Dodge<0||
+            !double.IsFinite(value.AttackRange)||value.AttackRange<=0||
+            value.AttackRange>500||value.AttackCooldownTicks is <1 or >3600||
+            value.Level is <1 or >ushort.MaxValue))
+            return false;
+        lock(_bindingGate)
+        {
+            if(_closed||_binding!=expected)return false;
+            _combatProfile=profile;
+            return true;
+        }
     }
 
     public bool TryGetPlayerIdentity(out PlayerIdentityPresentation identity)

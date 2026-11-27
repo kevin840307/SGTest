@@ -36,6 +36,15 @@ const EMOTION_DRAW_SLOTS := {
 	"ZI":[11,13,12,10,9,6,5,8,7,3,4,0,1,2],
 }
 const ROBOT_ZC_DRAW_SLOTS := [11,13,12,10,9,0,1,4,3,2,8,7,6,5]
+# Source-verified starter definition -> palette mappings from HK2 CreateCharPara.dat
+# through build_recovered2_character_rules.py. Unknown definitions never invent art.
+const EQUIPMENT_BODY_COLORS := {18501:0,18502:1,18503:2}
+const EQUIPMENT_LEG_COLORS := {18535:0,18536:1,18537:2}
+const EQUIPMENT_LEFT_COLORS := {18569:0,18570:1,18571:2}
+const EQUIPMENT_RIGHT_COLORS := {18603:0,18604:1,18605:2}
+const PRESENTATION_FIELDS := [
+	"_equipment_body_color","_equipment_leg_color",
+	"_equipment_left_color","_equipment_right_color"]
 
 var key := ""
 var parts: Dictionary = {}
@@ -48,18 +57,52 @@ var hit_available := false
 var death_available := false
 var emotion_available: Dictionary = {}
 
+static func presentation_appearance(
+	appearance:Dictionary,slot_definitions:Dictionary)->Dictionary:
+	var base:Dictionary
+	if appearance.is_empty():
+		base={
+			"race":0,"hair_index":0,"hair_color":0,
+			"body_index":0,"leg_index":0,"sleeve_color":0}
+	else:
+		if appearance_key(appearance).is_empty():
+			return {}
+		base=appearance.duplicate(true)
+	var slot1:=int(slot_definitions.get(1,slot_definitions.get("1",0)))
+	var slot2:=int(slot_definitions.get(2,slot_definitions.get("2",0)))
+	var slot3:=int(slot_definitions.get(3,slot_definitions.get("3",0)))
+	var slot4:=int(slot_definitions.get(4,slot_definitions.get("4",0)))
+	base["_equipment_left_color"]=int(EQUIPMENT_LEFT_COLORS.get(slot1,-1))
+	base["_equipment_right_color"]=int(EQUIPMENT_RIGHT_COLORS.get(slot2,-1))
+	base["_equipment_body_color"]=int(EQUIPMENT_BODY_COLORS.get(slot3,-1))
+	base["_equipment_leg_color"]=int(EQUIPMENT_LEG_COLORS.get(slot4,-1))
+	return base
+
+
 static func appearance_key(appearance: Dictionary = {}) -> String:
 	if appearance.is_empty():
 		return "0:0:0:0:0:0"
-	if appearance.size() not in [3,5,6] or 			not appearance.has_all(["race","hair_index","hair_color"]):
+	var presentation_count:=0
+	for presentation_field in PRESENTATION_FIELDS:
+		if appearance.has(presentation_field):
+			presentation_count+=1
+	if presentation_count not in [0,PRESENTATION_FIELDS.size()]:
 		return ""
-	if appearance.size() >= 5 and 			not appearance.has_all(["body_index","leg_index"]):
+	var base_size:=appearance.size()-presentation_count
+	if base_size not in [3,5,6] or not appearance.has_all(["race","hair_index","hair_color"]):
 		return ""
-	if appearance.size() == 6 and not appearance.has("sleeve_color"):
+	if base_size >= 5 and not appearance.has_all(["body_index","leg_index"]):
+		return ""
+	if base_size == 6 and not appearance.has("sleeve_color"):
 		return ""
 	for field in appearance:
 		if not appearance[field] is int:
 			return ""
+	for presentation_field in PRESENTATION_FIELDS:
+		if appearance.has(presentation_field):
+			var palette:=int(appearance[presentation_field])
+			if palette < -1 or palette > 2:
+				return ""
 	var race := int(appearance.race)
 	var hair := int(appearance.hair_index)
 	var color := int(appearance.hair_color)
@@ -77,7 +120,12 @@ static func appearance_key(appearance: Dictionary = {}) -> String:
 		return ""
 	if race == 4 and (body != 0 or leg != 0 or sleeve != 0):
 		return ""
-	return "%d:%d:%d:%d:%d:%d" % [race,hair,color,body,leg,sleeve]
+	var base_key:="%d:%d:%d:%d:%d:%d" % [race,hair,color,body,leg,sleeve]
+	if presentation_count==0:
+		return base_key
+	return base_key+":e:%d:%d:%d:%d" % [
+		int(appearance._equipment_body_color),int(appearance._equipment_leg_color),
+		int(appearance._equipment_left_color),int(appearance._equipment_right_color)]
 
 static func definition(appearance: Dictionary = {}) -> Dictionary:
 	var resolved_key := appearance_key(appearance)
@@ -91,12 +139,18 @@ static func definition(appearance: Dictionary = {}) -> Dictionary:
 	var body_index := int(value.get("body_index",0))
 	var leg_index := int(value.get("leg_index",0))
 	var sleeve_color := int(value.get("sleeve_color",0))
+	var body_color:=int(value.get("_equipment_body_color",body_index))
+	var leg_color:=int(value.get("_equipment_leg_color",leg_index))
+	var left_color:=int(value.get("_equipment_left_color",sleeve_color))
+	var right_color:=int(value.get("_equipment_right_color",sleeve_color))
 	if race_index == 3:
 		# Robot already uses the zero Arm00 sprites as its base limbs. Original
 		# Left_hand/Right_hand share one selector, so color both arms in place.
 		var robot := ROBOT_BASE_PARTS.duplicate(true)
-		robot[5] = [robot[5][0],robot[5][1],sleeve_color]
-		robot[7] = [robot[7][0],robot[7][1],sleeve_color]
+		# Robot base limbs are themselves equipment sprites. A missing/unknown
+		# verified mapping falls back to palette 0 instead of inventing art.
+		robot[5] = [robot[5][0],robot[5][1],maxi(left_color,0)]
+		robot[7] = [robot[7][0],robot[7][1],maxi(right_color,0)]
 		return {
 			"key":resolved_key,
 			"parts":robot,
@@ -120,27 +174,25 @@ static func definition(appearance: Dictionary = {}) -> Dictionary:
 				str(resolved[slot][1]).replace("B-",prefix+"-")]
 	var equipment_overlays := {}
 	if race_index != 4:
-		# Recovered builds Standard limbs first, then all starter equipment.
-		# Body00/Leg00/L-Arm00/R-Arm00 stay the same sprites; color_index 0/1/2
-		# selects the source palette. Shorts and sleeves never replace bare limbs.
-		equipment_overlays = {
-			9:[
+		# Recovered builds Standard limbs first, then source-verified starter
+		# equipment. A -1 presentation color means the authoritative slot is
+		# empty or its definition has no verified paper-doll mapping.
+		if body_color>=0:
+			equipment_overlays[9]=[
 				"equipment/%s/cloth/body00" % race,
-				"%s-BODY00" % prefix,
-				body_index],
-			12:[
+				"%s-BODY00" % prefix,body_color]
+		if leg_color>=0:
+			equipment_overlays[12]=[
 				"equipment/%s/cloth/leg00" % race,
-				"%s-LEG00" % prefix,
-				leg_index],
-			5:[
+				"%s-LEG00" % prefix,leg_color]
+		if left_color>=0:
+			equipment_overlays[5]=[
 				"equipment/%s/cloth/l_arm00" % race,
-				"%s-L-ARM00" % prefix,
-				sleeve_color],
-			7:[
+				"%s-L-ARM00" % prefix,left_color]
+		if right_color>=0:
+			equipment_overlays[7]=[
 				"equipment/%s/cloth/r_arm00" % race,
-				"%s-R-ARM00" % prefix,
-				sleeve_color],
-		}
+				"%s-R-ARM00" % prefix,right_color]
 	return {
 		"key":resolved_key,
 		"parts":resolved,

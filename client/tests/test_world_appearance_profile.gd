@@ -56,6 +56,31 @@ func _run() -> void:
 	var remote_app := {
 		"race":1,"hair_index":0,"hair_color":2,
 		"body_index":2,"leg_index":1,"sleeve_color":1}
+	var equipped_app:=Profile.presentation_appearance(
+		own_app,{1:18569,2:18605,3:18502,4:18537})
+	var equipped_definition:=Profile.definition(equipped_app)
+	var equipped_overlays:Dictionary=equipped_definition.get("overlays",{})
+	check(
+		int(equipped_app.get("_equipment_left_color",-9))==0 and
+		int(equipped_app.get("_equipment_right_color",-9))==2 and
+		int(equipped_app.get("_equipment_body_color",-9))==1 and
+		int(equipped_app.get("_equipment_leg_color",-9))==2,
+		"verified equipment definitions did not preserve independent palettes")
+	check(
+		int((equipped_overlays.get(5,[]) as Array)[2])==0 and
+		int((equipped_overlays.get(7,[]) as Array)[2])==2 and
+		int((equipped_overlays.get(9,[]) as Array)[2])==1 and
+		int((equipped_overlays.get(12,[]) as Array)[2])==2,
+		"verified equipment palettes did not reach paper-doll overlay slots")
+	var empty_equipment:=Profile.presentation_appearance(own_app,{})
+	check(
+		(Profile.definition(empty_equipment).get("overlays",{}) as Dictionary).is_empty(),
+		"authoritative empty equipment kept creation-time clothing overlays")
+	var unknown_equipment:=Profile.presentation_appearance(
+		own_app,{1:999999,2:999998,3:999997,4:999996})
+	check(
+		(Profile.definition(unknown_equipment).get("overlays",{}) as Dictionary).is_empty(),
+		"unverified equipment definition invented paper-doll art")
 	var own := actor_state(1,7872.0,own_app,1)
 	# Regression: first WorldReady may arrive before AOI PlayerIdentity/self_state
 	# carries appearance. The authenticated selected-character baseline must be

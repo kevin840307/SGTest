@@ -413,7 +413,7 @@ public sealed partial class GatewayConnection
             return postSkill(new TrustedSkillUse(
                 bound.ActorId,bound.ConnectionEpoch,skill.MapEpoch,
                 skill.SkillSequence,skill.SkillId,skill.TargetEntityId,
-                _combatProfile))
+                CombatProfileSnapshot()))
                 ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
         }
 
@@ -475,7 +475,7 @@ public sealed partial class GatewayConnection
             var request=new TrustedChatCommand(
                 bound.ActorId,bound.ConnectionEpoch,emotion.MapEpoch,
                 emotion.EmotionSequence,ChatChannel.Emotion,emotion.EmotionId,string.Empty,
-                PlayerLevel:_combatProfile?.Level??0);
+                PlayerLevel:CombatProfileSnapshot()?.Level??0);
             if(!postChat(request))
                 return WireFrameDisposition.Backpressured;
             _lastChatSequence=emotion.EmotionSequence;
@@ -493,7 +493,7 @@ public sealed partial class GatewayConnection
             var request=new TrustedChatCommand(
                 bound.ActorId,bound.ConnectionEpoch,chat.MapEpoch,
                 chat.ChatSequence,chat.Channel,chat.BubbleType,chat.Message,
-                PlayerLevel:_combatProfile?.Level??0);
+                PlayerLevel:CombatProfileSnapshot()?.Level??0);
             if(!postChat(request))
                 return WireFrameDisposition.Backpressured;
             _lastChatSequence=chat.ChatSequence;
@@ -645,7 +645,7 @@ public sealed partial class GatewayConnection
             var request=new TrustedPetAttack(
                 bound.ActorId,bound.ConnectionEpoch,petAttack.MapEpoch,
                 petAttack.AttackSequence,petAttack.PetUid,petAttack.TargetEntityId,
-                _combatProfile);
+                CombatProfileSnapshot());
             if(!postPetAttack(request))
                 return WireFrameDisposition.Backpressured;
             _lastPetAttackSequence=petAttack.AttackSequence;
@@ -662,7 +662,7 @@ public sealed partial class GatewayConnection
             var request=new TrustedPetSkill(
                 bound.ActorId,bound.ConnectionEpoch,petSkill.MapEpoch,
                 petSkill.SkillSequence,petSkill.PetUid,petSkill.SkillId,
-                petSkill.TargetEntityId,_combatProfile);
+                petSkill.TargetEntityId,CombatProfileSnapshot());
             if(!postPetSkill(request))
                 return WireFrameDisposition.Backpressured;
             _lastPetSkillSequence=petSkill.SkillSequence;
@@ -690,7 +690,7 @@ public sealed partial class GatewayConnection
             return postPvpSkill(new TrustedPvpSkill(
                 bound.ActorId,bound.ConnectionEpoch,pvpSkill.MapEpoch,
                 pvpSkill.SkillSequence,pvpSkill.SkillId,pvpSkill.TargetActorId,
-                _combatProfile))
+                CombatProfileSnapshot()))
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
@@ -701,7 +701,7 @@ public sealed partial class GatewayConnection
                 return WireFrameDisposition.ProtocolViolation;
             return postPvpAttack(new TrustedPvpAttack(
                 bound.ActorId,bound.ConnectionEpoch,pvpAttack.MapEpoch,
-                pvpAttack.AttackSequence,pvpAttack.TargetActorId,_combatProfile))
+                pvpAttack.AttackSequence,pvpAttack.TargetActorId,CombatProfileSnapshot()))
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 
@@ -724,7 +724,7 @@ public sealed partial class GatewayConnection
                 return WireFrameDisposition.ProtocolViolation;
             var request = new TrustedNormalAttack(
                 bound.ActorId, bound.ConnectionEpoch, attack.MapEpoch,
-                attack.AttackSequence, attack.TargetEntityId, _combatProfile);
+                attack.AttackSequence, attack.TargetEntityId, CombatProfileSnapshot());
             return postAttack(request)
                 ? WireFrameDisposition.Accepted : WireFrameDisposition.Backpressured;
         }
