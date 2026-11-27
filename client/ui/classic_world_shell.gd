@@ -66,6 +66,12 @@ class SourceLineEdit extends Control:
 	func focus_editor()->void:
 		_editor.grab_focus()
 
+	func release_editor_focus()->void:
+		_editor.release_focus()
+
+	func select_all()->void:
+		_editor.select_all()
+
 	func _gui_input(event:InputEvent)->void:
 		if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT and event.pressed:
 			_editor.grab_focus()
@@ -298,8 +304,29 @@ var _friend_message_index:=-1
 var _friend_message_auto_latest:=true
 var _friend_message_last_count:=0
 var _player_shop_rows:=VBoxContainer.new()
-var _player_shop_price:=SpinBox.new()
-var _player_shop_buy:=Button.new()
+var _player_shop_inventory_rows:=VBoxContainer.new()
+var _player_shop_buy:TextureButton
+var _player_shop_action_text:RichTextLabel
+var _player_shop_name_label:RichTextLabel
+var _player_shop_name_dialog:=Control.new()
+var _player_shop_name_input:=SourceLineEdit.new()
+var _player_shop_name_confirm:TextureButton
+var _player_shop_sell_price_dialog:=Control.new()
+var _player_shop_sell_price_input:=SourceLineEdit.new()
+var _player_shop_sell_quantity_dialog:=Control.new()
+var _player_shop_sell_quantity_input:=SourceLineEdit.new()
+var _player_shop_sell_uid:=0
+var _player_shop_sell_price_value:=0
+var _player_shop_buy_dialog:=Control.new()
+var _player_shop_buy_seller:=0
+var _player_shop_buy_listing:=0
+var _player_shop_buy_quantity:RichTextLabel
+var _player_shop_buy_total:RichTextLabel
+var _player_shop_close_question:=Control.new()
+var _player_shop_close_question_text:RichTextLabel
+var _player_shop_sign_layer:=Control.new()
+var _player_shop_signs:Dictionary={}
+var _world_view
 var _storage_rows:=VBoxContainer.new()
 var _storage_inventory_rows:=VBoxContainer.new()
 var _bank_status: Label
@@ -334,6 +361,11 @@ func _init()->void:
 	stage.size=BASE_SIZE
 	stage.mouse_filter=Control.MOUSE_FILTER_PASS
 	stage.add_child(hud)
+	_player_shop_sign_layer.name="PlayerShopSignLayer"
+	_player_shop_sign_layer.size=BASE_SIZE
+	_player_shop_sign_layer.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	stage.add_child(_player_shop_sign_layer)
+	stage.move_child(_player_shop_sign_layer,0)
 	hud.name="ClassicHud"
 	hud.size=BASE_SIZE
 	hud.mouse_filter=Control.MOUSE_FILTER_PASS
@@ -492,6 +524,7 @@ func _animate_status_bars()->void:
 
 func _process(_delta:float)->void:
 	_animate_status_bars()
+	_refresh_player_shop_signs()
 
 
 func _unhandled_key_input(event:InputEvent)->void:
@@ -515,6 +548,22 @@ func _unhandled_key_input(event:InputEvent)->void:
 		return
 	if _friend_question.visible:
 		_reject_friend_invite()
+		get_viewport().set_input_as_handled()
+		return
+	if _player_shop_buy_dialog.visible:
+		_cancel_player_shop_buy()
+		get_viewport().set_input_as_handled()
+		return
+	if _player_shop_sell_price_dialog.visible or _player_shop_sell_quantity_dialog.visible:
+		_cancel_player_shop_sell()
+		get_viewport().set_input_as_handled()
+		return
+	if _player_shop_close_question.visible:
+		_cancel_player_shop_close_all()
+		get_viewport().set_input_as_handled()
+		return
+	if _player_shop_name_dialog.visible:
+		_close_player_shop_name_dialog()
 		get_viewport().set_input_as_handled()
 		return
 	if _panel!=null and _panel.cancel_pre_use_skill():
@@ -724,7 +773,7 @@ func _build_hud()->void:
 	_texture_button(secondary_menu,"SkillCommand","B_BASIC_SKILL",Vector2(3,59),Vector2(24,23),func():_toggle(skill_window),"技能")
 	_texture_button(secondary_menu,"PartyCommand","B_COMMAND_TEAM",Vector2(2,86),Vector2(24,23),func():_toggle(party_window),"隊伍")
 	_texture_button(secondary_menu,"GuildCommand","B_BASIC_GUILD",Vector2(3,113),Vector2(24,23),func():_toggle(clan_window),"戰團")
-	_texture_button(secondary_menu,"PlayerShopCommand","B_BASIC_PSHOP",Vector2(4,142),Vector2(21,19),func():_toggle(player_shop_window),"小商店")
+	_texture_button(secondary_menu,"PlayerShopCommand","B_BASIC_PSHOP",Vector2(4,142),Vector2(21,19),_open_player_shop_ui,"小商店")
 	_texture_button(secondary_menu,"QuestCommand","B_BASIC_QUEST",Vector2(2,169),Vector2(25,22),func():_toggle(quest_window),"任務")
 	_texture_button(secondary_menu,"GmCommand","B_BASIC_GM",Vector2(2,196),Vector2(25,22),func():pass,"GM")
 	_texture_button(secondary_menu,"SystemCommand","B_BASIC_SYSTEM",Vector2(2,222),Vector2(24,23),func():_toggle(settings_window),"系統")
@@ -2255,26 +2304,132 @@ func _build_quest()->void:
 	quest_window.add_child(_quest_choices)
 
 func _build_player_shop()->void:
+	# 092_PShop.itf: 770x506. Keep decoded local rects for the stall name,
+	# selling rows and right-side inventory instead of the former generic list.
 	player_shop_window=_window("PlayerShopWindow","BG_PSHOP_01",Vector2(770,506),Vector2(15,69))
-	_player_shop_price.name="PlayerShopPrice"
-	_player_shop_price.position=Vector2(565,32)
-	_player_shop_price.size=Vector2(135,24)
-	_player_shop_price.min_value=1
-	_player_shop_price.max_value=9000000000000000
-	_player_shop_price.step=1
-	_player_shop_price.value=100
-	player_shop_window.add_child(_player_shop_price)
+	_player_shop_name_label=_itf_text(player_shop_window,"PlayerShopName",Rect2(79,37,170,12),10)
+	_itf_text(player_shop_window,"PlayerShopNameCaption",Rect2(3,37,72,14),10).text="小商店名稱："
+	_itf_text(player_shop_window,"PlayerShopSellTitle",Rect2(63,68,60,14),10,true).text="發售之商品"
+	_itf_text(player_shop_window,"PlayerShopPriceTitle",Rect2(197,68,60,14),10,true).text="發售之價格"
+	var rename:=_hit(player_shop_window,"PlayerShopRename",Rect2(258,36,62,15),_open_player_shop_name_dialog,"修改小商店名稱")
+	rename.text=""
+	_itf_text(player_shop_window,"PlayerShopRenameText",Rect2(265,38,48,14),10,true).text="修改名稱"
 	_player_shop_rows.name="PlayerShopRows"
-	_player_shop_rows.position=Vector2(36,62)
-	_player_shop_rows.size=Vector2(670,385)
-	_player_shop_rows.add_theme_constant_override("separation",1)
+	_player_shop_rows.position=Vector2(9,85)
+	_player_shop_rows.size=Vector2(306,244)
+	_player_shop_rows.add_theme_constant_override("separation",2)
 	player_shop_window.add_child(_player_shop_rows)
-	_player_shop_buy.text="購買目前查看中的商品"
-	_player_shop_buy.position=Vector2(525,461)
-	_player_shop_buy.size=Vector2(180,26)
-	_player_shop_buy.flat=true
-	_player_shop_buy.pressed.connect(_buy_inspected_player_shop)
-	player_shop_window.add_child(_player_shop_buy)
+	_player_shop_inventory_rows.name="PlayerShopInventoryRows"
+	_player_shop_inventory_rows.position=Vector2(553,62)
+	_player_shop_inventory_rows.size=Vector2(150,432)
+	_player_shop_inventory_rows.add_theme_constant_override("separation",2)
+	player_shop_window.add_child(_player_shop_inventory_rows)
+	_player_shop_action_text=_itf_text(player_shop_window,"PlayerShopActionText",Rect2(9,341,214,14),10)
+	_player_shop_buy=_texture_button(
+		player_shop_window,"PlayerShopCloseAll","YELLOW_BUTTON",Vector2(230,337),Vector2(85,21),
+		_open_player_shop_close_question,"關閉小商店")
+	_itf_text(player_shop_window,"PlayerShopCloseAllText",Rect2(246,341,54,12),10,true).text="關閉小商店"
+
+	# 092_PShop_Name.itf.
+	_player_shop_name_dialog.name="PlayerShopNameDialog"
+	_player_shop_name_dialog.position=Vector2(272,250)
+	_player_shop_name_dialog.size=Vector2(256,100)
+	_player_shop_name_dialog.visible=false
+	_player_shop_name_dialog.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_player_shop_name_dialog)
+	_background(_player_shop_name_dialog,"BG_RANK_01",_player_shop_name_dialog.size)
+	_texture_button(_player_shop_name_dialog,"PlayerShopNameClose","CLOSESCREEN",Vector2(239,4),Vector2(16,16),_close_player_shop_name_dialog,"取消")
+	_texture_button(_player_shop_name_dialog,"PlayerShopNameHelp","B_ONLINEHELP",Vector2(222,4),Vector2(16,16),Callable(),"說明")
+	_itf_text(_player_shop_name_dialog,"PlayerShopNamePrompt",Rect2(9,29,220,14),10).text="輸入小商店名稱(上限為20個中文字)"
+	_player_shop_name_input.name="PlayerShopNameInput"
+	_player_shop_name_input.position=Vector2(15,53)
+	_player_shop_name_input.size=Vector2(236,12)
+	_player_shop_name_input.max_length=20
+	_player_shop_name_input.display_font=_character_raster_font
+	_player_shop_name_input.display_font_size=12
+	_player_shop_name_input.baseline=10.0
+	_player_shop_name_input.text_changed.connect(func(_value):_update_player_shop_name_action())
+	_player_shop_name_input.text_submitted.connect(func(_value):_submit_player_shop_name())
+	_player_shop_name_dialog.add_child(_player_shop_name_input)
+	_player_shop_name_confirm=_texture_button(_player_shop_name_dialog,"PlayerShopNameConfirm","YELLOW_BUTTON",Vector2(167,73),Vector2(85,21),_submit_player_shop_name,"確定")
+	_itf_text(_player_shop_name_dialog,"PlayerShopNameConfirmText",Rect2(198,77,24,14),10,true).text="確定"
+	_update_player_shop_name_action()
+
+	# 092_PShop_Sell_Item_01.itf: price entry.
+	_player_shop_sell_price_dialog.name="PlayerShopSellPriceDialog"
+	_player_shop_sell_price_dialog.position=Vector2(289,238)
+	_player_shop_sell_price_dialog.size=Vector2(223,125)
+	_player_shop_sell_price_dialog.visible=false
+	_player_shop_sell_price_dialog.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_player_shop_sell_price_dialog)
+	_background(_player_shop_sell_price_dialog,"BG_PSHOP_ITEM_01",_player_shop_sell_price_dialog.size)
+	_player_shop_sell_price_input.name="PlayerShopSellPriceInput"
+	_player_shop_sell_price_input.position=Vector2(82,70)
+	_player_shop_sell_price_input.size=Vector2(94,14)
+	_player_shop_sell_price_input.max_length=16
+	_player_shop_sell_price_input.display_font=_character_raster_font
+	_player_shop_sell_price_input.display_font_size=12
+	_player_shop_sell_price_input.baseline=11.0
+	_player_shop_sell_price_input.text_changed.connect(func(_value):_update_player_shop_sell_price_action())
+	_player_shop_sell_price_input.text_submitted.connect(func(_value):_confirm_player_shop_sell_price())
+	_player_shop_sell_price_dialog.add_child(_player_shop_sell_price_input)
+	_texture_button(_player_shop_sell_price_dialog,"PlayerShopSellPriceOk","YELLOW_BUTTON",Vector2(39,98),Vector2(85,21),_confirm_player_shop_sell_price,"確定")
+	_texture_button(_player_shop_sell_price_dialog,"PlayerShopSellPriceCancel","YELLOW_BUTTON",Vector2(132,98),Vector2(85,21),_cancel_player_shop_sell,"取消")
+	_itf_text(_player_shop_sell_price_dialog,"PlayerShopSellPriceOkText",Rect2(69,102,24,12),10,true).text="確定"
+	_itf_text(_player_shop_sell_price_dialog,"PlayerShopSellPriceCancelText",Rect2(162,102,24,12),10,true).text="取消"
+
+	# 092_PShop_Sell_Item_02.itf: quantity entry.
+	_player_shop_sell_quantity_dialog.name="PlayerShopSellQuantityDialog"
+	_player_shop_sell_quantity_dialog.position=Vector2(289,238)
+	_player_shop_sell_quantity_dialog.size=Vector2(223,125)
+	_player_shop_sell_quantity_dialog.visible=false
+	_player_shop_sell_quantity_dialog.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_player_shop_sell_quantity_dialog)
+	_background(_player_shop_sell_quantity_dialog,"BG_PSHOP_ITEM_02",_player_shop_sell_quantity_dialog.size)
+	_player_shop_sell_quantity_input.name="PlayerShopSellQuantityInput"
+	_player_shop_sell_quantity_input.position=Vector2(67,71)
+	_player_shop_sell_quantity_input.size=Vector2(69,12)
+	_player_shop_sell_quantity_input.max_length=7
+	_player_shop_sell_quantity_input.display_font=_character_raster_font
+	_player_shop_sell_quantity_input.display_font_size=12
+	_player_shop_sell_quantity_input.baseline=10.0
+	_player_shop_sell_quantity_input.text_changed.connect(func(_value):_update_player_shop_sell_quantity_action())
+	_player_shop_sell_quantity_input.text_submitted.connect(func(_value):_confirm_player_shop_sell_quantity())
+	_player_shop_sell_quantity_dialog.add_child(_player_shop_sell_quantity_input)
+	_texture_button(_player_shop_sell_quantity_dialog,"PlayerShopSellQuantityOk","YELLOW_BUTTON",Vector2(39,98),Vector2(85,21),_confirm_player_shop_sell_quantity,"確定")
+	_texture_button(_player_shop_sell_quantity_dialog,"PlayerShopSellQuantityCancel","YELLOW_BUTTON",Vector2(132,98),Vector2(85,21),_cancel_player_shop_sell,"取消")
+	_itf_text(_player_shop_sell_quantity_dialog,"PlayerShopSellQuantityOkText",Rect2(69,102,24,12),10,true).text="確定"
+	_itf_text(_player_shop_sell_quantity_dialog,"PlayerShopSellQuantityCancelText",Rect2(162,102,24,12),10,true).text="取消"
+
+	# 092_PShop_Buy_Item_02.itf. V1 Server authority buys one complete listing;
+	# quantity is shown from the authoritative listing and is intentionally not
+	# made editable until original partial-buy packet semantics are verified.
+	_player_shop_buy_dialog.name="PlayerShopBuyDialog"
+	_player_shop_buy_dialog.position=Vector2(289,238)
+	_player_shop_buy_dialog.size=Vector2(223,125)
+	_player_shop_buy_dialog.visible=false
+	_player_shop_buy_dialog.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_player_shop_buy_dialog)
+	_background(_player_shop_buy_dialog,"BG_PSHOP_BUY_02",_player_shop_buy_dialog.size)
+	_player_shop_buy_quantity=_itf_text(_player_shop_buy_dialog,"PlayerShopBuyQuantity",Rect2(66,71,50,12),10,true)
+	_itf_text(_player_shop_buy_dialog,"PlayerShopBuyEquals",Rect2(123,71,8,12),10,true).text="="
+	_player_shop_buy_total=_itf_text(_player_shop_buy_dialog,"PlayerShopBuyTotal",Rect2(131,71,80,12),10)
+	_texture_button(_player_shop_buy_dialog,"PlayerShopBuyOk","YELLOW_BUTTON",Vector2(39,98),Vector2(85,21),_confirm_player_shop_buy,"確定")
+	_texture_button(_player_shop_buy_dialog,"PlayerShopBuyCancel","YELLOW_BUTTON",Vector2(132,98),Vector2(85,21),_cancel_player_shop_buy,"取消")
+	_itf_text(_player_shop_buy_dialog,"PlayerShopBuyOkText",Rect2(69,102,24,12),10,true).text="確定"
+	_itf_text(_player_shop_buy_dialog,"PlayerShopBuyCancelText",Rect2(162,102,24,12),10,true).text="取消"
+
+	# Reuse the original 044 question bar geometry for closing the whole stall.
+	_player_shop_close_question.name="PlayerShopCloseQuestion"
+	_player_shop_close_question.position=Vector2(166,290)
+	_player_shop_close_question.size=Vector2(469,19)
+	_player_shop_close_question.visible=false
+	_player_shop_close_question.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_player_shop_close_question)
+	_background(_player_shop_close_question,"BG_QUESTION_BOX",_player_shop_close_question.size)
+	_player_shop_close_question_text=_itf_text(_player_shop_close_question,"QuestionText",Rect2(9,3,382,12),10)
+	_texture_button(_player_shop_close_question,"QuestionYes","B_OK_BUTTON",Vector2(424,1),Vector2(16,16),_confirm_player_shop_close_all,"確定")
+	_texture_button(_player_shop_close_question,"QuestionNo","CLOSESCREEN",Vector2(444,1),Vector2(16,16),_cancel_player_shop_close_all,"取消")
 
 func _build_storage()->void:
 	storage_window=_window("StorageWindow","BG_BANK",Vector2(770,506),Vector2(15,69))
@@ -2485,9 +2640,10 @@ func set_skin_switch_visible(enabled:bool)->void:
 		_settings_hint.visible=enabled
 		_settings_hint.text="DEV UI" if enabled else "介面：HK 原版"
 
-func bind_session(panel,asset_store:RefCounted=null)->void:
+func bind_session(panel,asset_store:RefCounted=null,world_view=null)->void:
 	_panel=panel
 	_asset_store=asset_store
+	_world_view=world_view
 	_equipment_preview.bind_store(_asset_store)
 	_inventory_render_initialized=false
 	_social_render_signatures.clear()
@@ -2531,6 +2687,14 @@ func set_world_active(active:bool)->void:
 		_friend_message_index=-1
 		_friend_message_auto_latest=true
 		_friend_message_last_count=0
+		_cancel_player_shop_buy()
+		_cancel_player_shop_sell()
+		_cancel_player_shop_close_all()
+		_close_player_shop_name_dialog()
+		for raw_sign in _player_shop_signs.values():
+			if is_instance_valid(raw_sign):
+				raw_sign.queue_free()
+		_player_shop_signs.clear()
 		_hide_windows()
 		_photos.clear()
 
@@ -3542,90 +3706,332 @@ func _friend_action_pressed()->void:
 		_update_friend_action()
 
 
+func _open_player_shop_ui()->void:
+	var show:=not player_shop_window.visible
+	_hide_windows()
+	if not show:
+		return
+	_ensure_window_art(player_shop_window)
+	player_shop_window.show()
+	var actor_id:=int(_stats.get("actor_id",0))
+	var presentations:Dictionary=_stats.get("player_shop_presentations",{})
+	if actor_id>0 and not presentations.has(actor_id):
+		_open_player_shop_name_dialog()
+
+
+func _open_player_shop_name_dialog()->void:
+	if _panel==null or _panel.session==null:
+		return
+	var actor_id:=int(_stats.get("actor_id",0))
+	var presentations:Dictionary=_stats.get("player_shop_presentations",{})
+	var current:Dictionary=presentations.get(actor_id,{})
+	_player_shop_name_input.text=str(current.get("shop_name",""))
+	_update_player_shop_name_action()
+	_player_shop_name_dialog.show()
+	_player_shop_name_input.focus_editor()
+	_player_shop_name_input.caret_column=_player_shop_name_input.text.length()
+
+
+func _close_player_shop_name_dialog()->void:
+	_player_shop_name_dialog.hide()
+	_player_shop_name_input.release_editor_focus()
+
+
+func _update_player_shop_name_action()->void:
+	if _player_shop_name_confirm==null:
+		return
+	var clean:=_player_shop_name_input.text.strip_edges()
+	_player_shop_name_confirm.disabled=(
+		clean.is_empty() or clean.length()>20 or
+		clean.to_utf8_buffer().size()>WireCodec.PLAYER_SHOP_MAX_NAME_BYTES or
+		int(_stats.get("pending_player_shop_sequence",0))!=0)
+
+
+func _submit_player_shop_name()->void:
+	if _player_shop_name_confirm==null or _player_shop_name_confirm.disabled:
+		return
+	if _panel==null or _panel.session==null:
+		return
+	var clean:=_player_shop_name_input.text.strip_edges()
+	if _panel.session.set_player_shop_name(clean):
+		_update_player_shop_name_action()
+
+
+func _decimal_value(text:String)->int:
+	var clean:=text.strip_edges()
+	if clean.is_empty():
+		return 0
+	for index in clean.length():
+		var code:=clean.unicode_at(index)
+		if code<48 or code>57:
+			return 0
+	return int(clean)
+
+
 func _open_player_shop_item(uid:int)->void:
-	if _panel!=null and _panel.session!=null:
-		_panel.session.open_player_shop(uid,int(_player_shop_price.value))
+	var inventory:Dictionary=_stats.get("inventory_items",{})
+	if uid<=0 or not inventory.has(uid) or int(_stats.get("pending_player_shop_sequence",0))!=0:
+		return
+	_player_shop_sell_uid=uid
+	_player_shop_sell_price_value=0
+	_player_shop_sell_price_input.text="1"
+	_update_player_shop_sell_price_action()
+	_player_shop_sell_price_dialog.show()
+	_player_shop_sell_price_input.focus_editor()
+	_player_shop_sell_price_input.select_all()
+
+
+func _update_player_shop_sell_price_action()->void:
+	var button:=_player_shop_sell_price_dialog.get_node_or_null("PlayerShopSellPriceOk") as BaseButton
+	if button!=null:
+		var price:=_decimal_value(_player_shop_sell_price_input.text)
+		button.disabled=price<=0 or price>WireCodec.MAX_MONEY
+
+
+func _confirm_player_shop_sell_price()->void:
+	var price:=_decimal_value(_player_shop_sell_price_input.text)
+	if price<=0 or price>WireCodec.MAX_MONEY:
+		return
+	var inventory:Dictionary=_stats.get("inventory_items",{})
+	if _player_shop_sell_uid<=0 or not inventory.has(_player_shop_sell_uid):
+		_cancel_player_shop_sell()
+		return
+	var owned:=int((inventory[_player_shop_sell_uid] as Dictionary).get("quantity",0))
+	if owned<=0:
+		_cancel_player_shop_sell()
+		return
+	_player_shop_sell_price_value=price
+	_player_shop_sell_price_dialog.hide()
+	_player_shop_sell_quantity_input.text=str(owned)
+	_update_player_shop_sell_quantity_action()
+	_player_shop_sell_quantity_dialog.show()
+	_player_shop_sell_quantity_input.focus_editor()
+	_player_shop_sell_quantity_input.select_all()
+
+
+func _update_player_shop_sell_quantity_action()->void:
+	var button:=_player_shop_sell_quantity_dialog.get_node_or_null("PlayerShopSellQuantityOk") as BaseButton
+	if button==null:
+		return
+	var inventory:Dictionary=_stats.get("inventory_items",{})
+	var owned:=0
+	if inventory.has(_player_shop_sell_uid):
+		owned=int((inventory[_player_shop_sell_uid] as Dictionary).get("quantity",0))
+	var quantity:=_decimal_value(_player_shop_sell_quantity_input.text)
+	button.disabled=quantity<=0 or quantity>owned or _player_shop_sell_price_value<=0
+
+
+func _confirm_player_shop_sell_quantity()->void:
+	if _panel==null or _panel.session==null:
+		return
+	var inventory:Dictionary=_stats.get("inventory_items",{})
+	if not inventory.has(_player_shop_sell_uid):
+		_cancel_player_shop_sell()
+		return
+	var owned:=int((inventory[_player_shop_sell_uid] as Dictionary).get("quantity",0))
+	var quantity:=_decimal_value(_player_shop_sell_quantity_input.text)
+	if quantity<=0 or quantity>owned or _player_shop_sell_price_value<=0:
+		return
+	if _panel.session.open_player_shop(_player_shop_sell_uid,_player_shop_sell_price_value,quantity):
+		_cancel_player_shop_sell()
+
+
+func _cancel_player_shop_sell()->void:
+	_player_shop_sell_price_dialog.hide()
+	_player_shop_sell_quantity_dialog.hide()
+	_player_shop_sell_price_input.release_editor_focus()
+	_player_shop_sell_quantity_input.release_editor_focus()
+	_player_shop_sell_uid=0
+	_player_shop_sell_price_value=0
+
 
 func _inspect_player_shop(actor_id:int)->void:
-	if _panel!=null and _panel.session!=null:
-		_panel.session.inspect_player_shop(actor_id)
+	if _panel==null or _panel.session==null or actor_id<=0:
+		return
+	_hide_windows()
+	_ensure_window_art(player_shop_window)
+	player_shop_window.show()
+	_panel.session.inspect_player_shop(actor_id)
+
 
 func _close_player_shop_listing(listing_id:int)->void:
 	if _panel!=null and _panel.session!=null and listing_id>0:
 		_panel.session.close_player_shop(listing_id)
 
-func _buy_player_shop_listing(seller_actor_id:int,listing_id:int)->void:
-	if _panel!=null and _panel.session!=null and seller_actor_id>0 and listing_id>0:
-		_panel.session.buy_player_shop(seller_actor_id,listing_id)
 
-func _buy_inspected_player_shop()->void:
-	if _panel==null or _panel.session==null:
+func _buy_player_shop_listing(seller_actor_id:int,listing_id:int)->void:
+	if seller_actor_id<=0 or listing_id<=0 or int(_stats.get("pending_player_shop_sequence",0))!=0:
 		return
-	var listing:Dictionary=_stats.get("player_shop_inspected",{})
+	var listings:Dictionary=_stats.get("player_shop_inspected_listings",{})
+	var listing:Dictionary=listings.get(listing_id,{})
 	if listing.is_empty():
+		var fallback:Dictionary=_stats.get("player_shop_inspected",{})
+		if int(fallback.get("listing_id",0))==listing_id:
+			listing=fallback
+	if listing.is_empty() or int(listing.get("seller_actor_id",0))!=seller_actor_id:
 		return
-	_buy_player_shop_listing(
-		int(listing.get("seller_actor_id",0)),int(listing.get("listing_id",0)))
+	_player_shop_buy_seller=seller_actor_id
+	_player_shop_buy_listing=listing_id
+	_player_shop_buy_quantity.text=str(int(listing.get("quantity",0)))
+	_player_shop_buy_total.text=str(int(listing.get("price",0)))
+	_player_shop_buy_dialog.show()
+
+
+func _confirm_player_shop_buy()->void:
+	if _panel!=null and _panel.session!=null and _player_shop_buy_seller>0 and _player_shop_buy_listing>0:
+		if _panel.session.buy_player_shop(_player_shop_buy_seller,_player_shop_buy_listing):
+			_cancel_player_shop_buy()
+
+
+func _cancel_player_shop_buy()->void:
+	_player_shop_buy_dialog.hide()
+	_player_shop_buy_seller=0
+	_player_shop_buy_listing=0
+
+
+func _open_player_shop_close_question()->void:
+	var actor_id:=int(_stats.get("actor_id",0))
+	var presentations:Dictionary=_stats.get("player_shop_presentations",{})
+	if actor_id<=0 or not presentations.has(actor_id):
+		return
+	_player_shop_close_question_text.text="確定要關閉小商店？未售出的商品會回到背包。"
+	_player_shop_close_question.show()
+
+
+func _confirm_player_shop_close_all()->void:
+	if _panel!=null and _panel.session!=null and _panel.session.close_player_shop_all():
+		_player_shop_close_question.hide()
+
+
+func _cancel_player_shop_close_all()->void:
+	_player_shop_close_question.hide()
+
 
 func _refresh_player_shop()->void:
 	_clear_rows(_player_shop_rows)
+	_clear_rows(_player_shop_inventory_rows)
+	var actor_id:=int(_stats.get("actor_id",0))
+	var presentations:Dictionary=_stats.get("player_shop_presentations",{})
+	var own_presentation:Dictionary=presentations.get(actor_id,{})
+	var own_name:=str(own_presentation.get("shop_name",""))
+	_player_shop_name_label.text=own_name if not own_name.is_empty() else "尚未開設"
+	var pending:=int(_stats.get("pending_player_shop_sequence",0))!=0
+	_player_shop_buy.disabled=own_presentation.is_empty() or pending
+	_player_shop_action_text.text=(
+		"點右側背包商品上架；點自己的發售商品可取消。" if not own_presentation.is_empty()
+		else "先設定小商店名稱，才能上架商品。")
+	if not own_presentation.is_empty() and _player_shop_name_dialog.visible and not pending:
+		_player_shop_name_dialog.hide()
+
 	var own:Dictionary=_stats.get("player_shop_own_listing",{})
 	var own_listings:Dictionary=_stats.get("player_shop_own_listings",{})
 	if own_listings.is_empty() and not own.is_empty():
 		own_listings[int(own.get("listing_id",0))]=own
+	var own_ids:Array=own_listings.keys();own_ids.sort()
+	for raw_listing_id in own_ids:
+		var listing_id:=int(raw_listing_id)
+		var listing:Dictionary=own_listings[raw_listing_id]
+		var item_id:=int(listing.get("item_definition_id",0))
+		var item_name:=str(_panel.item_catalog.name_for(item_id)) if _panel!=null else "道具 %d"%item_id
+		_classic_row(_player_shop_rows,"%s ×%d　$%d"%[
+			item_name,int(listing.get("quantity",0)),int(listing.get("price",0))],
+			25.0,_close_player_shop_listing.bind(listing_id))
+
 	var inspected:Dictionary=_stats.get("player_shop_inspected",{})
 	var inspected_listings:Dictionary=_stats.get("player_shop_inspected_listings",{})
 	if inspected_listings.is_empty() and not inspected.is_empty():
 		inspected_listings[int(inspected.get("listing_id",0))]=inspected
+	if not inspected_listings.is_empty() and own_listings.is_empty():
+		var ids:Array=inspected_listings.keys();ids.sort()
+		for raw_listing_id in ids:
+			var listing_id:=int(raw_listing_id)
+			var listing:Dictionary=inspected_listings[raw_listing_id]
+			var item_id:=int(listing.get("item_definition_id",0))
+			var item_name:=str(_panel.item_catalog.name_for(item_id)) if _panel!=null else "道具 %d"%item_id
+			_classic_row(_player_shop_rows,"%s ×%d　$%d"%[
+				item_name,int(listing.get("quantity",0)),int(listing.get("price",0))],
+				25.0,_buy_player_shop_listing.bind(int(listing.get("seller_actor_id",0)),listing_id))
+		_player_shop_action_text.text="點商品後確認購買；交易由伺服器核准。"
 
-	var listed_uids:={}
-	var own_ids:Array=own_listings.keys();own_ids.sort()
-	for raw_listing_id in own_ids:
-		var own_listing_id:=int(raw_listing_id)
-		var own_listing:Dictionary=own_listings[raw_listing_id]
-		listed_uids[int(own_listing.get("item_uid",0))]=true
-		var own_id:=int(own_listing.get("item_definition_id",0))
-		var own_name:=str(_panel.item_catalog.name_for(own_id)) if _panel!=null else "道具 %d"%own_id
-		_classic_row(_player_shop_rows,"我的商店：%s ×%d　$%d"%[
-			own_name,int(own_listing.get("quantity",0)),int(own_listing.get("price",0))],
-			24.0,_close_player_shop_listing.bind(own_listing_id))
-
-	if own_listings.size()<16:
+	if not own_presentation.is_empty() and own_listings.size()<16:
 		var inventory:Dictionary=_stats.get("inventory_items",{})
 		var uids:Array=inventory.keys();uids.sort()
-		var offer_count:=0
-		for raw_uid in uids:
-			if offer_count>=8:break
-			var uid:=int(raw_uid)
-			if listed_uids.has(uid):
-				continue
-			var item:Dictionary=inventory[raw_uid]
+		for index in mini(16,uids.size()):
+			var uid:=int(uids[index])
+			var item:Dictionary=inventory[uids[index]]
 			var item_id:=int(item.get("item_definition_id",0))
 			var item_name:=str(_panel.item_catalog.name_for(item_id)) if _panel!=null else "道具 %d"%item_id
-			_classic_row(_player_shop_rows,"上架：%s ×%d"%[
-				item_name,int(item.get("quantity",0))],22.0,_open_player_shop_item.bind(uid))
-			offer_count+=1
+			_classic_row(_player_shop_inventory_rows,"%s ×%d"%[
+				item_name,int(item.get("quantity",0))],25.0,_open_player_shop_item.bind(uid))
+	elif own_presentation.is_empty():
+		_classic_row(_player_shop_inventory_rows,"請先設定小商店名稱",25.0)
 
+
+func _player_shop_actor_world_position(actor_id:int)->Vector2:
+	if actor_id==int(_stats.get("actor_id",0)):
+		return Vector2(float(_stats.get("x",0.0)),float(_stats.get("y",0.0)))
 	var entities:Dictionary=_stats.get("entities",{})
-	var entity_ids:Array=entities.keys();entity_ids.sort()
-	for raw_actor in entity_ids:
-		var actor_id:=int(raw_actor)
-		if actor_id<=0 or actor_id==int(_stats.get("actor_id",0)):
-			continue
-		_classic_row(_player_shop_rows,"查看 %s 的小商店"%_entity_name(actor_id,entities[raw_actor]),20.0,_inspect_player_shop.bind(actor_id))
+	if not entities.has(actor_id):
+		return Vector2.INF
+	var entity:Dictionary=entities[actor_id]
+	return Vector2(float(entity.get("x",0.0)),float(entity.get("y",0.0)))
 
-	var inspected_ids:Array=inspected_listings.keys();inspected_ids.sort()
-	for raw_listing_id in inspected_ids:
-		var inspected_listing_id:=int(raw_listing_id)
-		var inspected_listing:Dictionary=inspected_listings[raw_listing_id]
-		var inspected_item_id:=int(inspected_listing.get("item_definition_id",0))
-		var inspected_name:=str(_panel.item_catalog.name_for(inspected_item_id)) if _panel!=null else "道具 %d"%inspected_item_id
-		_classic_row(_player_shop_rows,"查看中：%s ×%d　$%d"%[
-			inspected_name,int(inspected_listing.get("quantity",0)),
-			int(inspected_listing.get("price",0))],24.0,
-			_buy_player_shop_listing.bind(
-				int(inspected_listing.get("seller_actor_id",0)),inspected_listing_id))
-	_player_shop_buy.disabled=inspected_listings.is_empty() or int(_stats.get("pending_player_shop_sequence",0))!=0
+
+func _refresh_player_shop_signs()->void:
+	if not _active or _world_view==null or not is_instance_valid(_world_view):
+		for raw in _player_shop_signs.values():
+			if is_instance_valid(raw):raw.hide()
+		return
+	var presentations:Dictionary=_stats.get("player_shop_presentations",{})
+	var live:Dictionary={}
+	for raw_actor in presentations.keys():
+		var actor_id:=int(raw_actor)
+		var presentation:Dictionary=presentations[raw_actor]
+		if actor_id<=0 or not bool(presentation.get("present",true)):
+			continue
+		var world_pos:=_player_shop_actor_world_position(actor_id)
+		if not world_pos.is_finite():
+			continue
+		live[actor_id]=true
+		var sign:Control=_player_shop_signs.get(actor_id,null)
+		if sign==null or not is_instance_valid(sign):
+			sign=Control.new()
+			sign.name="PlayerShopSign_%d"%actor_id
+			sign.size=Vector2(119,32)
+			sign.mouse_filter=Control.MOUSE_FILTER_PASS
+			_player_shop_sign_layer.add_child(sign)
+			var button:=TextureButton.new()
+			button.name="Hit"
+			button.size=Vector2(119,32)
+			button.ignore_texture_size=true
+			button.stretch_mode=TextureButton.STRETCH_SCALE
+			button.texture_filter=CanvasItem.TEXTURE_FILTER_NEAREST
+			button.texture_normal=_tex("BG_PSHOP_03")
+			button.texture_hover=button.texture_normal
+			button.texture_pressed=button.texture_normal
+			var sign_actor_id:=actor_id
+			button.pressed.connect(
+				_open_player_shop_ui if sign_actor_id==int(_stats.get("actor_id",0))
+				else _inspect_player_shop.bind(sign_actor_id))
+			sign.add_child(button)
+			var label:=_classic_label(sign,"Name",Rect2(4,2,109,18),10,true)
+			label.clip_text=true
+			_player_shop_signs[actor_id]=sign
+		var label:=sign.get_node_or_null("Name") as Label
+		if label!=null:
+			label.text=str(presentation.get("shop_name",""))
+		var screen:Vector2=_world_view.camera.world_to_screen(world_pos)
+		var scale_factor:=maxf(0.05,stage.scale.x)
+		var local:Vector2=(screen-stage.position)/scale_factor
+		sign.position=local+Vector2(-59.5,-52.0)
+		sign.visible=Rect2(Vector2(-119,-32),BASE_SIZE+Vector2(238,64)).has_point(sign.position)
+	for raw_actor in _player_shop_signs.keys():
+		var actor_id:=int(raw_actor)
+		if live.has(actor_id):
+			continue
+		var sign:Control=_player_shop_signs[raw_actor]
+		_player_shop_signs.erase(raw_actor)
+		if is_instance_valid(sign):sign.queue_free()
 
 func _refresh_storage()->void:
 	_clear_rows(_storage_rows)
@@ -3784,5 +4190,5 @@ func _menu_action(index:int)->void:
 		0:_toggle(clan_window)
 		1:_toggle(character)
 		2:_toggle(inventory)
-		3:_toggle(player_shop_window)
+		3:_open_player_shop_ui()
 		4:_toggle(settings_window)

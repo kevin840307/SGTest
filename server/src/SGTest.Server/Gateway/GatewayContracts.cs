@@ -115,7 +115,8 @@ public readonly record struct TrustedGmPvpNameCommand(
 public readonly record struct TrustedPlayerShopCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint ShopSequence,PlayerShopCommandAction Action,
-    long SellerActorId,long ListingId,long ItemUid,long Price);
+    long SellerActorId,long ListingId,long ItemUid,long Price,
+    string Name = "",int Quantity = 0);
 public readonly record struct TrustedChatCommand(
     long ActorId,long ConnectionEpoch,long RequestMapEpoch,
     uint ChatSequence,ChatChannel Channel,byte BubbleType,string Message,

@@ -315,6 +315,19 @@ public sealed partial class WorldResultRouter
         }
     }
 
+    public GatewaySendStatus QueuePlayerShopInventorySnapshot(
+        TrustedPlayerShopCommand request,
+        IReadOnlyList<InventoryItemWire> items,long wallet)
+    {
+        lock(_gate)
+        {
+            if(!_connections.TryGetValue(request.ActorId,out var connection)||
+               connection.IsClosed)
+                return GatewaySendStatus.Closed;
+            return connection.QueuePlayerShopInventorySnapshot(request,items,wallet);
+        }
+    }
+
     public GatewaySendStatus QueuePlayerShopSnapshot(
         TrustedPlayerShopCommand request,PlayerShopSnapshotWire snapshot)
     {

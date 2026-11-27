@@ -8,7 +8,7 @@ internal static class PlayerShopChecks
     {
         Checks.Run("player shop atomically transfers one whole ItemUid stack and money",
             ()=>AtomicPurchase(root).GetAwaiter().GetResult());
-        Checks.Run("player shop stale listing cannot sell an ItemUid moved elsewhere",
+        Checks.Run("player shop rejects a legacy active snapshot mismatch without wallet mutation",
             ()=>StaleListing(root).GetAwaiter().GetResult());
         Checks.Run("ten concurrent player-shop buyers yield exactly one sale",
             ()=>ConcurrentBuyers(root).GetAwaiter().GetResult());
@@ -32,9 +32,12 @@ internal static class PlayerShopChecks
                 account,1,"ShopBuyer",new(15,10,8))).Character!.CharacterId;
             long other=(await store.CreateCharacterAsync(
                 account,2,"ShopOther",new(15,12,8))).Character!.CharacterId;
+            long poor=(await store.CreateCharacterAsync(
+                account,3,"ShopPoor",new(15,14,8))).Character!.CharacterId;
             SeedWallet(db,seller,100);
             SeedWallet(db,buyer,1000);
             SeedWallet(db,other,1000);
+            SeedWallet(db,poor,100);
             long generation=await store.AllocateLootWorldGenerationAsync();
             var first=await SeedItem(store,generation,seller,5101,2,1);
             var second=await SeedItem(store,generation,seller,5102,1,2);
@@ -48,7 +51,7 @@ internal static class PlayerShopChecks
             };
 
             var created=await store.CreatePlayerShopListingAsync(
-                seller,first.ItemUid,300,rules);
+                seller,first.ItemUid,0,300,rules);
             Checks.Require(created.Status==PlayerShopCreateStatus.Created&&
                 created.Listing is not null&&
                 created.Listing.ItemUid==first.ItemUid&&
@@ -63,12 +66,12 @@ internal static class PlayerShopChecks
                 ??throw new InvalidOperationException("player-shop listing missing");
 
             var duplicate=await store.CreatePlayerShopListingAsync(
-                seller,first.ItemUid,1,rules);
+                seller,first.ItemUid,0,1,rules);
             Checks.Require(duplicate.Status==PlayerShopCreateStatus.AlreadyOpen,
                 "same ItemUid was listed twice");
 
             var secondCreated=await store.CreatePlayerShopListingAsync(
-                seller,second.ItemUid,125,rules);
+                seller,second.ItemUid,0,125,rules);
             Checks.Require(secondCreated.Status==PlayerShopCreateStatus.Created&&
                 secondCreated.Listing is not null&&
                 secondCreated.Listing.ItemUid==second.ItemUid,
@@ -80,6 +83,16 @@ internal static class PlayerShopChecks
                 active[0].ListingId==listing.ListingId&&
                 active[1].ListingId==secondListing.ListingId,
                 "multi-listing player-shop lookup mismatch");
+
+            var insufficient=await store.BuyPlayerShopListingAsync(
+                poor,listing.ListingId,rules);
+            Checks.Require(
+                insufficient.Status==PlayerShopBuyStatus.InsufficientMoney&&
+                await store.GetCharacterMoneyAsync(poor)==100&&
+                await store.GetCharacterMoneyAsync(seller)==100&&
+                (await store.GetActivePlayerShopListingsAsync(seller))
+                    .Any(x=>x.ListingId==listing.ListingId),
+                "insufficient-money player-shop buy changed money or listing");
 
             var applied=await store.BuyPlayerShopListingAsync(
                 buyer,listing.ListingId,rules);
@@ -130,7 +143,7 @@ internal static class PlayerShopChecks
                 "closing one remaining stall product did not empty the seller stall");
 
             var blocked=await store.CreatePlayerShopListingAsync(
-                seller,blockedItem.ItemUid,100,rules);
+                seller,blockedItem.ItemUid,0,100,rules);
             Checks.Require(blocked.Status==PlayerShopCreateStatus.NotTradeable&&
                 (await store.ListInventoryItemsAsync(seller))
                     .Any(x=>x.ItemUid==blockedItem.ItemUid),
@@ -154,27 +167,26 @@ internal static class PlayerShopChecks
                 account,0,"StaleSeller",new(15,8,8))).Character!.CharacterId;
             long buyer=(await store.CreateCharacterAsync(
                 account,1,"StaleBuyer",new(15,9,8))).Character!.CharacterId;
-            long movedTo=(await store.CreateCharacterAsync(
-                account,2,"StaleMoved",new(15,10,8))).Character!.CharacterId;
             SeedWallet(db,seller,50);
             SeedWallet(db,buyer,500);
-            SeedWallet(db,movedTo,0);
             long generation=await store.AllocateLootWorldGenerationAsync();
             var item=await SeedItem(store,generation,seller,5201,1,1);
             var rules=new Dictionary<int,TradeItemRule>
             { [5201]=new(5201,true,"synthetic:player-shop-stale") };
 
             var created=await store.CreatePlayerShopListingAsync(
-                seller,item.ItemUid,200,rules);
+                seller,item.ItemUid,0,200,rules);
             Checks.Require(created.Status==PlayerShopCreateStatus.Created&&
                 created.Listing is not null,"stale listing setup failed");
             var staleListing=created.Listing
                 ??throw new InvalidOperationException("stale listing missing");
 
-            var moved=await store.CommitInventoryTradeAsync(
-                new(92001,seller,movedTo,0,0,[item.ItemUid],[]),rules);
-            Checks.Require(moved.Status==TradeCommitStatus.Applied,
-                "stale listing setup could not move UID");
+            // New listings are escrowed, so ordinary inventory/equipment/trade
+            // paths cannot mutate the listed UID anymore. Model the only stale shape
+            // still accepted for migration compatibility: a legacy active row whose
+            // seller-owned inventory snapshot no longer matches the listing.
+            SeedLegacyPlayerShopConflict(
+                db,seller,item.ItemUid,5201,2,item.DropId);
 
             var rejected=await store.BuyPlayerShopListingAsync(
                 buyer,staleListing.ListingId,rules);
@@ -183,35 +195,13 @@ internal static class PlayerShopChecks
                 await store.GetCharacterMoneyAsync(seller)==50&&
                 await store.GetCharacterMoneyAsync(buyer)==500,
                 "stale player-shop listing mutated wallets");
-            await AssertOwnership(store,movedTo,item.ItemUid,5201,1,item.DropId);
+            await AssertOwnership(store,seller,item.ItemUid,5201,2,item.DropId);
             Checks.Require(await store.GetActivePlayerShopListingAsync(seller) is null,
                 "stale player-shop listing remained active");
 
-            var levelItem=await SeedItem(store,generation,seller,5201,1,2);
-            SeedEnhancementLevel(db,levelItem.ItemUid,2);
-            var levelListingResult=await store.CreatePlayerShopListingAsync(
-                seller,levelItem.ItemUid,100,rules);
-            Checks.Require(levelListingResult.Status==PlayerShopCreateStatus.Created&&
-                levelListingResult.Listing?.EnhancementLevel==2,
-                "enhancement-level listing setup failed");
-            var levelListing=levelListingResult.Listing
-                ??throw new InvalidOperationException("enhancement listing missing");
-            SeedEnhancementLevel(db,levelItem.ItemUid,3);
-            var changedLevel=await store.BuyPlayerShopListingAsync(
-                buyer,levelListing.ListingId,rules);
-            Checks.Require(changedLevel.Status==PlayerShopBuyStatus.StaleListing&&
-                changedLevel.Listing?.State==PlayerShopListingState.Stale&&
-                changedLevel.Listing?.EnhancementLevel==2&&
-                await store.GetCharacterMoneyAsync(seller)==50&&
-                await store.GetCharacterMoneyAsync(buyer)==500,
-                "player-shop sold an item whose enhancement changed after listing");
-            await AssertOwnership(store,seller,levelItem.ItemUid,5201,1,levelItem.DropId,3);
-            Checks.Require(await store.GetActivePlayerShopListingAsync(seller) is null,
-                "enhancement-stale player-shop listing remained active");
-
             var closeItem=await SeedItem(store,generation,seller,5201,1,3);
             var fresh=await store.CreatePlayerShopListingAsync(
-                seller,closeItem.ItemUid,100,rules);
+                seller,closeItem.ItemUid,0,100,rules);
             Checks.Require(fresh.Status==PlayerShopCreateStatus.Created&&
                 fresh.Listing is not null,"fresh listing after stale failed");
             var freshListing=fresh.Listing
@@ -254,7 +244,7 @@ internal static class PlayerShopChecks
             var rules=new Dictionary<int,TradeItemRule>
             { [5301]=new(5301,true,"synthetic:player-shop-race") };
             var created=await store.CreatePlayerShopListingAsync(
-                seller,item.ItemUid,100,rules);
+                seller,item.ItemUid,0,100,rules);
             Checks.Require(created.Listing is not null,
                 "concurrent player-shop listing setup failed");
             var raceListing=created.Listing
@@ -312,6 +302,32 @@ internal static class PlayerShopChecks
             item.Quantity==quantity&&item.SourceDropId==dropId&&
             item.EnhancementLevel==enhancementLevel,
             "player-shop settlement lost UID/quantity/provenance/enhancement");
+    }
+
+    private static void SeedLegacyPlayerShopConflict(
+        string db,long owner,long itemUid,int definition,int quantity,long dropId)
+    {
+        using var connection=new SqliteConnection(
+            new SqliteConnectionStringBuilder
+            {DataSource=db,Mode=SqliteOpenMode.ReadWrite,Pooling=false}.ToString());
+        connection.Open();
+        using var command=connection.CreateCommand();
+        command.CommandText=@"
+INSERT INTO item_instances(
+ item_uid,character_id,item_definition_id,quantity,source_drop_id,
+ durability_raw,enhancement_level,source_kind,source_reference,created_unix_ms)
+VALUES($uid,$owner,$definition,$quantity,$drop,NULL,0,1,$reference,$now);";
+        command.Parameters.AddWithValue("$uid",itemUid);
+        command.Parameters.AddWithValue("$owner",owner);
+        command.Parameters.AddWithValue("$definition",definition);
+        command.Parameters.AddWithValue("$quantity",quantity);
+        command.Parameters.AddWithValue("$drop",dropId);
+        command.Parameters.AddWithValue(
+            "$reference","synthetic:legacy-player-shop-conflict");
+        command.Parameters.AddWithValue(
+            "$now",DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        Checks.Require(command.ExecuteNonQuery()==1,
+            "legacy player-shop conflict seed failed");
     }
 
     private static void SeedEnhancementLevel(string db,long itemUid,int level)

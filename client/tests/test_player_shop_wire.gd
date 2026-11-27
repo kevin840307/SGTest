@@ -119,8 +119,8 @@ func _initialize()->void:
 		_fail("seller notice codec")
 		return
 
-	# Seller: opening a listing never removes the UID. Only the committed
-	# seller-side Sold push removes it and updates the authoritative wallet.
+	# Seller: an Applied open receipt starts a server-authoritative inventory
+	# refresh. The listed UID is escrowed and must be absent before a sale push.
 	var seller:=_base_world(22,11)
 	seller.inventory_items[7001]={
 		"item_uid":7001,"item_definition_id":6101,
@@ -133,9 +133,6 @@ func _initialize()->void:
 	if not seller.mark_player_shop_sent(1,1,0,0,7001,300):
 		_fail("seller open admission")
 		return
-	if seller.inventory_items.has(7001)==false:
-		_fail("open optimistically removed seller UID")
-		return
 	if not seller.apply_frame(
 		_result(3,1,1,0,22,91,7001,6101,2,5001,80,300,100,100,5)):
 		_fail("seller open receipt "+seller.protocol_error)
@@ -143,11 +140,20 @@ func _initialize()->void:
 	var seller_snap:=seller.snapshot()
 	if (
 		int(seller_snap.player_shop_own_listing.get("listing_id",0))!=91 or
-		not (seller_snap.inventory_items as Dictionary).has(7001) or
+		bool(seller_snap.inventory_ready) or
+		(seller_snap.inventory_items as Dictionary).has(7001) or
 		int(seller_snap.player_shop_wallet)!=100
 	):
-		_fail("seller open state")
+		_fail("seller open did not enter escrow refresh")
 		return
+	# The real server follows the receipt with a reliable inventory snapshot.
+	# Model its committed state here; the AES E2E below exercises the frame path.
+	seller.inventory_items[7002]={
+		"item_uid":7002,"item_definition_id":6102,
+		"quantity":1,"drop_id":5002,"durability_raw":-1,
+		"enhancement_level":0}
+	seller.inventory_ready=true
+	seller.inventory_next_index=1
 	if not seller.mark_player_shop_sent(2,1,0,0,7002,125):
 		_fail("seller second open admission")
 		return
@@ -155,13 +161,16 @@ func _initialize()->void:
 		_result(3,2,1,0,22,92,7002,6102,1,5002,-1,125,100,100,0)):
 		_fail("seller second open receipt "+seller.protocol_error)
 		return
+	seller.inventory_ready=true
+	seller.inventory_next_index=0
 	seller_snap=seller.snapshot()
 	if (
 		(seller_snap.player_shop_own_listings as Dictionary).size()!=2 or
 		not (seller_snap.player_shop_own_listings as Dictionary).has(91) or
-		not (seller_snap.player_shop_own_listings as Dictionary).has(92)
+		not (seller_snap.player_shop_own_listings as Dictionary).has(92) or
+		not (seller_snap.inventory_items as Dictionary).is_empty()
 	):
-		_fail("seller multi-listing state")
+		_fail("seller multi-listing escrow state")
 		return
 	if not seller.apply_frame(_sold(3,91,11,7001,400)):
 		_fail("seller sold reducer "+seller.protocol_error)
@@ -169,14 +178,14 @@ func _initialize()->void:
 	seller_snap=seller.snapshot()
 	if (
 		(seller_snap.inventory_items as Dictionary).has(7001) or
-		not (seller_snap.inventory_items as Dictionary).has(7002) or
+		(seller_snap.inventory_items as Dictionary).has(7002) or
 		int(seller_snap.player_shop_own_listing.get("listing_id",0))!=92 or
 		(seller_snap.player_shop_own_listings as Dictionary).size()!=1 or
 		not (seller_snap.player_shop_own_listings as Dictionary).has(92) or
 		int(seller_snap.player_shop_wallet)!=400 or
 		int(seller_snap.last_player_shop_sold.get("buyer_actor_id",0))!=11
 	):
-		_fail("seller sale did not preserve remaining multi-listing stall")
+		_fail("seller sale did not preserve remaining escrow listing")
 		return
 	if (
 		not seller.apply_frame(_sold(3,91,11,7001,400)) or

@@ -108,8 +108,16 @@ internal static class PlayerShopCoordinatorChecks
             await shops.AttachAsync(sellerGateway.Binding);
             await shops.AttachAsync(buyerGateway.Binding);
 
-            var open=new TrustedPlayerShopCommand(
+            var setName=new TrustedPlayerShopCommand(
                 seller,sellerActor.ConnectionEpoch,sellerActor.MapEpoch,1,
+                PlayerShopCommandAction.SetName,0,0,0,0,"測試小商店");
+            var named=await shops.HandleNewAsync(setName,router);
+            Checks.Require(named.Status==PlayerShopResultStatus.Applied&&
+                DrainResult(sellerGateway)==named,
+                "player-shop name receipt mismatch");
+
+            var open=new TrustedPlayerShopCommand(
+                seller,sellerActor.ConnectionEpoch,sellerActor.MapEpoch,2,
                 PlayerShopCommandAction.Open,0,0,item.ItemUid,300);
             var opened=await shops.HandleNewAsync(open,router);
             var openedWire=DrainResult(sellerGateway);
@@ -118,14 +126,16 @@ internal static class PlayerShopCoordinatorChecks
                 opened.ItemUid==item.ItemUid&&opened.Quantity==2&&
                 opened.SourceDropId==item.DropId&&opened.Price==300,
                 "player-shop open receipt mismatch");
+            DrainAny(sellerGateway,WireOpcode.InventorySnapshot);
             long listingId=opened.ListingId;
-            var openSecond=open with{ShopSequence=2,ItemUid=item2.ItemUid,Price=125};
+            var openSecond=open with{ShopSequence=3,ItemUid=item2.ItemUid,Price=125};
             var openedSecond=await shops.HandleNewAsync(openSecond,router);
             Checks.Require(openedSecond.Status==PlayerShopResultStatus.Applied&&
                 openedSecond.ListingId>listingId&&
                 openedSecond.ItemUid==item2.ItemUid&&
                 DrainResult(sellerGateway)==openedSecond,
                 "second player-shop product open receipt mismatch");
+            DrainAny(sellerGateway,WireOpcode.InventorySnapshot);
 
             var inspectHidden=new TrustedPlayerShopCommand(
                 buyer,buyerActor.ConnectionEpoch,buyerActor.MapEpoch,1,
@@ -277,13 +287,21 @@ internal static class PlayerShopCoordinatorChecks
                     DrainAny(gateway,WireOpcode.EntitySpawn);
                 }
 
-                var open=new TrustedPlayerShopCommand(
+                var setName=new TrustedPlayerShopCommand(
                     seller,sellerActor.ConnectionEpoch,sellerActor.MapEpoch,1,
+                    PlayerShopCommandAction.SetName,0,0,0,0,"競購小商店");
+                var named=await shops.HandleNewAsync(setName,router);
+                Checks.Require(named.Status==PlayerShopResultStatus.Applied&&
+                    DrainResult(sellerGateway)==named,
+                    "concurrent player-shop name failed");
+                var open=new TrustedPlayerShopCommand(
+                    seller,sellerActor.ConnectionEpoch,sellerActor.MapEpoch,2,
                     PlayerShopCommandAction.Open,0,0,item.ItemUid,300);
                 var opened=await shops.HandleNewAsync(open,router);
                 Checks.Require(opened.Status==PlayerShopResultStatus.Applied&&
                     opened.ListingId>0&&DrainResult(sellerGateway)==opened,
                     "concurrent player-shop open failed");
+                DrainAny(sellerGateway,WireOpcode.InventorySnapshot);
 
                 var pending=new Task<PlayerShopResultWire>[buyerCount];
                 for(int i=0;i<buyerCount;i++)
@@ -400,11 +418,21 @@ internal static class PlayerShopCoordinatorChecks
                 trades.TryRegisterGameplayGate(buyerGateway.Binding,buyerGate),
                 "portal race gate register");
             var shops=new PlayerShopCoordinator(store,world,rules,trades);
-            var open=new TrustedPlayerShopCommand(
+            var setName=new TrustedPlayerShopCommand(
                 seller,sellerActor.ConnectionEpoch,sellerActor.MapEpoch,1,
+                PlayerShopCommandAction.SetName,0,0,0,0,"傳點競態小商店");
+            var named=await shops.HandleNewAsync(setName,router);
+            Checks.Require(named.Status==PlayerShopResultStatus.Applied&&
+                DrainResult(sellerGateway)==named,
+                "portal-race player-shop name failed");
+            var open=new TrustedPlayerShopCommand(
+                seller,sellerActor.ConnectionEpoch,sellerActor.MapEpoch,2,
                 PlayerShopCommandAction.Open,0,0,item.ItemUid,200);
             var opened=await shops.HandleNewAsync(open,router);
-            DrainResult(sellerGateway);
+            Checks.Require(opened.Status==PlayerShopResultStatus.Applied&&
+                DrainResult(sellerGateway)==opened,
+                "portal-race player-shop open failed");
+            DrainAny(sellerGateway,WireOpcode.InventorySnapshot);
             Checks.Require(buyerGateway.QueueAoi(new(
                     AoiEventKind.Spawn,20,buyerActor.MapEpoch,sellerActor))==
                     GatewaySendStatus.Enqueued,"portal race seller Spawn");
@@ -440,11 +468,15 @@ internal static class PlayerShopCoordinatorChecks
             {
                 if(sellerGate.CurrentCount==0)sellerGate.Release();
             }
+            var portalListing=await store.GetPlayerShopListingAsync(opened.ListingId);
             Checks.Require(await store.GetCharacterMoneyAsync(seller)==50&&
                 await store.GetCharacterMoneyAsync(buyer)==500&&
-                (await store.ListInventoryItemsAsync(seller))
-                    .Any(x=>x.ItemUid==item.ItemUid),
-                "stale player-shop portal race changed money or UID");
+                !(await store.ListInventoryItemsAsync(seller))
+                    .Any(x=>x.ItemUid==item.ItemUid)&&
+                portalListing is not null&&
+                portalListing.State==PlayerShopListingState.Active&&
+                portalListing.ItemUid==item.ItemUid,
+                "stale player-shop portal race changed money or escrow UID");
         }
         finally
         {

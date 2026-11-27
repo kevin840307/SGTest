@@ -1,4 +1,6 @@
 using SGTest.Server.Skill;
+using System.Text;
+using SGTest.Server.Wire;
 using SGTest.Server.Pvp;
 using SGTest.Server.Monster;
 using SGTest.Server.Pet;
@@ -28,7 +30,7 @@ public enum AoiEventKind : byte
     MonsterSpawn, MonsterDelta, MonsterDespawn,
     GroundDropSpawn, GroundDropDespawn,
     PetSpawn, PetDelta, PetDespawn, PetAttackVisual, PetSkillVisual,
-    MechaState, PlayerEquipmentState,
+    MechaState, PlayerEquipmentState, PlayerShopState,
     PlayerAttackVisual, PlayerSkillVisual, PlayerDamageVisual, PlayerRespawnVisual,
     PvpCombatVisual, PvpSkillVisual
 }
@@ -83,6 +85,7 @@ public readonly record struct AoiEvent(
     PetWorldPresence? Pet = null,
     MechaWorldStateUpdate? Mecha = null,
     PlayerEquipmentWorldStateUpdate? PlayerEquipment = null,
+    PlayerShopWorldStateUpdate? PlayerShop = null,
     PetAttackVisual? PetAttack = null,
     PetSkillVisual? PetSkill = null,
     PlayerAttackVisual? PlayerAttack = null,
@@ -119,6 +122,7 @@ public sealed class WorldAoi
     private readonly Dictionary<long, PetWorldPresence> _petsByOwner = new();
     private readonly Dictionary<long, MechaWorldStateUpdate> _mechasByOwner = new();
     private readonly Dictionary<long, PlayerEquipmentWorldStateUpdate> _playerEquipmentByOwner = new();
+    private readonly Dictionary<long, PlayerShopWorldStateUpdate> _playerShopsByOwner = new();
     private readonly Dictionary<long, PetFollowTarget> _petFollowTargets = new();
     private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _groundBuckets = new();
     private readonly Dictionary<(int Map, int X, int Y), HashSet<long>> _monsterBuckets = new();
@@ -144,6 +148,7 @@ public sealed class WorldAoi
         public readonly Dictionary<long, PetWorldPresence> VisiblePets = new();
         public readonly Dictionary<long, MechaWorldStateUpdate> VisibleMechas = new();
         public readonly Dictionary<long, PlayerEquipmentWorldStateUpdate> VisiblePlayerEquipment = new();
+        public readonly Dictionary<long, PlayerShopWorldStateUpdate> VisiblePlayerShops = new();
         public readonly Queue<AoiEvent> Pending = new();
 
         public Observer(ActorSnapshot actor) => Self = actor;
@@ -481,6 +486,53 @@ public sealed class WorldAoi
            owner.MapEpoch==update.OwnerMapEpoch)
             foreach(var observer in _observers.Values)
                 RefreshPlayerEquipment(observer,owner,_lastTick);
+    }
+
+    public void ApplyPlayerShopState(PlayerShopWorldStateUpdate update)
+    {
+        string name=(update.ShopName??string.Empty).Trim();
+        if(update.OwnerActorId<=0||update.OwnerConnectionEpoch<=0||
+           update.OwnerMapEpoch<=0||update.Revision==0)
+            throw new InvalidOperationException("Invalid player-shop AOI update");
+        if(update.Present)
+        {
+            if(string.IsNullOrWhiteSpace(name)||
+               name.EnumerateRunes().Count() is <1 or >20||
+               System.Text.Encoding.UTF8.GetByteCount(name)>WireProtocol.PlayerShopMaximumNameBytes)
+                throw new InvalidOperationException("Invalid player-shop name");
+        }
+        else if(name.Length!=0)
+            throw new InvalidOperationException("Closed player-shop AOI update carried a name");
+
+        update=update with { ShopName=name };
+        if(_playerShopsByOwner.TryGetValue(update.OwnerActorId,out var previous))
+        {
+            if(update.OwnerConnectionEpoch<previous.OwnerConnectionEpoch||
+               (update.OwnerConnectionEpoch==previous.OwnerConnectionEpoch&&
+                update.OwnerMapEpoch<previous.OwnerMapEpoch)||
+               (update.OwnerConnectionEpoch==previous.OwnerConnectionEpoch&&
+                update.OwnerMapEpoch==previous.OwnerMapEpoch&&
+                update.Revision<previous.Revision))
+                return;
+            if(!update.Present)
+                HidePlayerShop(previous,update.Revision);
+            else if(previous.OwnerConnectionEpoch!=update.OwnerConnectionEpoch||
+                    previous.OwnerMapEpoch!=update.OwnerMapEpoch)
+                HidePlayerShop(previous);
+        }
+
+        if(!update.Present)
+        {
+            _playerShopsByOwner.Remove(update.OwnerActorId);
+            return;
+        }
+
+        _playerShopsByOwner[update.OwnerActorId]=update;
+        if(_entities.TryGetValue(update.OwnerActorId,out var owner)&&
+           owner.ConnectionEpoch==update.OwnerConnectionEpoch&&
+           owner.MapEpoch==update.OwnerMapEpoch)
+            foreach(var observer in _observers.Values)
+                RefreshPlayerShop(observer,owner,_lastTick);
     }
 
     public int EnqueuePlayerIdentity(PlayerIdentityPresentation identity)
@@ -1123,6 +1175,7 @@ public sealed class WorldAoi
                 RefreshPet(observer, actor, tick);
                 RefreshMecha(observer, actor, tick);
                 RefreshPlayerEquipment(observer,actor,tick);
+                RefreshPlayerShop(observer,actor,tick);
             }
 
         var viewer = new Observer(actor);
@@ -1154,6 +1207,13 @@ public sealed class WorldAoi
            activeEquipment.OwnerConnectionEpoch==actor.ConnectionEpoch&&
            activeEquipment.OwnerMapEpoch==actor.MapEpoch)
             HidePlayerEquipment(activeEquipment);
+        if(_playerShopsByOwner.TryGetValue(actor.ActorId,out var activeShop)&&
+           activeShop.OwnerConnectionEpoch==actor.ConnectionEpoch&&
+           activeShop.OwnerMapEpoch==actor.MapEpoch)
+        {
+            HidePlayerShop(activeShop);
+            _playerShopsByOwner.Remove(actor.ActorId);
+        }
         RemoveBucket(old);
         _entities.Remove(actor.ActorId);
         // After disconnect or a trusted map transfer, the old observer queue is
@@ -1190,6 +1250,7 @@ public sealed class WorldAoi
                 RefreshPet(observer, actor, tick);
                 RefreshMecha(observer, actor, tick);
                 RefreshPlayerEquipment(observer,actor,tick);
+                RefreshPlayerShop(observer,actor,tick);
             }
         if (_observers.TryGetValue(actor.ActorId, out var moving))
         {
@@ -1306,6 +1367,17 @@ public sealed class WorldAoi
                     PlayerEquipment:DetachedPlayerEquipment(entry.Value)));
             }
         }
+        foreach(var entry in observer.VisiblePlayerShops.ToArray())
+        {
+            bool ownerVisible=entry.Key==viewer.ActorId || observer.Visible.ContainsKey(entry.Key);
+            if(!_playerShopsByOwner.TryGetValue(entry.Key,out var shop)||
+               !shop.Equals(entry.Value)||!ownerVisible)
+            {
+                observer.VisiblePlayerShops.Remove(entry.Key);
+                Enqueue(observer,new(AoiEventKind.PlayerShopState,tick,viewer.MapEpoch,
+                    PlayerShop:ClosedPlayerShop(entry.Value)));
+            }
+        }
 
         // Scan only the bounded map-specific spatial buckets surrounding this
         // observer, not the entire entity dictionaries each movement tick.
@@ -1325,10 +1397,12 @@ public sealed class WorldAoi
                 RefreshPet(observer,actor,tick);
                 RefreshMecha(observer,actor,tick);
                 RefreshPlayerEquipment(observer,actor,tick);
+                RefreshPlayerShop(observer,actor,tick);
             }
         RefreshPet(observer,viewer,tick);
         RefreshMecha(observer,viewer,tick);
         RefreshPlayerEquipment(observer,viewer,tick);
+        RefreshPlayerShop(observer,viewer,tick);
 
         candidates.Clear();
         for (int bx = minX; bx <= maxX; bx++)
@@ -1694,6 +1768,72 @@ public sealed class WorldAoi
         Enqueue(observer,new(AoiEventKind.PlayerEquipmentState,tick,
             observer.Self.MapEpoch,PlayerEquipment:equipment));
     }
+
+    private void HidePlayerShop(
+        PlayerShopWorldStateUpdate shop,uint closeRevision=0)
+    {
+        foreach(var observer in _observers.Values)
+            if(observer.VisiblePlayerShops.TryGetValue(shop.OwnerActorId,out var seen)&&
+               seen.OwnerConnectionEpoch==shop.OwnerConnectionEpoch&&
+               seen.OwnerMapEpoch==shop.OwnerMapEpoch)
+            {
+                observer.VisiblePlayerShops.Remove(shop.OwnerActorId);
+                var closed=closeRevision>seen.Revision
+                    ? ClosedPlayerShop(seen,closeRevision)
+                    : ClosedPlayerShop(seen);
+                Enqueue(observer,new(AoiEventKind.PlayerShopState,_lastTick,
+                    observer.Self.MapEpoch,PlayerShop:closed));
+            }
+    }
+
+    private void RefreshPlayerShop(Observer observer,ActorSnapshot owner,long tick)
+    {
+        if(!_playerShopsByOwner.TryGetValue(owner.ActorId,out var shop)||
+           shop.OwnerConnectionEpoch!=owner.ConnectionEpoch)
+        {
+            if(observer.VisiblePlayerShops.Remove(owner.ActorId,out var stale))
+                Enqueue(observer,new(AoiEventKind.PlayerShopState,tick,
+                    observer.Self.MapEpoch,PlayerShop:ClosedPlayerShop(stale)));
+            return;
+        }
+
+        if(shop.OwnerMapEpoch!=owner.MapEpoch)
+        {
+            if(observer.VisiblePlayerShops.Remove(owner.ActorId,out var stale))
+                Enqueue(observer,new(AoiEventKind.PlayerShopState,tick,
+                    observer.Self.MapEpoch,PlayerShop:ClosedPlayerShop(stale)));
+            return;
+        }
+
+        bool ownerVisible=observer.Self.ActorId==owner.ActorId&&
+            observer.Self.ConnectionEpoch==owner.ConnectionEpoch&&
+            observer.Self.MapEpoch==owner.MapEpoch;
+        if(!ownerVisible&&observer.Visible.TryGetValue(owner.ActorId,out var seenOwner))
+            ownerVisible=seenOwner.ConnectionEpoch==owner.ConnectionEpoch&&
+                seenOwner.MapEpoch==owner.MapEpoch;
+        if(!ownerVisible)
+        {
+            if(observer.VisiblePlayerShops.Remove(owner.ActorId,out var hidden))
+                Enqueue(observer,new(AoiEventKind.PlayerShopState,tick,
+                    observer.Self.MapEpoch,PlayerShop:ClosedPlayerShop(hidden)));
+            return;
+        }
+
+        if(observer.VisiblePlayerShops.TryGetValue(owner.ActorId,out var current)&&
+           current.Equals(shop))
+            return;
+        observer.VisiblePlayerShops[owner.ActorId]=shop;
+        Enqueue(observer,new(AoiEventKind.PlayerShopState,tick,
+            observer.Self.MapEpoch,PlayerShop:shop));
+    }
+
+    private static PlayerShopWorldStateUpdate ClosedPlayerShop(
+        PlayerShopWorldStateUpdate source,uint revision=0) =>
+        source with
+        {
+            Revision=revision>source.Revision?revision:source.Revision,
+            Present=false,ShopName=string.Empty
+        };
 
     private static PlayerEquipmentWorldStateUpdate DetachedPlayerEquipment(
         PlayerEquipmentWorldStateUpdate source) =>

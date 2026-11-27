@@ -180,6 +180,11 @@ public static partial class WireProtocol
     public const int GmPvpNameResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 8 + 1;
     public const int PlayerShopCommandFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 8 + 8 + 8 + 8;
+    public const int PlayerShopCommandQuantityFrameBytes = PlayerShopCommandFrameBytes + 4;
+    public const int PlayerShopCommandNameHeaderBytes = PlayerShopCommandFrameBytes + 2;
+    public const int PlayerShopMaximumNameBytes = 80;
+    public const int PlayerShopCommandMaximumFrameBytes =
+        PlayerShopCommandNameHeaderBytes + PlayerShopMaximumNameBytes;
     public const int PlayerShopResultFrameBytes =
         HeaderBytes + 8 + 4 + 1 + 1 + 8 + 8 + 8 + 4 + 4 + 8 + 4 + 8 + 8 + 8 + 1;
     public const int PlayerShopSoldFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 8;
@@ -188,6 +193,9 @@ public static partial class WireProtocol
     public const int PlayerShopSnapshotMaximumFrameBytes =
         PlayerShopSnapshotHeaderBytes +
         SqliteIdentityStore.PlayerShopMaximumActiveListings*PlayerShopListingBytes;
+    public const int PlayerShopPresentationHeaderBytes = HeaderBytes + 8 + 8 + 8 + 8 + 8 + 4 + 1 + 2;
+    public const int PlayerShopPresentationMaximumFrameBytes =
+        PlayerShopPresentationHeaderBytes + PlayerShopMaximumNameBytes;
     public const int ChatCommandHeaderBytes = HeaderBytes + 8 + 4 + 1 + 1 + 2;
     public const int ChatDeliveryHeaderBytes = HeaderBytes + 8 + 8 + 8 + 4 + 1 + 1 + 2 + 2;
     public const int ChatMaxMessageBytes = 256;
@@ -885,13 +893,20 @@ public static partial class WireProtocol
             WireOpcode.GmCapability => advertised == GmCapabilityFrameBytes,
             WireOpcode.GmPvpNameCommand => advertised == GmPvpNameCommandFrameBytes,
             WireOpcode.GmPvpNameResult => advertised == GmPvpNameResultFrameBytes,
-            WireOpcode.PlayerShopCommand => advertised == PlayerShopCommandFrameBytes,
+            WireOpcode.PlayerShopCommand =>
+                advertised == PlayerShopCommandFrameBytes ||
+                advertised == PlayerShopCommandQuantityFrameBytes ||
+                (advertised >= PlayerShopCommandNameHeaderBytes + 1 &&
+                 advertised <= PlayerShopCommandMaximumFrameBytes),
             WireOpcode.PlayerShopResult => advertised == PlayerShopResultFrameBytes,
             WireOpcode.PlayerShopSold => advertised == PlayerShopSoldFrameBytes,
             WireOpcode.PlayerShopSnapshot =>
                 advertised >= PlayerShopSnapshotHeaderBytes &&
                 advertised <= PlayerShopSnapshotMaximumFrameBytes &&
                 (advertised-PlayerShopSnapshotHeaderBytes)%PlayerShopListingBytes==0,
+            WireOpcode.PlayerShopPresentation =>
+                advertised >= PlayerShopPresentationHeaderBytes &&
+                advertised <= PlayerShopPresentationMaximumFrameBytes,
             WireOpcode.ChatCommand => advertised >= ChatCommandHeaderBytes + 1 && advertised <= ChatCommandMaximumFrameBytes,
             WireOpcode.ChatDelivery => advertised >= ChatDeliveryHeaderBytes + 2 && advertised <= ChatDeliveryMaximumFrameBytes,
             WireOpcode.EmotionCommand => advertised == EmotionCommandFrameBytes,

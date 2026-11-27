@@ -1109,8 +1109,8 @@ def run_player_shop(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
     server = subprocess.Popen(
         ["dotnet", "run", "--project", str(fixture), "-c", "Release",
          "--no-build", "--", "--player-shop"],
-        cwd=repo, env=env, text=True, stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, bufsize=1)
+        cwd=repo, env=env, text=True, encoding="utf-8", errors="replace",
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
     server_lines: list[str] = []
     server_notices: queue.Queue[str] = queue.Queue()
     seller_lines: list[str] = []
@@ -1158,6 +1158,7 @@ def run_player_shop(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
 
         seller=subprocess.Popen(
             [*base,"seller",*tail],cwd=repo,text=True,
+            encoding="utf-8",errors="replace",
             stdout=subprocess.PIPE,stderr=subprocess.STDOUT,bufsize=1)
         assert seller.stdout is not None
         threading.Thread(
@@ -1167,6 +1168,7 @@ def run_player_shop(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
 
         buyer=subprocess.run(
             [*base,"buyer",*tail],cwd=repo,text=True,
+            encoding="utf-8",errors="replace",
             stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
             timeout=max(1.0,deadline-time.monotonic()))
         if buyer.returncode!=0 or "CLIENT_PLAYER_SHOP_PASS role=buyer" not in buyer.stdout:
@@ -1179,6 +1181,15 @@ def run_player_shop(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
             raise RuntimeError(
                 "player-shop seller failed:\n"+"\n".join(seller_lines))
 
+        until(server_notices,"PLAYER_SHOP_FIXTURE_RELOG_READY",deadline,server)
+        relog=subprocess.run(
+            [*base,"relog",*tail],cwd=repo,text=True,
+            encoding="utf-8",errors="replace",
+            stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+            timeout=max(1.0,deadline-time.monotonic()))
+        if relog.returncode!=0 or "CLIENT_PLAYER_SHOP_PASS role=relog" not in relog.stdout:
+            raise RuntimeError("player-shop relog failed:\n"+relog.stdout)
+
         server.wait(timeout=max(1.0,deadline-time.monotonic()))
         if server.returncode!=0 or not any(
                 line.startswith("PLAYER_SHOP_FIXTURE_PASS")
@@ -1187,6 +1198,7 @@ def run_player_shop(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
                 "player-shop fixture failed:\n"+"\n".join(server_lines))
 
         print(buyer.stdout,end="")
+        print(relog.stdout,end="")
         for line in seller_lines:
             if line.startswith("CLIENT_PLAYER_SHOP_"):
                 print(line)
@@ -1196,9 +1208,9 @@ def run_player_shop(args, repo: Path, fixture: Path, env: dict[str, str]) -> int
         print("GODOT_CSHARP_TWO_CLIENT_PLAYER_SHOP_E2E_PASS "
               "aes_cbc=true concurrent_clients=2 online_only=true "
               "aoi_seller=true inspect=true atomic_uid=true "
-              "quantity=2 source_drop=true durability=80 "
+              "partial_stack=3_to_2_plus_1 source_drop=true durability=80 "
               "seller_wallet=100_to_400 buyer_wallet=1000_to_700 "
-              "seller_sold_push=true client_price_math=false")
+              "seller_sold_push=true relog_persistence=true client_price_math=false")
         return 0
     except Exception as error:
         print("AES_PLAYER_SHOP_RUNNER_FAIL",error,file=sys.stderr)

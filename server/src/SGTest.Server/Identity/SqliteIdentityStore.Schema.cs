@@ -639,6 +639,8 @@ CREATE TABLE IF NOT EXISTS player_shop_listings (
     source_drop_id INTEGER NULL,
     durability_raw INTEGER NULL,
     enhancement_level INTEGER NOT NULL DEFAULT 0 CHECK(enhancement_level BETWEEN 0 AND 255),
+    source_kind INTEGER NOT NULL DEFAULT 2 CHECK(source_kind IN (1,2)),
+    source_reference TEXT NOT NULL DEFAULT 'legacy-player-shop' CHECK(length(source_reference) BETWEEN 1 AND 256),
     price INTEGER NOT NULL CHECK(price BETWEEN 1 AND 9000000000000000),
     state INTEGER NOT NULL CHECK(state BETWEEN 0 AND 3),
     buyer_character_id INTEGER NULL REFERENCES characters(character_id) ON DELETE RESTRICT,
@@ -661,6 +663,28 @@ ON player_shop_listings(item_uid) WHERE state=0;",tx);
             Execute(connection,@"
 CREATE INDEX IF NOT EXISTS ix_player_shop_seller_history
 ON player_shop_listings(seller_character_id,listing_id);",tx);
+            // Schema v48: player-shop listings can become a true escrow.
+            // Preserve exact trusted inventory provenance while the UID is absent
+            // from item_instances; old rows are backfilled compatibly.
+            if(schemaVersion<48)
+            {
+                if(!ColumnExists(connection,"player_shop_listings","source_kind",tx))
+                    Execute(connection,@"ALTER TABLE player_shop_listings
+ADD COLUMN source_kind INTEGER NOT NULL DEFAULT 2
+CHECK(source_kind IN (1,2));",tx);
+                if(!ColumnExists(connection,"player_shop_listings","source_reference",tx))
+                    Execute(connection,@"ALTER TABLE player_shop_listings
+ADD COLUMN source_reference TEXT NOT NULL DEFAULT 'legacy-player-shop'
+CHECK(length(source_reference) BETWEEN 1 AND 256);",tx);
+                Execute(connection,@"
+UPDATE player_shop_listings
+SET source_kind=CASE WHEN source_drop_id IS NULL THEN 2 ELSE 1 END,
+    source_reference=CASE
+      WHEN source_drop_id IS NULL THEN 'legacy-player-shop:' || listing_id
+      ELSE 'drop:' || source_drop_id
+    END;",tx);
+            }
+
             // Schema v20: +N is ItemInstance state, never a separate
             // ItemDefinition. This migration only establishes durable metadata;
             // it does not claim an original max level, cost, material or success

@@ -194,6 +194,8 @@ public sealed class WorldAoiPump
                     _aoi.ApplyMechaState(mechaUpdate);
                 while(_router.PlayerEquipmentWorldUpdates.TryRead(out var equipmentUpdate))
                     _aoi.ApplyPlayerEquipmentState(equipmentUpdate);
+                while(_router.PlayerShopWorldUpdates.TryRead(out var shopUpdate))
+                    _aoi.ApplyPlayerShopState(shopUpdate);
 
                 while (_router.AttackRequests.TryRead(out var attack))
                 {

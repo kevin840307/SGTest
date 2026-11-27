@@ -163,6 +163,12 @@ public sealed partial class GatewayConnection
                         equipment.ShieldDefinitionId,equipment.BackDefinitionId,
                         equipment.CharmDefinitionId));
                     break;
+                case AoiEventKind.PlayerShopState when evt.PlayerShop is { } shop:
+                    frame=WireProtocol.EncodePlayerShopPresentation(new(
+                        evt.ReceiverMapEpoch,evt.Tick,shop.OwnerActorId,
+                        shop.OwnerConnectionEpoch,shop.OwnerMapEpoch,
+                        shop.Revision,shop.Present,shop.ShopName));
+                    break;
                 case AoiEventKind.PlayerAttackVisual when evt.PlayerAttack is { } attack:
                     frame=WireProtocol.EncodePlayerAttackVisual(new(
                         evt.ReceiverMapEpoch,evt.Tick,

@@ -1,4 +1,5 @@
 using SGTest.Server.Visibility;
+using System.Text;
 using SGTest.Server.Skill;
 using SGTest.Server.Pvp;
 using SGTest.Server.Npc;
@@ -243,6 +244,23 @@ public sealed partial class WorldResultRouter
             }
         }
         return _playerEquipmentWorldUpdates.Writer.TryWrite(update);
+    }
+
+    public bool TryPostPlayerShopWorldState(PlayerShopWorldStateUpdate update)
+    {
+        if(update.OwnerActorId<=0||update.OwnerConnectionEpoch<=0||
+           update.OwnerMapEpoch<=0||update.Revision==0)return false;
+        string name=(update.ShopName??string.Empty).Trim();
+        if(update.Present)
+        {
+            if(string.IsNullOrWhiteSpace(name)||
+               name.EnumerateRunes().Count() is <1 or >20||
+               System.Text.Encoding.UTF8.GetByteCount(name)>WireProtocol.PlayerShopMaximumNameBytes)
+                return false;
+        }
+        else if(name.Length!=0)
+            return false;
+        return _playerShopWorldUpdates.Writer.TryWrite(update with { ShopName=name });
     }
 
     public bool TryRequestResync(TrustedWorldResyncRequest request)

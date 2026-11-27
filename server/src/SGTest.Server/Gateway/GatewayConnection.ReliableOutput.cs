@@ -417,6 +417,37 @@ public sealed partial class GatewayConnection
         }
     }
 
+    public GatewaySendStatus QueuePlayerShopInventorySnapshot(
+        TrustedPlayerShopCommand request,
+        IReadOnlyList<InventoryItemWire> items,long wallet)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            var bound=_binding;
+            if(request.ActorId!=bound.ActorId||
+               request.ConnectionEpoch!=bound.ConnectionEpoch||
+               request.RequestMapEpoch!=bound.MapEpoch||
+               items is null||items.Count>WireProtocol.InventorySnapshotMaxItems||
+               wallet<0||wallet>SqliteIdentityStore.MaximumMoney)
+                return GatewaySendStatus.GenerationMismatch;
+            const int chunk=WireProtocol.InventorySnapshotMaxItemsPerFrame;
+            if(items.Count==0)
+                return _reliable.TryEnqueue(WireProtocol.EncodeInventorySnapshot(
+                    new(request.ActorId,0,true,Array.Empty<InventoryItemWire>(),wallet)))
+                    ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+            for(int start=0;start<items.Count;start+=chunk)
+            {
+                var group=items.Skip(start).Take(chunk).ToArray();
+                bool final=start+group.Length==items.Count;
+                if(!_reliable.TryEnqueue(WireProtocol.EncodeInventorySnapshot(
+                    new(request.ActorId,start,final,group,final?wallet:null))))
+                    return GatewaySendStatus.Backpressured;
+            }
+            return GatewaySendStatus.Enqueued;
+        }
+    }
+
     public GatewaySendStatus QueuePlayerShopSnapshot(
         TrustedPlayerShopCommand request,PlayerShopSnapshotWire snapshot)
     {

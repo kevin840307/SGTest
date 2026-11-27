@@ -461,7 +461,8 @@ public sealed partial class GatewayConnection
                 bound.ActorId,bound.ConnectionEpoch,playerShop.MapEpoch,
                 playerShop.ShopSequence,playerShop.Action,
                 playerShop.SellerActorId,playerShop.ListingId,
-                playerShop.ItemUid,playerShop.Price))
+                playerShop.ItemUid,playerShop.Price,playerShop.Name,
+                playerShop.Quantity))
                 ? WireFrameDisposition.Accepted:WireFrameDisposition.Backpressured;
         }
 

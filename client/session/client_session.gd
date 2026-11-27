@@ -275,12 +275,15 @@ func withdraw_bank_money(amount: int) -> bool:
 		"actor_id":int(current.get("actor_id",0)),"map_epoch":int(current.get("map_epoch",0))})
 
 
-func open_player_shop(item_uid:int,price:int)->bool:
+func open_player_shop(item_uid:int,price:int,quantity:int=0)->bool:
 	var current:=snapshot()
 	var inventory:Dictionary=current.get("inventory_items",{})
 	if item_uid<=0 or price<=0 or price>WireCodec.MAX_MONEY or not inventory.has(item_uid):
 		return false
-	return _queue_player_shop_intent(1,0,0,item_uid,price,current)
+	var owned:=int((inventory[item_uid] as Dictionary).get("quantity",0))
+	if quantity<0 or quantity>owned or owned<=0:
+		return false
+	return _queue_player_shop_intent(1,0,0,item_uid,price,current,"",quantity)
 
 
 func close_player_shop(listing_id:int)->bool:
@@ -288,6 +291,20 @@ func close_player_shop(listing_id:int)->bool:
 		return false
 	var current:=snapshot()
 	return _queue_player_shop_intent(2,0,listing_id,0,0,current)
+
+
+func set_player_shop_name(name:String)->bool:
+	var clean:=name.strip_edges()
+	var bytes:=clean.to_utf8_buffer()
+	if clean.length()<1 or clean.length()>20 or bytes.size()<1 or bytes.size()>WireCodec.PLAYER_SHOP_MAX_NAME_BYTES:
+		return false
+	var current:=snapshot()
+	return _queue_player_shop_intent(5,0,0,0,0,current,clean)
+
+
+func close_player_shop_all()->bool:
+	var current:=snapshot()
+	return _queue_player_shop_intent(6,0,0,0,0,current)
 
 
 func inspect_player_shop(seller_actor_id:int)->bool:
@@ -315,7 +332,7 @@ func buy_player_shop(seller_actor_id:int,listing_id:int)->bool:
 
 func _queue_player_shop_intent(
 		action:int,seller_actor_id:int,listing_id:int,item_uid:int,
-		price:int,current:Dictionary)->bool:
+		price:int,current:Dictionary,name:String="",quantity:int=0)->bool:
 	if (
 		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
 		bool(current.get("player_dead",false)) or
@@ -332,7 +349,7 @@ func _queue_player_shop_intent(
 	return _queue_intent({
 		"type":"player_shop","action":action,
 		"seller_actor_id":seller_actor_id,"listing_id":listing_id,
-		"item_uid":item_uid,"price":price,
+		"item_uid":item_uid,"price":price,"name":name,"quantity":quantity,
 		"actor_id":int(current.get("actor_id",0)),
 		"map_epoch":int(current.get("map_epoch",0))
 	})
@@ -1845,6 +1862,9 @@ func _process_player_shop_intent(intent: Dictionary) -> void:
 	var listing:=int(intent.get("listing_id",0))
 	var uid:=int(intent.get("item_uid",0))
 	var price:=int(intent.get("price",0))
+	var quantity:=int(intent.get("quantity",0))
+	var name:=str(intent.get("name","")).strip_edges()
+	var name_bytes:=name.to_utf8_buffer()
 	var entities:Dictionary=current.get("entities",{})
 	if (
 		int(current.get("state",-1))!=WorldState.STATE_IN_WORLD or
@@ -1862,37 +1882,49 @@ func _process_player_shop_intent(intent: Dictionary) -> void:
 	var valid:=false
 	match action:
 		1:
+			var inventory:Dictionary=current.get("inventory_items",{})
+			var owned:=int((inventory.get(uid,{}) as Dictionary).get("quantity",0))
 			valid=(
 				seller==0 and listing==0 and uid>0 and price>0 and
-				price<=WireCodec.MAX_MONEY and
-				(current.get("inventory_items",{}) as Dictionary).has(uid)
+				price<=WireCodec.MAX_MONEY and name_bytes.is_empty() and
+				quantity>=0 and quantity<=owned and owned>0 and inventory.has(uid)
 			)
 		2:
-			valid=seller==0 and listing>0 and uid==0 and price==0
+			valid=seller==0 and listing>0 and uid==0 and price==0 and name_bytes.is_empty()
 		3:
 			valid=(
 				seller>0 and seller!=int(current.get("actor_id",0)) and
-				entities.has(seller) and listing==0 and uid==0 and price==0
+				entities.has(seller) and listing==0 and uid==0 and price==0 and
+				name_bytes.is_empty()
 			)
 		4:
 			valid=(
 				seller>0 and seller!=int(current.get("actor_id",0)) and
-				entities.has(seller) and listing>0 and uid==0 and price==0
+				entities.has(seller) and listing>0 and uid==0 and price==0 and
+				name_bytes.is_empty()
 			)
+		5:
+			valid=(
+				seller==0 and listing==0 and uid==0 and price==0 and
+				name.length()>=1 and name.length()<=20 and
+				name_bytes.size()>=1 and name_bytes.size()<=WireCodec.PLAYER_SHOP_MAX_NAME_BYTES
+			)
+		6:
+			valid=seller==0 and listing==0 and uid==0 and price==0 and name_bytes.is_empty()
 	if not valid:
 		_pop_intent()
 		return
 	var sequence:=int(current.get("player_shop_sequence",0))+1
 	var frame:=WireCodec.encode_player_shop_command(
 		int(current.get("map_epoch",0)),sequence,action,
-		seller,listing,uid,price)
+		seller,listing,uid,price,name,quantity)
 	if frame.is_empty():
 		_pop_intent()
 		return
 	if (
 		_transport.send_frame(frame) and
 		_world.mark_player_shop_sent(
-			sequence,action,seller,listing,uid,price)
+			sequence,action,seller,listing,uid,price,name,quantity)
 	):
 		_pop_intent()
 		_publish()

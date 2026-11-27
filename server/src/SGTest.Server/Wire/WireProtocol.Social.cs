@@ -203,7 +203,18 @@ public static partial class WireProtocol
     {
         if(!ValidPlayerShopCommand(value))
             throw new ArgumentOutOfRangeException(nameof(value));
-        var frame=NewFrame(WireOpcode.PlayerShopCommand,PlayerShopCommandFrameBytes);
+        byte[] name=Array.Empty<byte>();
+        if(value.Action==PlayerShopCommandAction.SetName)
+        {
+            try { name=StrictUtf8.GetBytes(value.Name.Trim()); }
+            catch(EncoderFallbackException) { throw new ArgumentOutOfRangeException(nameof(value)); }
+        }
+        int size=value.Action==PlayerShopCommandAction.Open&&value.Quantity>0
+            ?PlayerShopCommandQuantityFrameBytes
+            :name.Length==0
+                ?PlayerShopCommandFrameBytes
+                :PlayerShopCommandNameHeaderBytes+name.Length;
+        var frame=NewFrame(WireOpcode.PlayerShopCommand,size);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.MapEpoch);
         BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(16,4),value.ShopSequence);
         frame[20]=(byte)value.Action;
@@ -211,6 +222,13 @@ public static partial class WireProtocol
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(29,8),value.ListingId);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(37,8),value.ItemUid);
         BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(45,8),value.Price);
+        if(value.Action==PlayerShopCommandAction.Open&&value.Quantity>0)
+            BinaryPrimitives.WriteInt32LittleEndian(frame.AsSpan(53,4),value.Quantity);
+        else if(name.Length>0)
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(53,2),(ushort)name.Length);
+            name.AsSpan().CopyTo(frame.AsSpan(PlayerShopCommandNameHeaderBytes));
+        }
         return frame;
     }
 
@@ -220,14 +238,33 @@ public static partial class WireProtocol
         value=default;
         if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PlayerShopCommand)
             return false;
+        var action=(PlayerShopCommandAction)frame[20];
+        string name=string.Empty;
+        int quantity=0;
+        if(frame.Length==PlayerShopCommandQuantityFrameBytes)
+        {
+            if(action!=PlayerShopCommandAction.Open)return false;
+            quantity=BinaryPrimitives.ReadInt32LittleEndian(frame.Slice(53,4));
+        }
+        else if(frame.Length!=PlayerShopCommandFrameBytes)
+        {
+            if(action!=PlayerShopCommandAction.SetName||
+               frame.Length<PlayerShopCommandNameHeaderBytes+1)return false;
+            int length=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(53,2));
+            if(length is <1 or >PlayerShopMaximumNameBytes||
+               frame.Length!=PlayerShopCommandNameHeaderBytes+length)
+                return false;
+            try { name=StrictUtf8.GetString(frame.Slice(PlayerShopCommandNameHeaderBytes,length)); }
+            catch(DecoderFallbackException) { return false; }
+        }
         value=new(
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8)),
             BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(16,4)),
-            (PlayerShopCommandAction)frame[20],
+            action,
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(21,8)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(29,8)),
             BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(37,8)),
-            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(45,8)));
+            BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(45,8)),name,quantity);
         return ValidPlayerShopCommand(value);
     }
 
@@ -282,32 +319,45 @@ public static partial class WireProtocol
     private static bool ValidPlayerShopCommand(PlayerShopCommandWire value)
     {
         if(value.MapEpoch<=0||value.ShopSequence==0||
-           value.Action is <PlayerShopCommandAction.Open or >PlayerShopCommandAction.Buy||
+           value.Action is <PlayerShopCommandAction.Open or >PlayerShopCommandAction.CloseAll||
            value.SellerActorId<0||value.ListingId<0||value.ItemUid<0||
+           value.Quantity<0||value.Quantity>1_000_000||
            value.Price<0||value.Price>SqliteIdentityStore.MaximumMoney)
             return false;
+        string name=(value.Name??string.Empty).Trim();
+        int runes=name.EnumerateRunes().Count();
+        int nameBytes;
+        try { nameBytes=StrictUtf8.GetByteCount(name); }
+        catch(EncoderFallbackException) { return false; }
         return value.Action switch
         {
             PlayerShopCommandAction.Open =>
                 value.SellerActorId==0&&value.ListingId==0&&
-                value.ItemUid>0&&value.Price>0,
+                value.ItemUid>0&&value.Price>0&&nameBytes==0,
             PlayerShopCommandAction.Close =>
                 value.SellerActorId==0&&value.ListingId>0&&
-                value.ItemUid==0&&value.Price==0,
+                value.ItemUid==0&&value.Price==0&&nameBytes==0&&value.Quantity==0,
             PlayerShopCommandAction.Inspect =>
                 value.SellerActorId>0&&value.ListingId==0&&
-                value.ItemUid==0&&value.Price==0,
+                value.ItemUid==0&&value.Price==0&&nameBytes==0&&value.Quantity==0,
             PlayerShopCommandAction.Buy =>
                 value.SellerActorId>0&&value.ListingId>0&&
-                value.ItemUid==0&&value.Price==0,
+                value.ItemUid==0&&value.Price==0&&nameBytes==0&&value.Quantity==0,
+            PlayerShopCommandAction.SetName =>
+                value.SellerActorId==0&&value.ListingId==0&&
+                value.ItemUid==0&&value.Price==0&&value.Quantity==0&&
+                runes is >=1 and <=20&&nameBytes is >=1 and <=PlayerShopMaximumNameBytes,
+            PlayerShopCommandAction.CloseAll =>
+                value.SellerActorId==0&&value.ListingId==0&&
+                value.ItemUid==0&&value.Price==0&&nameBytes==0&&value.Quantity==0,
             _=>false
         };
     }
 
     private static bool ValidPlayerShopResult(PlayerShopResultWire value)=>
         value.MapEpoch>0&&value.ShopSequence>0&&
-        value.Action is >=PlayerShopCommandAction.Open and <=PlayerShopCommandAction.Buy&&
-        (byte)value.Status<=16&&
+        value.Action is >=PlayerShopCommandAction.Open and <=PlayerShopCommandAction.CloseAll&&
+        (byte)value.Status<=18&&
         value.SellerActorId>=0&&value.ListingId>=0&&value.ItemUid>=0&&
         value.ItemDefinitionId is >=0 and <=100_000_000&&
         value.Quantity is >=0 and <=1_000_000&&value.SourceDropId>=0&&
@@ -425,6 +475,60 @@ public static partial class WireProtocol
         return value.ReceiverMapEpoch>0&&value.ListingId>0&&
             value.BuyerActorId>0&&value.ItemUid>0&&
             value.SellerWallet>=0&&value.SellerWallet<=SqliteIdentityStore.MaximumMoney;
+    }
+
+    public static byte[] EncodePlayerShopPresentation(PlayerShopPresentationWire value)
+    {
+        string name=(value.ShopName??string.Empty).Trim();
+        byte[] bytes;
+        try { bytes=StrictUtf8.GetBytes(name); }
+        catch(EncoderFallbackException) { throw new ArgumentOutOfRangeException(nameof(value)); }
+        int runes=name.EnumerateRunes().Count();
+        if(value.ReceiverMapEpoch<=0||value.ServerTick<0||value.OwnerActorId<=0||
+           value.OwnerConnectionEpoch<=0||value.OwnerMapEpoch<=0||value.Revision==0||
+           (value.Present
+               ? runes is <1 or >20 || bytes.Length is <1 or >PlayerShopMaximumNameBytes
+               : bytes.Length!=0))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        var frame=NewFrame(WireOpcode.PlayerShopPresentation,
+            PlayerShopPresentationHeaderBytes+bytes.Length);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(8,8),value.ReceiverMapEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(16,8),value.ServerTick);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(24,8),value.OwnerActorId);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(32,8),value.OwnerConnectionEpoch);
+        BinaryPrimitives.WriteInt64LittleEndian(frame.AsSpan(40,8),value.OwnerMapEpoch);
+        BinaryPrimitives.WriteUInt32LittleEndian(frame.AsSpan(48,4),value.Revision);
+        frame[52]=value.Present?(byte)1:(byte)0;
+        BinaryPrimitives.WriteUInt16LittleEndian(frame.AsSpan(53,2),(ushort)bytes.Length);
+        bytes.AsSpan().CopyTo(frame.AsSpan(PlayerShopPresentationHeaderBytes));
+        return frame;
+    }
+
+    public static bool TryDecodePlayerShopPresentation(
+        ReadOnlySpan<byte> frame,out PlayerShopPresentationWire value)
+    {
+        value=default;
+        if(!TryReadHeader(frame,out var h)||h.Opcode!=WireOpcode.PlayerShopPresentation||
+           frame.Length<PlayerShopPresentationHeaderBytes)return false;
+        long receiver=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(8,8));
+        long tick=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(16,8));
+        long actor=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(24,8));
+        long connection=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(32,8));
+        long ownerEpoch=BinaryPrimitives.ReadInt64LittleEndian(frame.Slice(40,8));
+        uint revision=BinaryPrimitives.ReadUInt32LittleEndian(frame.Slice(48,4));
+        byte present=frame[52];
+        int length=BinaryPrimitives.ReadUInt16LittleEndian(frame.Slice(53,2));
+        if(receiver<=0||tick<0||actor<=0||connection<=0||ownerEpoch<=0||revision==0||
+           present>1||length>PlayerShopMaximumNameBytes||
+           frame.Length!=PlayerShopPresentationHeaderBytes+length)return false;
+        string name;
+        try { name=StrictUtf8.GetString(frame.Slice(PlayerShopPresentationHeaderBytes,length)); }
+        catch(DecoderFallbackException) { return false; }
+        int runes=name.EnumerateRunes().Count();
+        if((present==1 && (runes is <1 or >20 || string.IsNullOrWhiteSpace(name)))||
+           (present==0 && length!=0))return false;
+        value=new(receiver,tick,actor,connection,ownerEpoch,revision,present==1,name);
+        return true;
     }
 
     public static byte[] EncodeChatCommand(ChatCommandWire value)

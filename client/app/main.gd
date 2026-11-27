@@ -169,7 +169,7 @@ func _ready() -> void:
 	recovered2_auth.skin_requested.connect(_select_recovered2_skin)
 	classic_auth.bind_session(session_panel,world_view.store)
 	recovered2_world.bind_session(session_panel)
-	classic_world.bind_session(session_panel,world_view.store)
+	classic_world.bind_session(session_panel,world_view.store,world_view)
 	# Alternative UI selection is intentionally not player-facing right now;
 	# --dev-ui can still expose the same live switch path without reconnecting.
 	classic_world.set_skin_switch_visible(dev_overlay_enabled)

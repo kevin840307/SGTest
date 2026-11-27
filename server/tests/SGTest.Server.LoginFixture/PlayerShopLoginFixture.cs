@@ -45,7 +45,7 @@ internal static class PlayerShopLoginFixture
             long generation=await store.AllocateLootWorldGenerationAsync()
                 .ConfigureAwait(false);
             var seeded=await SeedItem(
-                store,generation,seller,6401,2,1,8,8).ConfigureAwait(false);
+                store,generation,seller,6401,3,1,8,8).ConfigureAwait(false);
             SetDurability(db,seeded.ItemUid,80);
             SetEnhancementLevel(db,seeded.ItemUid,6);
             var rules=new Dictionary<int,TradeItemRule>
@@ -62,7 +62,7 @@ internal static class PlayerShopLoginFixture
 
             var settings = AesCbcSettings.FromEnvironment();
                                     var listener=new TcpListener(IPAddress.Loopback,0);
-            listener.Start(2);
+            listener.Start(3);
             using var stop=new CancellationTokenSource();
             var routing=router.RunAsync(world.Results);
             var pumping=pump.RunAsync(stop.Token);
@@ -110,6 +110,16 @@ internal static class PlayerShopLoginFixture
                 var ended=await Task.WhenAll(sellerTask,buyerTask)
                     .WaitAsync(TimeSpan.FromSeconds(35)).ConfigureAwait(false);
 
+                Console.WriteLine("PLAYER_SHOP_FIXTURE_RELOG_READY");
+                Console.Out.Flush();
+                using var relogSocket=await listener.AcceptTcpClientAsync()
+                    .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                var relogResult=await authorization.RunAuthenticatedAesSocketAsync(
+                    relogSocket,settings,router,
+                    new AesWireConnectionOptions(
+                        AuthorizationTimeoutMilliseconds:15000))
+                    .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+
                 long sellerWallet=await store.GetCharacterMoneyAsync(seller)
                     .ConfigureAwait(false);
                 long buyerWallet=await store.GetCharacterMoneyAsync(buyer)
@@ -124,6 +134,8 @@ internal static class PlayerShopLoginFixture
 
                 if(sellerWallet!=400||buyerWallet!=700||
                    sellerInventory.Any(x=>x.ItemUid==seeded.ItemUid)||
+                   sellerInventory.Count(x=>x.ItemDefinitionId==6401)!=1||
+                   sellerInventory.Single(x=>x.ItemDefinitionId==6401).Quantity!=1||
                    buyerInventory.Count(x=>x.ItemUid==seeded.ItemUid)!=1||
                    buyerInventory.Single(x=>x.ItemUid==seeded.ItemUid)
                        .ItemDefinitionId!=6401||
@@ -136,23 +148,26 @@ internal static class PlayerShopLoginFixture
                    raw.Owner!=buyer||raw.DurabilityRaw!=80||
                    raw.EnhancementLevel!=6||
                    active is not null||
-                   ended[0].CommandsAccepted!=2||
+                   ended[0].CommandsAccepted!=6||
                    ended[1].CommandsAccepted!=3||
+                   relogResult.CommandsAccepted!=1||
                    router.Statistics.ActiveSessions!=0)
                     throw new InvalidOperationException(
                         $"player-shop E2E mismatch seller_wallet={sellerWallet} " +
                         $"buyer_wallet={buyerWallet} seller_inv={sellerInventory.Count} " +
                         $"buyer_inv={buyerInventory.Count} owner={raw.Owner} " +
                         $"durability={raw.DurabilityRaw} enhancement={raw.EnhancementLevel} " +
-                        $"commands={ended[0].CommandsAccepted}/{ended[1].CommandsAccepted} " +
+                        $"commands={ended[0].CommandsAccepted}/{ended[1].CommandsAccepted}/{relogResult.CommandsAccepted} " +
+                        $"seller_remainder={sellerInventory.Where(x=>x.ItemDefinitionId==6401).Sum(x=>x.Quantity)} " +
                         $"active_shop={active is not null} " +
                         $"sessions={router.Statistics.ActiveSessions}");
 
                 Console.WriteLine(
                     $"PLAYER_SHOP_FIXTURE_PASS seller={seller} buyer={buyer} " +
                     $"item_uid={seeded.ItemUid} drop_id={seeded.DropId} " +
-                    $"quantity=2 durability=80 enhancement=6 seller_wallet={sellerWallet} " +
-                    $"buyer_wallet={buyerWallet} commands=2/3");
+                    $"seed_quantity=3 listing_quantity=2 seller_remainder=1 " +
+                    $"durability=80 enhancement=6 seller_wallet={sellerWallet} " +
+                    $"buyer_wallet={buyerWallet} commands=6/3/1 relog=true");
                 Console.Out.Flush();
                 return 0;
             }

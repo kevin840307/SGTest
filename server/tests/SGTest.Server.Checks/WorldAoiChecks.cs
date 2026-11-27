@@ -51,6 +51,8 @@ internal static class WorldAoiChecks
             MechaInterest);
         Checks.Run("player equipment presentation follows player AOI and clears on detach",
             PlayerEquipmentInterest);
+        Checks.Run("player-shop presentation preserves newer close revision for owner and visible peer",
+            PlayerShopInterest);
         Checks.Run("pet attack and skill visuals reach visible remote peers without duplicating owner result",
             PetAttackVisualInterest);
         Checks.Run("player attack visual reaches only viewers seeing attacker and target",
@@ -225,6 +227,37 @@ internal static class WorldAoiChecks
                 x.Kind==AoiEventKind.PlayerEquipmentState&&
                 x.PlayerEquipment is {Present:true,OwnerMapEpoch:8,Revision:3}),
             "equipment presentation did not heal owner generation after transfer");
+    }
+
+    private static void PlayerShopInterest()
+    {
+        var aoi=new WorldAoi(new WorldAoiOptions(
+            EnterHalfWidth:200,EnterHalfHeight:150,ExitMargin:60,BucketSize:64));
+        var owner=Actor(811,15,24,24,connection:41,mapEpoch:7);
+        var peer=Actor(812,15,48,24,connection:42,mapEpoch:8);
+        Life(aoi,1,Join(owner),Join(peer));
+        Drain(aoi,owner);Drain(aoi,peer);
+
+        var opened=PlayerShopWorldStateUpdate.Open(
+            new ConnectionBinding(owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch),
+            1,"測試小商店");
+        aoi.ApplyPlayerShopState(opened);
+        Require(
+            Drain(aoi,owner).Single(x=>x.Kind==AoiEventKind.PlayerShopState)
+                .PlayerShop==opened&&
+            Drain(aoi,peer).Single(x=>x.Kind==AoiEventKind.PlayerShopState)
+                .PlayerShop==opened,
+            "player-shop open revision did not fan out to visible players");
+
+        var closed=PlayerShopWorldStateUpdate.Closed(
+            new ConnectionBinding(owner.ActorId,owner.ConnectionEpoch,owner.MapEpoch),2);
+        aoi.ApplyPlayerShopState(closed);
+        var ownerClose=Drain(aoi,owner).Single(x=>x.Kind==AoiEventKind.PlayerShopState);
+        var peerClose=Drain(aoi,peer).Single(x=>x.Kind==AoiEventKind.PlayerShopState);
+        Require(
+            ownerClose.PlayerShop is {Present:false,Revision:2,ShopName:""}&&
+            peerClose.PlayerShop is {Present:false,Revision:2,ShopName:""},
+            "player-shop close lost the newer authoritative revision");
     }
 
     private static void MechaInterest()

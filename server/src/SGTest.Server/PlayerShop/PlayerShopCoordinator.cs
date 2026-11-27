@@ -1,4 +1,7 @@
 using SGTest.Server.Trade;
+using SGTest.Server.Visibility;
+using System.Collections.Concurrent;
+using System.Text;
 using SGTest.Server.Combat;
 using SGTest.Server.Gateway;
 using SGTest.Server.Identity;
@@ -21,6 +24,9 @@ public sealed class PlayerShopCoordinator
     private readonly IReadOnlyDictionary<int,TradeItemRule> _itemRules;
     private readonly PlayerCombatSettlement? _combat;
     private readonly PlayerTradeCoordinator _gates;
+    private readonly ConcurrentDictionary<long,LiveShop> _liveShops = new();
+
+    private sealed record LiveShop(ConnectionBinding Binding,uint Revision,string Name);
 
     public PlayerShopCoordinator(
         SqliteIdentityStore store,ServerWorldHost world,
@@ -42,6 +48,7 @@ public sealed class PlayerShopCoordinator
         // stale stall instead of silently reviving any old listing.
         await _store.CloseAllPlayerShopListingsAsync(binding.ActorId)
             .ConfigureAwait(false);
+        _liveShops.TryRemove(binding.ActorId,out _);
     }
 
     public async Task CloseForBindingAsync(
@@ -51,6 +58,16 @@ public sealed class PlayerShopCoordinator
         if(!router.IsCurrentBinding(binding))return;
         await _store.CloseAllPlayerShopListingsAsync(binding.ActorId)
             .ConfigureAwait(false);
+        if(_liveShops.TryGetValue(binding.ActorId,out var live)&&
+           live.Binding==binding&&
+           _liveShops.TryRemove(binding.ActorId,out var removed))
+        {
+            uint revision=removed.Revision==uint.MaxValue?uint.MaxValue:removed.Revision+1;
+            if(!router.TryPostPlayerShopWorldState(
+                PlayerShopWorldStateUpdate.Closed(binding,revision)))
+                throw new AoiBackpressureException(
+                    "Player-shop close presentation queue full");
+        }
     }
 
     public async Task<PlayerShopResultWire> HandleNewAsync(
@@ -84,7 +101,7 @@ public sealed class PlayerShopCoordinator
                !router.IsCurrentBinding(binding))
                 return Queue(command,router,Result(
                     command,PlayerShopResultStatus.StaleGeneration));
-            if(current.CombatDead&&command.Action!=PlayerShopCommandAction.Close)
+            if(current.CombatDead&&command.Action is not (PlayerShopCommandAction.Close or PlayerShopCommandAction.CloseAll))
                 return Queue(command,router,Result(
                     command,PlayerShopResultStatus.PlayerDead));
 
@@ -92,8 +109,14 @@ public sealed class PlayerShopCoordinator
             {
                 case PlayerShopCommandAction.Open:
                 {
+                    if(!_liveShops.TryGetValue(command.ActorId,out var liveShop)||
+                       liveShop.Binding!=binding)
+                        return Queue(command,router,Result(
+                            command,PlayerShopResultStatus.NoShop,
+                            sellerActorId:command.ActorId));
                     var created=await _store.CreatePlayerShopListingAsync(
-                        command.ActorId,command.ItemUid,command.Price,_itemRules)
+                        command.ActorId,command.ItemUid,command.Quantity,
+                        command.Price,_itemRules)
                         .ConfigureAwait(false);
                     var status=created.Status switch
                     {
@@ -102,12 +125,17 @@ public sealed class PlayerShopCoordinator
                         PlayerShopCreateStatus.NotOwned=>PlayerShopResultStatus.NotOwned,
                         PlayerShopCreateStatus.NotTradeable=>PlayerShopResultStatus.NotTradeable,
                         PlayerShopCreateStatus.CapacityReached=>PlayerShopResultStatus.CapacityReached,
+                        PlayerShopCreateStatus.InvalidQuantity=>PlayerShopResultStatus.InvalidQuantity,
                         _=>throw new InvalidOperationException("Unknown player-shop create result")
                     };
                     long wallet=await _store.GetCharacterMoneyAsync(command.ActorId)
                         .ConfigureAwait(false);
-                    return Queue(command,router,Result(
+                    var result=Queue(command,router,Result(
                         command,status,created.Listing,command.ActorId,wallet,wallet));
+                    if(status==PlayerShopResultStatus.Applied)
+                        await QueueInventorySnapshotAsync(command,router,wallet)
+                            .ConfigureAwait(false);
+                    return result;
                 }
                 case PlayerShopCommandAction.Close:
                 {
@@ -122,8 +150,80 @@ public sealed class PlayerShopCoordinator
                     };
                     long wallet=await _store.GetCharacterMoneyAsync(command.ActorId)
                         .ConfigureAwait(false);
-                    return Queue(command,router,Result(
+                    var result=Queue(command,router,Result(
                         command,status,null,command.ActorId,wallet,wallet));
+                    if(status is PlayerShopResultStatus.Applied or
+                                 PlayerShopResultStatus.AlreadyApplied)
+                        await QueueInventorySnapshotAsync(command,router,wallet)
+                            .ConfigureAwait(false);
+                    return result;
+                }
+                case PlayerShopCommandAction.SetName:
+                {
+                    string name=(command.Name??string.Empty).Trim();
+                    int bytes=Encoding.UTF8.GetByteCount(name);
+                    if(string.IsNullOrWhiteSpace(name)||
+                       name.EnumerateRunes().Count() is <1 or >20||
+                       bytes is <1 or >WireProtocol.PlayerShopMaximumNameBytes)
+                        return Queue(command,router,Result(
+                            command,PlayerShopResultStatus.InvalidName,
+                            sellerActorId:command.ActorId,
+                            sellerWallet:await _store.GetCharacterMoneyAsync(command.ActorId)
+                                .ConfigureAwait(false),
+                            buyerWallet:await _store.GetCharacterMoneyAsync(command.ActorId)
+                                .ConfigureAwait(false)));
+
+                    uint revision=1;
+                    if(_liveShops.TryGetValue(command.ActorId,out var prior)&&
+                       prior.Binding==binding)
+                    {
+                        if(prior.Revision==uint.MaxValue)
+                            return Queue(command,router,Result(
+                                command,PlayerShopResultStatus.StaleSequence,
+                                sellerActorId:command.ActorId));
+                        revision=prior.Revision+1;
+                    }
+                    var update=PlayerShopWorldStateUpdate.Open(binding,revision,name);
+                    if(!router.TryPostPlayerShopWorldState(update))
+                        throw new AoiBackpressureException(
+                            "Player-shop presentation queue full");
+                    _liveShops[command.ActorId]=new(binding,revision,name);
+                    long wallet=await _store.GetCharacterMoneyAsync(command.ActorId)
+                        .ConfigureAwait(false);
+                    return Queue(command,router,Result(
+                        command,PlayerShopResultStatus.Applied,null,
+                        command.ActorId,wallet,wallet));
+                }
+                case PlayerShopCommandAction.CloseAll:
+                {
+                    int closed=await _store.CloseAllPlayerShopListingsAsync(
+                        command.ActorId).ConfigureAwait(false);
+                    bool hadLive=_liveShops.TryGetValue(command.ActorId,out var live)&&
+                        live.Binding==binding;
+                    if(hadLive&&live is not null)
+                    {
+                        _liveShops.TryRemove(command.ActorId,out _);
+                        uint revision=live.Revision==uint.MaxValue
+                            ?uint.MaxValue
+                            :live.Revision+1;
+                        if(!router.TryPostPlayerShopWorldState(
+                            PlayerShopWorldStateUpdate.Closed(binding,revision)))
+                        {
+                            router.CloseCurrentBinding(binding);
+                            throw new AoiBackpressureException(
+                                "Player-shop close presentation queue full");
+                        }
+                    }
+                    long wallet=await _store.GetCharacterMoneyAsync(command.ActorId)
+                        .ConfigureAwait(false);
+                    var result=Queue(command,router,Result(
+                        command,(closed>0||hadLive)
+                            ?PlayerShopResultStatus.Applied
+                            :PlayerShopResultStatus.AlreadyApplied,
+                        null,command.ActorId,wallet,wallet));
+                    await QueueInventorySnapshotAsync(command,router,wallet)
+                        .ConfigureAwait(false);
+                    return result;
                 }
                 case PlayerShopCommandAction.Inspect:
                 {
@@ -136,6 +236,11 @@ public sealed class PlayerShopCoordinator
                        !router.IsVisibleActor(binding,seller))
                         return Queue(command,router,Result(
                             command,PlayerShopResultStatus.NotVisible,
+                            sellerActorId:command.SellerActorId));
+                    if(!_liveShops.TryGetValue(command.SellerActorId,out var sellerShop)||
+                       sellerShop.Binding!=seller)
+                        return Queue(command,router,Result(
+                            command,PlayerShopResultStatus.NoShop,
                             sellerActorId:command.SellerActorId));
                     var listings=await _store.GetActivePlayerShopListingsAsync(
                         command.SellerActorId).ConfigureAwait(false);
@@ -180,6 +285,11 @@ public sealed class PlayerShopCoordinator
            !router.IsVisibleActor(buyerBinding,sellerBinding))
             return Queue(command,router,Result(
                 command,PlayerShopResultStatus.NotVisible,
+                sellerActorId:command.SellerActorId));
+        if(!_liveShops.TryGetValue(command.SellerActorId,out var sellerShop)||
+           sellerShop.Binding!=sellerBinding)
+            return Queue(command,router,Result(
+                command,PlayerShopResultStatus.NoShop,
                 sellerActorId:command.SellerActorId));
         if(!_gates.TryResolveGameplayGates(
                 buyerBinding,sellerBinding,out var buyerGate,out var sellerGate)||
@@ -293,6 +403,36 @@ public sealed class PlayerShopCoordinator
             if(!requesterQueued||!sellerQueued)
                 throw new IOException(
                     "Committed player-shop sale could not reach both reliable queues");
+
+            // Selling the last active listing closes the live stall presentation.
+            // The durable sale is already committed and both reliable receipts are
+            // queued; removing the empty sign prevents peers from browsing a ghost
+            // shop. The seller gameplay gate is still held, so a concurrent reopen
+            // cannot race this check.
+            if(status is PlayerShopResultStatus.Applied or
+                         PlayerShopResultStatus.AlreadyApplied)
+            {
+                var remaining=await _store.GetActivePlayerShopListingsAsync(
+                    sellerBinding.ActorId).ConfigureAwait(false);
+                if(remaining.Count==0&&
+                   _liveShops.TryGetValue(sellerBinding.ActorId,out var live)&&
+                   live.Binding==sellerBinding&&
+                   _liveShops.TryRemove(
+                       new KeyValuePair<long,LiveShop>(sellerBinding.ActorId,live)))
+                {
+                    uint revision=live.Revision==uint.MaxValue
+                        ?uint.MaxValue
+                        :live.Revision+1;
+                    if(!router.TryPostPlayerShopWorldState(
+                        PlayerShopWorldStateUpdate.Closed(
+                            sellerBinding,revision)))
+                    {
+                        router.CloseCurrentBinding(sellerBinding);
+                        throw new AoiBackpressureException(
+                            "Sold-out player-shop close presentation queue full");
+                    }
+                }
+            }
             return receipt;
         }
         finally
@@ -341,6 +481,28 @@ public sealed class PlayerShopCoordinator
             listing?.DurabilityRaw??-1,
             listing?.Price??0,sellerWallet,buyerWallet,
             listing?.EnhancementLevel??0);
+
+    private async Task QueueInventorySnapshotAsync(
+        TrustedPlayerShopCommand command,WorldResultRouter router,long wallet)
+    {
+        var inventory=await _store.ListInventoryItemsAsync(
+            command.ActorId,WireProtocol.InventorySnapshotMaxItems+1)
+            .ConfigureAwait(false);
+        if(inventory.Count>WireProtocol.InventorySnapshotMaxItems)
+            throw new InvalidOperationException(
+                "Character inventory exceeds bounded V1 baseline capacity");
+        var items=inventory.Select(item=>new InventoryItemWire(
+            item.ItemUid,item.ItemDefinitionId,item.Quantity,item.SourceDropId,
+            item.EnhancementLevel,item.DurabilityRaw??-1)).ToArray();
+        var queued=router.QueuePlayerShopInventorySnapshot(command,items,wallet);
+        if(queued!=GatewaySendStatus.Enqueued)
+        {
+            if(router.TryGetCurrentBinding(command.ActorId,out var binding))
+                router.CloseCurrentBinding(binding);
+            throw new IOException(
+                "Reliable player-shop inventory snapshot could not be queued: "+queued);
+        }
+    }
 
     private static PlayerShopResultWire Queue(
         TrustedPlayerShopCommand command,WorldResultRouter router,

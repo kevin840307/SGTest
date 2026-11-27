@@ -152,7 +152,8 @@ public enum WireOpcode : ushort
     FriendMessageCommand = 139,
     HotkeyCommand = 140,
     HotkeySnapshot = 141,
-    PlayerEquipmentPresentation = 142
+    PlayerEquipmentPresentation = 142,
+    PlayerShopPresentation = 143
 }
 
 public enum ChatChannel : byte { Nearby = 0, World = 1, Warband = 2, Party = 3, Whisper = 4, Emotion = 5, FriendMessage = 6 }
@@ -344,7 +345,9 @@ public enum PlayerShopCommandAction : byte
     Open = 1,
     Close = 2,
     Inspect = 3,
-    Buy = 4
+    Buy = 4,
+    SetName = 5,
+    CloseAll = 6
 }
 
 public enum PlayerShopResultStatus : byte
@@ -365,7 +368,9 @@ public enum PlayerShopResultStatus : byte
     Closed = 13,
     StaleListing = 14,
     StaleSequence = 15,
-    CapacityReached = 16
+    CapacityReached = 16,
+    InvalidName = 17,
+    InvalidQuantity = 18
 }
 
 public enum QuestViewWireStatus : byte
@@ -690,7 +695,8 @@ public readonly record struct GmPvpNameResultWire(
     long TargetActorId,PvpNameState State);
 public readonly record struct PlayerShopCommandWire(
     long MapEpoch,uint ShopSequence,PlayerShopCommandAction Action,
-    long SellerActorId,long ListingId,long ItemUid,long Price);
+    long SellerActorId,long ListingId,long ItemUid,long Price,
+    string Name = "",int Quantity = 0);
 public readonly record struct PlayerShopResultWire(
     long MapEpoch,uint ShopSequence,PlayerShopCommandAction Action,
     PlayerShopResultStatus Status,long SellerActorId,long ListingId,
@@ -706,6 +712,10 @@ public sealed record PlayerShopSnapshotWire(
 public readonly record struct PlayerShopSoldWire(
     long ReceiverMapEpoch,long ListingId,long BuyerActorId,long ItemUid,
     long SellerWallet);
+public readonly record struct PlayerShopPresentationWire(
+    long ReceiverMapEpoch,long ServerTick,long OwnerActorId,
+    long OwnerConnectionEpoch,long OwnerMapEpoch,uint Revision,
+    bool Present,string ShopName);
 public readonly record struct ChatCommandWire(
     long MapEpoch,uint ChatSequence,ChatChannel Channel,byte BubbleType,string Message);
 public readonly record struct ChatDeliveryWire(

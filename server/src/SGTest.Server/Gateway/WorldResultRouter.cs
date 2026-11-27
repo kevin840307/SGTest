@@ -83,6 +83,7 @@ public sealed partial class WorldResultRouter
     private readonly Channel<PetWorldStateUpdate> _petWorldUpdates;
     private readonly Channel<MechaWorldStateUpdate> _mechaWorldUpdates;
     private readonly Channel<PlayerEquipmentWorldStateUpdate> _playerEquipmentWorldUpdates;
+    private readonly Channel<PlayerShopWorldStateUpdate> _playerShopWorldUpdates;
     private readonly WorldResultRouterOptions _options;
     private readonly Action<WorldChangedBatch>? _changedObserver;
     private long _queued, _stale, _changedQueued, _backpressure;
@@ -234,6 +235,14 @@ public sealed partial class WorldResultRouter
                 FullMode=BoundedChannelFullMode.Wait,
                 AllowSynchronousContinuations=false
             });
+        _playerShopWorldUpdates = Channel.CreateBounded<PlayerShopWorldStateUpdate>(
+            new BoundedChannelOptions(_options.MaxSessions)
+            {
+                SingleReader=true,
+                SingleWriter=false,
+                FullMode=BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations=false
+            });
     }
 
     public ChannelReader<WorldChangedBatch> ChangedBatches => _changed.Reader;
@@ -263,6 +272,8 @@ public sealed partial class WorldResultRouter
         _mechaWorldUpdates.Reader;
     public ChannelReader<PlayerEquipmentWorldStateUpdate> PlayerEquipmentWorldUpdates =>
         _playerEquipmentWorldUpdates.Reader;
+    public ChannelReader<PlayerShopWorldStateUpdate> PlayerShopWorldUpdates =>
+        _playerShopWorldUpdates.Reader;
 
     public WorldResultRouterStatistics Statistics
     {

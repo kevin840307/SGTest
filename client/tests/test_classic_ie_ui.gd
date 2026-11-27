@@ -57,6 +57,47 @@ class ClanCreateSession:
 		name=value
 		return queue_ok
 
+class PlayerShopUiSession:
+	extends RefCounted
+	var names:=0
+	var opens:=0
+	var buys:=0
+	var closes:=0
+	var close_alls:=0
+	var inspects:=0
+	var name:=""
+	var item_uid:=0
+	var price:=0
+	var quantity:=0
+	var seller_actor_id:=0
+	var listing_id:=0
+	func set_player_shop_name(value:String)->bool:
+		names+=1
+		name=value
+		return true
+	func open_player_shop(uid:int,value:int,count:int=0)->bool:
+		opens+=1
+		item_uid=uid
+		price=value
+		quantity=count
+		return true
+	func buy_player_shop(actor:int,listing:int)->bool:
+		buys+=1
+		seller_actor_id=actor
+		listing_id=listing
+		return true
+	func close_player_shop(listing:int)->bool:
+		closes+=1
+		listing_id=listing
+		return true
+	func close_player_shop_all()->bool:
+		close_alls+=1
+		return true
+	func inspect_player_shop(actor:int)->bool:
+		inspects+=1
+		seller_actor_id=actor
+		return true
+
 func _fail(reason: String) -> void:
 	push_error("CLASSIC_IE_UI_FAIL "+reason)
 	quit(1)
@@ -609,9 +650,17 @@ func _run() -> void:
 			{"channel":3,"sender_actor_id":44,"sender_name":"隊友","message":"出發吧"},
 		],
 		"player_shop_own_listing":{},
+		"player_shop_own_listings":{},
 		"player_shop_inspected":{
 			"seller_actor_id":43,"listing_id":88,"item_definition_id":1001,
 			"item_uid":9001,"quantity":2,"price":777,
+		},
+		"player_shop_inspected_listings":{
+			88:{"seller_actor_id":43,"listing_id":88,"item_definition_id":1001,
+				"item_uid":9001,"quantity":2,"price":777},
+		},
+		"player_shop_presentations":{
+			43:{"owner_actor_id":43,"present":true,"shop_name":"附近小商店"},
 		},
 		"pending_player_shop_sequence":0,
 		"active_storage_npc":700,"storage_ready":true,"storage_revision":4,"storage_sequence":4,
@@ -964,10 +1013,85 @@ func _run() -> void:
 	if not world.quest_window.visible or world._quest_title.text != "失落的星鑰" or world._quest_choices.get_child_count() != 2:
 		_fail("classic BG_QUEST_LIST did not bind quest choices")
 		return
+	# 092 PlayerShop: exercise the actual source-backed player path rather than
+	# only asserting that a generic window exists.
+	var real_shop_session=app.session_panel.session
+	var shop_session:=PlayerShopUiSession.new()
+	app.session_panel.session=shop_session
 	world.secondary_menu.get_node("PlayerShopCommand").pressed.emit()
-	if not world.player_shop_window.visible or world._player_shop_rows.get_child_count() < 3 or world._player_shop_buy.disabled:
-		_fail("classic player-shop presentation is not backed by inventory/nearby/listing snapshot")
+	var shop_name_close:=world._player_shop_name_dialog.get_node("PlayerShopNameClose") as Control
+	var shop_name_confirm:=world._player_shop_name_dialog.get_node("PlayerShopNameConfirm") as BaseButton
+	if (
+		not world.player_shop_window.visible or not world._player_shop_name_dialog.visible or
+		world._player_shop_name_dialog.size!=Vector2(256,100) or
+		world._player_shop_name_input.get_rect()!=Rect2(15,53,236,12) or
+		shop_name_close.get_rect()!=Rect2(239,4,16,16) or
+		shop_name_confirm.get_rect()!=Rect2(167,73,85,21)
+	):
+		_fail("092_PShop_Name source geometry/open flow drifted from HK ITF")
 		return
+	world._player_shop_name_input.text="測試小商店"
+	world._update_player_shop_name_action()
+	shop_name_confirm.pressed.emit()
+	if shop_session.names!=1 or shop_session.name!="測試小商店":
+		_fail("092_PShop_Name did not queue the typed authoritative stall name")
+		return
+	var owned_shop:Dictionary=fixture.duplicate(true)
+	owned_shop.player_shop_presentations[42]={
+		"owner_actor_id":42,"present":true,"shop_name":"測試小商店"}
+	world.apply_snapshot(owned_shop)
+	if world._player_shop_name_dialog.visible or world._player_shop_name_label.text!="測試小商店" or world._player_shop_inventory_rows.get_child_count()==0:
+		_fail("authoritative PlayerShop presentation did not close naming dialog or expose inventory")
+		return
+	world._refresh_player_shop_signs()
+	if not world._player_shop_signs.has(43) or str((world._player_shop_signs[43] as Control).get_node("Name").text)!="附近小商店":
+		_fail("player-shop AOI presentation did not create the 119x32 world sign")
+		return
+	var inventory_offer:=world._player_shop_inventory_rows.get_child(0) as Button
+	inventory_offer.pressed.emit()
+	var price_ok:=world._player_shop_sell_price_dialog.get_node("PlayerShopSellPriceOk") as BaseButton
+	if not world._player_shop_sell_price_dialog.visible or world._player_shop_sell_price_input.get_rect()!=Rect2(82,70,94,14):
+		_fail("092_PShop_Sell_Item_01 price dialog did not open at source rect")
+		return
+	world._player_shop_sell_price_input.text="450"
+	world._update_player_shop_sell_price_action()
+	price_ok.pressed.emit()
+	var quantity_ok:=world._player_shop_sell_quantity_dialog.get_node("PlayerShopSellQuantityOk") as BaseButton
+	if not world._player_shop_sell_quantity_dialog.visible or world._player_shop_sell_quantity_input.get_rect()!=Rect2(67,71,69,12):
+		_fail("092_PShop_Sell_Item_02 quantity dialog did not follow price confirm")
+		return
+	world._player_shop_sell_quantity_input.text="1"
+	world._update_player_shop_sell_quantity_action()
+	quantity_ok.pressed.emit()
+	if shop_session.opens!=1 or shop_session.item_uid<=0 or shop_session.price!=450 or shop_session.quantity!=1:
+		_fail("PlayerShop price/quantity flow did not queue one authoritative listing intent")
+		return
+	# The inspected seller listing remains authoritative and opens the original
+	# buy confirmation instead of sending a purchase on first click.
+	if world._player_shop_rows.get_child_count()==0:
+		_fail("PlayerShop inspected listing was not rendered")
+		return
+	(world._player_shop_rows.get_child(0) as Button).pressed.emit()
+	if (
+		not world._player_shop_buy_dialog.visible or
+		world._player_shop_buy_quantity.text!="2" or world._player_shop_buy_total.text!="777"
+	):
+		_fail("092_PShop_Buy_Item_02 did not show authoritative quantity/price")
+		return
+	(world._player_shop_buy_dialog.get_node("PlayerShopBuyOk") as BaseButton).pressed.emit()
+	if shop_session.buys!=1 or shop_session.seller_actor_id!=43 or shop_session.listing_id!=88:
+		_fail("PlayerShop buy confirmation did not queue the inspected listing")
+		return
+	world._player_shop_buy.pressed.emit()
+	if not world._player_shop_close_question.visible:
+		_fail("PlayerShop close-all did not require confirmation")
+		return
+	(world._player_shop_close_question.get_node("QuestionYes") as BaseButton).pressed.emit()
+	if shop_session.close_alls!=1:
+		_fail("PlayerShop close-all confirmation did not queue exactly once")
+		return
+	app.session_panel.session=real_shop_session
+	world.apply_snapshot(fixture)
 	world._toggle(world.storage_window)
 	if (
 		not world.storage_window.visible or world._storage_rows.get_child_count() != 1 or
