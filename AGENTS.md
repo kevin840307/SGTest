@@ -1,6 +1,50 @@
-# SGTest AGENTS.md — v17 玩家可見功能優先 / 原版反編譯對齊 / 安全背景開發
+# SGTest AGENTS.md — v21 玩家實測優先 / 原版 1:1 / 安全直接開發
 
-適用 C:\SGO\SRC\SGTest；唯一正式執行規範，v17 取代 v11–v16 衝突規則。docs/SCHEDULER_PROMPT.md 與 C:\ChatGPTScheduler\prompt.txt 是**精簡執行入口**，本檔保留完整來源、安全、架構與驗收契約；遇到最新使用者指定優先順序，以本檔「當前工作焦點」為準。詳細架構/原版研究/Smoke 按需查 docs/AGENT_REFERENCE.md。
+適用 C:\SGO\SRC\SGTest；唯一正式執行規範。v21 取代先前 v11–v20 衝突規則。docs/SCHEDULER_PROMPT.md 與 C:\ChatGPTScheduler\prompt.txt 是**精簡執行入口**，本檔保留完整來源、安全、架構與驗收契約；最新玩家實測回饋永遠高於舊 COMPLETE/PASS、里程碑與自動測試結論。詳細架構/原版研究/Smoke 按需查 docs/AGENT_REFERENCE.md。
+
+## 0A. 2026-11-27 玩家實測強制覆蓋（最高優先）
+
+最新正式手動測試已由玩家明確判定：**登入後 UI 不像原版、怪物血條 UI 錯誤、打怪邏輯錯誤、戰鬥 UI 錯誤。** 因此所有受影響的舊 `COMPLETE/PASS` 都只能視為歷史技術證據，不能再當目前完成狀態。
+
+### 狀態優先權
+`最新玩家實測 > Windows native visible 同狀態 A/B > 原版 source evidence > automated/headless/AES gate > 舊 todo/FEATURE_MATRIX`
+
+只要玩家回報「不一致／錯誤／不能用」：
+- 受影響功能立即視為 `TEST FAILED / IN PROGRESS`，即使 todo/matrix 尚未改字也一樣。
+- 下一輪先重現玩家看到的同一畫面/操作，再修正式 Client/Server。
+- 必須用最新正式 Windows Client 做同狀態原版 A/B；沒有 native A/B 只能 `NOT VERIFIED`，不得重新標 COMPLETE。
+- 禁止用「之前 gate PASS」「功能有回封包」「測試有數字」反駁玩家實測。
+- 修正後同步把 todo.txt / docs/FEATURE_MATRIX.md 的假 COMPLETE 降級或改回真實狀態，避免 scheduler 再跳過。
+
+### 當前唯一修復序列
+在以下三項依序完成前，**禁止切去傳點 600、NPC/Quest 或其他新功能**：
+
+1. **P0-HOTFIX-1 登入後整屏 HK UI 1:1**
+   - 玩家進世界第一眼看到的完整 800×600 baseline：底部 HUD、HP/MP/WP/EXP/Level/金錢、聊天、快捷列、右側 COMMAND、玩家/NPC/怪物名稱與目前預設可見浮動 UI。
+   - 每個 control 必須對 HK ITF 的 ID/group/rect/state、原 SPR/frame、origin/trim/pivot/alpha、font/size/weight/baseline/color、normal/hover/pressed/disabled/selected、hitbox/focus/drag/Z-order。
+   - 原圖存在就不得自畫、不得 placeholder、不得相似圖替代、不得用魔術 offset 疊到「看起來差不多」；寬屏只能擴世界，不拉伸 800×600 UI。
+   - 不能只驗 scene node rect；必須看最後 Windows 畫面。
+
+2. **P0-HOTFIX-2 怪物血條／選怪／戰鬥 UI**
+   - 查清原版怪物何時顯示 HP、血條 SPR/frame/尺寸/相對座標、target/mouse-over/selected 狀態、名稱/等級（原版有才做）、HIT/MISS/傷害數字、受擊/死亡/重生的顯示與消失。
+   - 多怪時 UI 必須綁正確 entity；不可漂移、黏錯怪、死亡後殘留。
+   - **禁止通用 ProgressBar、自畫矩形或開發者 debug bar 冒充原版怪物血條。**
+
+3. **P0-HOTFIX-3 原版打怪流程**
+   - 玩家正常鍵鼠完整流程必須是：`正確 hit-test 選怪 → 必要時走到合法距離 → 停步/面向 → 原版攻擊動畫 → 正確時點送 intent → Server authority HIT/MISS/damage → 怪物受擊/死亡 → 正確 UI`。
+   - 點擊座標/camera transform/sprite bounds/透明區 hit-test 不得偏移；超距不能直接打中；需要接近時走正常移動流程。
+   - attack range/cadence/recovery/animation timing 必須有原版證據；**攻擊或技能動畫未完成時不得無限重複送攻擊/技能。**
+   - Move/Attack/Hit/Death 狀態不可互相蓋掉造成滑步、瞬移、消失、連點爆發。
+   - HIT/MISS/damage/HP/death/respawn、怪物 chase/retaliation/range/cadence 全由 Server authority 且只用 source-backed 規則；雙 Client 必須一致；換圖/重登不能殘留 target/HP bar/combat state。
+
+### UI/戰鬥完成 Gate
+畫面像但功能錯 = FAIL；功能可用但畫面不像 = FAIL。完成前至少需要：
+- 原版 Reference 同狀態。
+- 最新正式 Windows Client After 同狀態。
+- 同 client area / DPI / 狀態，檢查 rect、baseline、hitbox；可安全取得時做 overlay/pixel diff。
+- HP bar、HIT/MISS、受擊與攻擊動畫用連續影格或錄影，不可只拿單張靜態 PASS。
+- 正常鍵鼠，而不是 pressed.emit / direct handler / fake snapshot。
+- 適用時雙 Client、換圖、重登。
 
 ## 0. 每輪必須讀取的執行規格（先用已整理證據，禁止從零猜測）
 
@@ -18,16 +62,15 @@
 
 **交付真正可玩的正式 Godot Client + .NET Server；HK 原版畫面、操作、功能、數值、動畫與手感一致，多人正確流暢低資源。** 使用者實測優先於過期 PASS；已知 FAIL 不得用測試數、commit 數、fixture 截圖或其他功能 PASS 遮掩。
 
-### 當前工作焦點：登入後浮動 UI 完整對齊＋真 Server 玩法（最新使用者指定，優先於 M1–M6 的固定先後順序）
+### 當前工作焦點：2026-11-27 玩家回報 HOTFIX（優先於所有 M1–M6 與舊 COMPLETE）
 
-**每輪直接修正式程式，先讓玩家有新功能可操作；不要把修改文案、調整一張 SPR、補測試、防禦性重構或僅研究 .lst 當成交付。** 登入／創角／選角已能用，只做回歸；第二次密碼與其他錯位仍要修。
+**每輪直接修正式程式，不要只補測試或研究。當前只依 §0A 的順序工作：整屏 UI 1:1 → 怪物血條/選怪/戰鬥 UI → 原版打怪流程。前一項沒有 Windows 同狀態 A/B 前，不得切下一項。**
 
-- **聊天／好友／社交／社團：** 輸入、送出、各頻道、聊天歷史、雙 Client 頭頂氣泡；好友新增/刪除/切換、黑名單、線上狀態、邀請、組隊；社團建立/加入/邀請/離開/會長與權限/成員/公告/管理子視窗。按原版完整入口、狀態與權限做，不因沒有截圖就略過。
-- **HUD：** HP/MP/SP（原版若標 WP 則依來源）/金錢/等級/EXP，對照原版原圖、每個文字 rect/字型/baseline/顏色、動態條、Server 真實數值與更新。絕不以假數值、靜態圖片、空資料填畫面。
-- **快捷鍵：** F1–F12 的圖/文字/位置、長短與第1/2頁、滑鼠拖放/取消、技能及物品實際綁定、按鍵使用/MP/冷卻/存取/重登。只改換頁外觀不算功能完成。
-- **右側所有選單及面板：** 背包及物品/數量/圖示/使用/丟棄/拾取/整理、人物資料/配點/裝備及原版動態紙娃娃、機甲、玩家小商店/擺攤、社團、系統登出/音效/設定；NPC 對話/商店/買賣/銀行/倉庫/修理/強化、玩家交易、寵物、任務/PvP 等原版可達功能。每個按鈕、分頁、提示、文字與互動必須有真實效果。
-- **Server 三個當前 P0：** (1) Map15↔Map13 連續換圖至少 10 次且每次 WorldReady 後能立即行走/互動，不得兩次就卡；(2) 真實來源可信怪物可見、追擊、被普攻/MISS、受傷、死亡、EXP/掉落、重生；(3) 真實技能學習/裝備、施放、單/範圍目標、MP/冷卻/效果及多人同步。缺可信資料就沿原版 loader/Dat/.lst→converter→runtime→Server 查到實際阻塞並接通，不以「服務可啟動但 monsters=0」或偽造怪物數值冒充完成。
-- **交付節奏：** 優先解除卡圖 P0，UI 浮動視窗與怪物/技能可按直接相依並行；選一條可驗收的玩家動作做到底（按鈕/輸入→Server→回傳→文字/動畫→適用雙 Client/重登），修完繼續下一項。遇獨立阻塞就留下可重現證據並轉同組相鄰可完成工作，不自由挑最容易 commit 的小修。以原版反編譯追對應 CWindow/Control handler、sprite frame、字型/文字位置、能力/封包/Server Rule，不得靠猜或無關研究拖延。
+- 登入／創角／選角本身已可用，只做必要回歸；登入後整屏任何仍與 HK 原版不一致的 HUD、聊天、快捷列、COMMAND、名稱/頭頂資訊、浮動面板都重新視為 FAIL。
+- 聊天、好友、社團、背包、人物/裝備、機甲、小商店、系統等舊 COMPLETE 只保留其 authority/persistence 技術證據；若其可見畫面落在玩家目前指出的「UI 不一致」範圍，UI Gate 必須重新 A/B，不能因舊 COMPLETE 跳過。
+- Map15↔Map13 10 次穩定可保留為已驗技術基線，但**傳點 600 暫停**；除非它直接阻塞目前三個 HOTFIX 的重現/驗收，否則不得插隊。
+- 怪物與戰鬥現在不是「有 78 隻、有 HIT/MISS 就算完成」；必須同時修正原版血條/選怪/傷害呈現與完整玩家攻擊時序，Server source-backed authority 和 Client 原版 presentation 缺一不可。
+- 技能、EXP、loot、NPC 等後續功能只有在三個 HOTFIX 完成後才恢復排程；不能用它們製造新的可玩成果來避開目前 FAIL。
 
 
 - 2026-11-25 玩家驗收：登入/創角/選角已完成，凍結主動開發（僅回歸修復）；第二次密碼輸入框仍錯位。換圖兩次會卡住、無怪物/普攻/技能、聊天沒有氣泡、頻道/好友操作未通、快捷鍵/背包文字錯位、無測試物品/裝備動態外觀/機甲。以上保留為 OPEN/FAIL，直到同一流程重新實測通過，不得因局部修改關閉。
