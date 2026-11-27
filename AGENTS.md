@@ -1,6 +1,6 @@
-# SGTest AGENTS.md — v21 玩家實測優先 / 原版 1:1 / 安全直接開發
+# SGTest AGENTS.md — v21.1 玩家實測優先 / 原版文字精準 / 真功能互動
 
-適用 C:\SGO\SRC\SGTest；唯一正式執行規範。v21 取代先前 v11–v20 衝突規則。docs/SCHEDULER_PROMPT.md 與 C:\ChatGPTScheduler\prompt.txt 是**精簡執行入口**，本檔保留完整來源、安全、架構與驗收契約；最新玩家實測回饋永遠高於舊 COMPLETE/PASS、里程碑與自動測試結論。詳細架構/原版研究/Smoke 按需查 docs/AGENT_REFERENCE.md。
+適用 C:\SGO\SRC\SGTest；唯一正式執行規範。v21.1 取代先前 v11–v21 衝突規則。docs/SCHEDULER_PROMPT.md 與 C:\ChatGPTScheduler\prompt.txt 是**精簡執行入口**，本檔保留完整來源、安全、架構與驗收契約；最新玩家實測回饋永遠高於舊 COMPLETE/PASS、里程碑與自動測試結論。詳細架構/原版研究/Smoke 按需查 docs/AGENT_REFERENCE.md。
 
 ## 0A. 2026-11-27 玩家實測強制覆蓋（最高優先）
 
@@ -22,6 +22,9 @@
 1. **P0-HOTFIX-1 登入後整屏 HK UI 1:1**
    - 玩家進世界第一眼看到的完整 800×600 baseline：底部 HUD、HP/MP/WP/EXP/Level/金錢、聊天、快捷列、右側 COMMAND、玩家/NPC/怪物名稱與目前預設可見浮動 UI。
    - 每個 control 必須對 HK ITF 的 ID/group/rect/state、原 SPR/frame、origin/trim/pivot/alpha、font/size/weight/baseline/color、normal/hover/pressed/disabled/selected、hitbox/focus/drag/Z-order。
+   - **文字先做 existence audit：原版該位置沒有文字就不得自行新增；原版有文字才允許顯示。** 原版只有 icon/SPR 的按鈕禁止疊自製 Label/caption/tooltip/debug text；原版文字已烘焙在 SPR/背景時禁止再疊動態 Label。
+   - 原版有動態文字時，內容/繁中用字/標點/font face/size/weight/color/outline/shadow/alignment/clip/wrap/local rect/baseline/ascent/descent 必須依來源；位置以 ITF rect + draw/font handler 為準，不靠 magic offset。
+   - 任何原版沒有的額外文字、開發者提示、entity id、HP debug、測試 caption、重複/錯字都必須移除；逐畫面檢查缺字、多字、雙字、錯位、裁切、baseline。
    - 原圖存在就不得自畫、不得 placeholder、不得相似圖替代、不得用魔術 offset 疊到「看起來差不多」；寬屏只能擴世界，不拉伸 800×600 UI。
    - 不能只驗 scene node rect；必須看最後 Windows 畫面。
 
@@ -30,20 +33,26 @@
    - 多怪時 UI 必須綁正確 entity；不可漂移、黏錯怪、死亡後殘留。
    - **禁止通用 ProgressBar、自畫矩形或開發者 debug bar 冒充原版怪物血條。**
 
-3. **P0-HOTFIX-3 原版打怪流程**
+3. **P0-HOTFIX-3 原版雙向戰鬥＋真互動**
    - 玩家正常鍵鼠完整流程必須是：`正確 hit-test 選怪 → 必要時走到合法距離 → 停步/面向 → 原版攻擊動畫 → 正確時點送 intent → Server authority HIT/MISS/damage → 怪物受擊/死亡 → 正確 UI`。
+   - **怪物不能只是木樁。** 玩家命中或觸發原版 AI 條件後，怪物須鎖定正確玩家、依 source-backed 規則追擊/停止/轉向、進入合法攻擊距離後按原版 cadence/animation 攻擊，Server authority 決定 HIT/MISS/damage，玩家 HP/受擊/死亡 UI 正確更新。
    - 點擊座標/camera transform/sprite bounds/透明區 hit-test 不得偏移；超距不能直接打中；需要接近時走正常移動流程。
-   - attack range/cadence/recovery/animation timing 必須有原版證據；**攻擊或技能動畫未完成時不得無限重複送攻擊/技能。**
+   - attack range/cadence/recovery/animation timing 必須有原版證據；**玩家或怪物攻擊/技能動畫未完成時不得無限重複送 intent。**
+   - 怪物 target/chase/retaliation/range/cadence/target-lost 必須 source-backed；禁止測試腳本直接扣玩家 HP 冒充 AI。
    - Move/Attack/Hit/Death 狀態不可互相蓋掉造成滑步、瞬移、消失、連點爆發。
-   - HIT/MISS/damage/HP/death/respawn、怪物 chase/retaliation/range/cadence 全由 Server authority 且只用 source-backed 規則；雙 Client 必須一致；換圖/重登不能殘留 target/HP bar/combat state。
+   - HIT/MISS/damage/HP/death/respawn 全由 Server authority；雙 Client 看同一隻怪與同一場戰鬥必須一致；換圖/重登不能殘留 target/HP bar/combat state。
+   - **目前正式畫面中玩家看得到、點得到、原版有 handler 的互動入口都必須真的可用：** 按鈕/分頁/快捷鍵不能 no-op；NPC/世界物件須依原版距離/條件觸發真對話或動作；玩家選取/右鍵/好友/組隊等既有入口須對正確 actor 且有真 Server 結果；怪物須能選/接近/攻擊/反擊；已存在的掉落/拾取流程須有正常 hit-test/authority。未知尚未實作的新系統不因此擴 scope。
 
-### UI/戰鬥完成 Gate
-畫面像但功能錯 = FAIL；功能可用但畫面不像 = FAIL。完成前至少需要：
+### UI/戰鬥/互動完成 Gate
+畫面像但功能錯 = FAIL；功能可用但畫面不像 = FAIL；**多一個原版不存在的字也算 FAIL。** 完成前至少需要：
 - 原版 Reference 同狀態。
 - 最新正式 Windows Client After 同狀態。
 - 同 client area / DPI / 狀態，檢查 rect、baseline、hitbox；可安全取得時做 overlay/pixel diff。
-- HP bar、HIT/MISS、受擊與攻擊動畫用連續影格或錄影，不可只拿單張靜態 PASS。
+- 逐區做文字 existence audit：原版該有的字存在且位置/字型/baseline 正確；原版沒有的字完全不存在；烘焙文字與動態 Label 不可重複。
+- HP bar、HIT/MISS、受擊、玩家攻擊與怪物攻擊動畫用連續影格或錄影，不可只拿單張靜態 PASS。
 - 正常鍵鼠，而不是 pressed.emit / direct handler / fake snapshot。
+- 對目前可見且原版有 handler 的入口逐一真操作：按鈕不能 no-op、NPC/玩家/怪物/世界物件互動要有正確結果。
+- 戰鬥須雙向：玩家能正常打怪；符合原版 AI 條件時怪物會追擊/反擊/打玩家；玩家 HP/HIT/MISS/死亡回饋正確。
 - 適用時雙 Client、換圖、重登。
 
 ## 0. 每輪必須讀取的執行規格（先用已整理證據，禁止從零猜測）
@@ -64,7 +73,7 @@
 
 ### 當前工作焦點：2026-11-27 玩家回報 HOTFIX（優先於所有 M1–M6 與舊 COMPLETE）
 
-**每輪直接修正式程式，不要只補測試或研究。當前只依 §0A 的順序工作：整屏 UI 1:1 → 怪物血條/選怪/戰鬥 UI → 原版打怪流程。前一項沒有 Windows 同狀態 A/B 前，不得切下一項。**
+**每輪直接修正式程式，不要只補測試或研究。當前只依 §0A 的順序工作：整屏 UI 圖片＋文字 1:1 → 怪物血條/選怪/戰鬥 UI → 原版雙向戰鬥＋目前可見真互動。前一項沒有 Windows 同狀態 A/B 前，不得切下一項。**
 
 - 登入／創角／選角本身已可用，只做必要回歸；登入後整屏任何仍與 HK 原版不一致的 HUD、聊天、快捷列、COMMAND、名稱/頭頂資訊、浮動面板都重新視為 FAIL。
 - 聊天、好友、社團、背包、人物/裝備、機甲、小商店、系統等舊 COMPLETE 只保留其 authority/persistence 技術證據；若其可見畫面落在玩家目前指出的「UI 不一致」範圍，UI Gate 必須重新 A/B，不能因舊 COMPLETE 跳過。
@@ -91,7 +100,7 @@
 - 開局先讀最新**當前工作焦點**、TODO/Matrix 與上輪 OPEN/FAIL/NOT VERIFIED，優先接續最早尚未做完的玩家可操作流程；從原 Task ID 找直接依賴與驗收證據。M1–M6 與舊狀態不能蓋過最新使用者指令。完成的登入等只做必要回歸；不能以微調 caret/AA/Tab、無關封包防禦或增加測試作主題。
 - 同一核心阻塞跨輪保留，直到真玩家可操作且適用 Gate 達標。若缺來源，定向追 原版→converter→verified manifest→正式 loader/runtime→Server 啟動→Client 畫面，使用已驗證規則先打通最小完整可玩切片；不能停在「抽出欄位」或「已 fail-closed」。禁止猜數值、繞過權威或把測試資料升為正式玩法。
 - M1 是持續支援的測試環境，不要求先完成所有尚未開發玩法才能進 M2；只要當前切片的必要能力可驗就立即推進，之後逐步補 capability。使用者指定缺陷與獨立直接依賴可並行，尤其共用 input/font/rect、聊天/好友、跨圖；不得以「目前不是這個里程碑」拒絕高優先使用者問題。真阻塞改做同一里程碑或相鄰核心依賴，列明原因、缺證據、下一具體動作；工具兩次失敗用 §2 fallback，不無限重試。
-- UI 必須有畫面、文字、座標、狀態、命中、實際操作、資料/動畫/成敗回饋。原圖與 ITF 不符或按鈕 no-op、未連 Server、假測試物品都不算完成。第二次密碼/快捷鍵/背包等共同錯位先查實際 rect、anchor、theme minimum、glyph baseline/clip、共用 renderer，避免每輪加魔術偏移。
+- UI 必須有畫面、文字存在性、座標、字型、baseline、狀態、命中、實際操作、資料/動畫/成敗回饋。**原版沒有文字的地方不得自行加字；原版有文字才按 source rect/font/draw handler 顯示。** 原圖與 ITF 不符、文字多出/重複/錯位、按鈕 no-op、未連 Server、假測試物品都不算完成。第二次密碼/快捷鍵/背包等共同錯位先查實際 rect、anchor、theme minimum、glyph baseline/clip、共用 renderer，避免每輪加魔術偏移。
 - 每輪至少交付一個可觀察的新玩家成果（或重現並實質解除最早核心 blocker），完成後立即續作。目標 25～40 分鐘有效開發、完整垂直切片優先，非硬配額；不以 task/leaf/commit 數計量，不 sleep 湊時間。若客觀限制無法交付，照實標未完成，留下可重現失敗、已安全提交進度與下一個可執行步驟；下一輪優先恢復，不將技術前置稱為玩家成果。
 
 ## 2. 每輪閉環與統一測試環境
