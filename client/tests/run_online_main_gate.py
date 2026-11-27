@@ -119,6 +119,8 @@ def main() -> int:
                         help="private Converter runtime root for --real-transfer")
     parser.add_argument("--pack", type=Path,
                         help="matching private external assets.pck for --real-transfer")
+    parser.add_argument("--monster-runtime-root", type=Path,
+                        help="optional verified Map13 monster runtime; with --real-transfer also validates combat after every transfer")
     args = parser.parse_args()
     if args.character_progression_rules:
         args.character_progression_rules = args.character_progression_rules.resolve()
@@ -143,10 +145,14 @@ def main() -> int:
             parser.error("real-transfer pack not found")
         if not args.character_progression_rules or not args.character_appearance_rules:
             parser.error("--real-transfer requires source-backed progression and appearance manifests")
+        if args.monster_runtime_root:
+            args.monster_runtime_root = args.monster_runtime_root.resolve()
+            if not args.monster_runtime_root.is_dir():
+                parser.error("monster runtime root not found")
         if args.manual_input:
             parser.error("--manual-input is not part of the deterministic real-transfer stress gate")
-    elif args.content_root or args.pack:
-        parser.error("--content-root/--pack are only valid with --real-transfer")
+    elif args.content_root or args.pack or args.monster_runtime_root:
+        parser.error("--content-root/--pack/--monster-runtime-root are only valid with --real-transfer")
     source_backed_player_rules = bool(args.character_progression_rules)
     if args.metrics_report and os.name == "nt" and args.godot.lower().endswith("_console.exe"):
         # Godot console executable launches a sibling real engine on Windows.
@@ -236,7 +242,7 @@ def main() -> int:
                         raise RuntimeError("character provisioning did not create " + username)
 
             host_env = base_env.copy()
-            host_seconds = 70 if args.real_transfer else (45 if args.manual_input else 30)
+            host_seconds = 180 if args.monster_runtime_root else (70 if args.real_transfer else (45 if args.manual_input else 30))
             host_command = ["dotnet", str(host_dll), "serve", "--content", str(content),
                             "--identity", str(database),
                             "--bind", "127.0.0.1", "--port", "0", "--max-connections", "8",
@@ -247,6 +253,8 @@ def main() -> int:
                                  "--character-appearance-rules", str(args.character_appearance_rules),
                                  "--character-spawn-map", "15", "--character-spawn-x", spawn_x,
                                  "--character-spawn-y", spawn_y]
+            if args.monster_runtime_root:
+                host_command += ["--monster-runtime-root", str(args.monster_runtime_root)]
             host = subprocess.Popen(
                 host_command,
                 cwd=repo, env=host_env, text=True, encoding="utf-8", errors="replace",
@@ -264,6 +272,10 @@ def main() -> int:
             ready = json.loads(ready_line)
             if ready.get("result") != "AES_HOST_READY":
                 raise RuntimeError("formal Host readiness payload invalid")
+            if args.monster_runtime_root:
+                monster_maps = [int(value) for value in ready.get("monster_maps", [])]
+                if int(ready.get("monsters", 0)) <= 0 or 13 not in monster_maps:
+                    raise RuntimeError("real-transfer combat gate requires verified Map13 monsters")
             port = int(str(ready["endpoint"]).rsplit(":", 1)[1])
 
             def start_client(role: str, username: str):
@@ -276,6 +288,8 @@ def main() -> int:
                     env["SGTEST_E2E_PLAYER_CREATE_NAME"] = "GateActor" if role == "actor" else "GateObserver"
                 if args.real_transfer:
                     env["SGTEST_E2E_REAL_TRANSFER"] = "1"
+                if args.monster_runtime_root:
+                    env["SGTEST_E2E_REAL_TRANSFER_COMBAT"] = "1"
                 if args.manual_input and role == "observer":
                     env["SGTEST_E2E_REQUIRE_MANUAL_INPUT"] = "1"
                 command = [args.godot]
@@ -341,6 +355,11 @@ def main() -> int:
                     "ONLINE_MAIN_GATE_REAL_READY role=observer",
                     "ONLINE_MAIN_GATE_REAL_AOI_STRESS_PASS role=observer cycles=10",
                 ]
+                if args.monster_runtime_root:
+                    required_actor += [
+                        "ONLINE_MAIN_GATE_REAL_COMBAT_ACK role=actor cycle=10",
+                        "ONLINE_MAIN_GATE_REAL_COMBAT_STRESS_PASS role=actor cycles=10",
+                    ]
             else:
                 required_actor = [
                     "ONLINE_MAIN_GATE_HUD_AUTHORITY role=actor",
@@ -386,6 +405,7 @@ def main() -> int:
                       "formal_host=true main_scenes=2 aes_cbc=true provision_cli=true "
                       "move=true aoi=true hud_authority=true map15_map13_return=true transfer_cycles=10 "
                       "source_backed_portals=true resource_release=true synthetic_content=false private_original_content=true "
+                      f"combat_after_transfer={str(bool(args.monster_runtime_root)).lower()} "
                       f"native_visible={str(args.native).lower()} manual_input=false")
             else:
                 print("ONLINE_MAIN_SCENE_FORMAL_HOST_GATE_PASS "

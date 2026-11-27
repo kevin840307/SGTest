@@ -44,6 +44,10 @@ var _manual_click_seen := false
 var _manual_click_screen := Vector2.ZERO
 var _manual_click_world_start := Vector2.ZERO
 var _real_transfer_mode := false
+var _real_transfer_combat := false
+var _real_attack_target := 0
+var _real_attack_before_sequence := 0
+var _real_combat_cycles := 0
 var _real_observer_departures := 0
 var _real_observer_returns := 0
 
@@ -74,6 +78,7 @@ func _start_online_gate() -> void:
 		return
 	_manual_input_required = OS.get_environment("SGTEST_E2E_REQUIRE_MANUAL_INPUT") == "1"
 	_real_transfer_mode = OS.get_environment("SGTEST_E2E_REAL_TRANSFER") == "1"
+	_real_transfer_combat = OS.get_environment("SGTEST_E2E_REAL_TRANSFER_COMBAT") == "1"
 	var username := OS.get_environment("SGTEST_E2E_USERNAME")
 	var password := OS.get_environment("SGTEST_E2E_PASSWORD")
 	OS.set_environment("SGTEST_E2E_PASSWORD","")
@@ -84,7 +89,7 @@ func _start_online_gate() -> void:
 	_app.session_panel.username_input.text = username
 	_app.session_panel.password_input.text = password
 	password = ""
-	_online_gate_deadline = Time.get_ticks_msec() + (150000 if _real_transfer_mode else (120000 if _manual_input_required else 90000))
+	_online_gate_deadline = Time.get_ticks_msec() + (240000 if _real_transfer_combat else (150000 if _real_transfer_mode else (120000 if _manual_input_required else 90000)))
 	_online_gate_phase = 0
 	print("ONLINE_MAIN_GATE_START role=",_online_gate_role)
 	_app.session_panel.login()
@@ -268,6 +273,23 @@ func _real_controller_matches_generation() -> bool:
 	)
 
 
+func _nearest_live_real_monster() -> int:
+	var monsters: Dictionary = _app._last_snapshot.get("monsters",{})
+	var own := Vector2(float(_app._last_snapshot.get("x",0.0)),float(_app._last_snapshot.get("y",0.0)))
+	var best_id := 0
+	var best_distance := INF
+	for raw_id in monsters.keys():
+		var monster: Dictionary = monsters[raw_id]
+		if int(monster.get("current_hp",0)) <= 0:
+			continue
+		var at := Vector2(float(monster.get("x",0.0)),float(monster.get("y",0.0)))
+		var distance := own.distance_to(at)
+		if distance < best_distance:
+			best_distance = distance
+			best_id = int(raw_id)
+	return best_id
+
+
 func _real_transfer_actor() -> void:
 	if _online_gate_phase == 0:
 		if not _map_generation_ready(15) or not _real_npc_ready(46,52):
@@ -313,7 +335,37 @@ func _real_transfer_actor() -> void:
 		):
 			print("ONLINE_MAIN_GATE_REAL_MAP13_MOVE_ACK role=actor cycle=",_transfer_cycle+1,
 				" from=",_map13_move_start," to=",at13)
-			_online_gate_not_before = Time.get_ticks_msec() + 350
+			if _real_transfer_combat:
+				_real_attack_target = _nearest_live_real_monster()
+				if _real_attack_target <= 0:
+					_online_gate_fail("real_map13_no_live_monster_cycle_%d" % (_transfer_cycle+1))
+					return
+				_real_attack_before_sequence = int(_app._last_snapshot.get("last_attack_result_sequence",0))
+				if not _app.session_panel.submit_attack_monster(_real_attack_target):
+					_online_gate_fail("real_map13_attack_enqueue_cycle_%d" % (_transfer_cycle+1))
+					return
+				_online_gate_phase = 107
+			else:
+				_online_gate_not_before = Time.get_ticks_msec() + 350
+				_online_gate_phase = 103
+	elif _online_gate_phase == 107:
+		var attack_sequence := int(_app._last_snapshot.get("last_attack_result_sequence",0))
+		var attack_status := int(_app._last_snapshot.get("last_attack_result_status",-1))
+		var attack_result: Dictionary = _app._last_snapshot.get("last_attack_result",{})
+		if (
+			attack_sequence > _real_attack_before_sequence
+			and attack_status in [0,1]
+			and int(attack_result.get("target_entity_id",0)) == _real_attack_target
+		):
+			_real_combat_cycles += 1
+			print("ONLINE_MAIN_GATE_REAL_COMBAT_ACK role=actor cycle=",_transfer_cycle+1,
+				" target=",_real_attack_target," status=",attack_status,
+				" damage=",int(attack_result.get("damage",0)))
+			# The map-stability gate only needs to prove that combat is admitted by
+			# the new WorldReady generation. Do not turn this into the later full
+			# monster-combat milestone by kiting a retaliating source monster back
+			# to the portal; exercise the return interaction immediately instead.
+			_online_gate_not_before = Time.get_ticks_msec() + 50
 			_online_gate_phase = 103
 	elif _online_gate_phase == 103 and Time.get_ticks_msec() >= _online_gate_not_before:
 		if not _app.session_panel.submit_npc_interact(1):
@@ -350,6 +402,11 @@ func _real_transfer_actor() -> void:
 				" from=",_map13_move_start," to=",at15)
 			_transfer_cycle += 1
 			if _transfer_cycle >= TRANSFER_CYCLES:
+				if _real_transfer_combat:
+					if _real_combat_cycles != TRANSFER_CYCLES:
+						_online_gate_fail("real_combat_cycle_count_%d" % _real_combat_cycles)
+						return
+					print("ONLINE_MAIN_GATE_REAL_COMBAT_STRESS_PASS role=actor cycles=",_real_combat_cycles)
 				print("ONLINE_MAIN_GATE_REAL_TRANSFER_STRESS_PASS role=actor cycles=",_transfer_cycle)
 				_online_gate_finish(true,"")
 				return
