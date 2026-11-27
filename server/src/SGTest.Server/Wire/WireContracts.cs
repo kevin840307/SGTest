@@ -420,7 +420,7 @@ public readonly record struct PlayerRespawnVisualWire(
     long ConnectionEpoch,uint RespawnSequence,byte Facing);
 public readonly record struct PlayerCombatStateWire(
     long MapEpoch, int CurrentHp, int MaxHp, int CurrentMp, int MaxMp,
-    bool CombatEnabled = true);
+    int CurrentWp, int MaxWp, bool CombatEnabled = true);
 
 [Flags]
 public enum PlayerProfileStatVerification : byte

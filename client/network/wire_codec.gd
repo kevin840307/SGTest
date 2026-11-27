@@ -153,7 +153,7 @@ const NORMAL_ATTACK_RESULT_FRAME_BYTES := 57
 const SKILL_USE_FRAME_BYTES := 32
 const SKILL_USE_RESULT_FRAME_BYTES := 61
 const PLAYER_SKILL_VISUAL_FRAME_BYTES := 70
-const PLAYER_COMBAT_STATE_FRAME_BYTES := 33
+const PLAYER_COMBAT_STATE_FRAME_BYTES := 41
 const PLAYER_PROFILE_STATE_FRAME_BYTES := 74
 const PLAYER_CREATION_PROFILE_STATE_FRAME_BYTES := 32
 const PLAYER_ATTRIBUTE_ALLOCATE_FRAME_BYTES := 13
@@ -637,11 +637,14 @@ static func decode_player_combat_state(frame: PackedByteArray) -> Dictionary:
 	var max_hp := reader.get_32()
 	var current_mp := reader.get_32()
 	var max_mp := reader.get_32()
+	var current_wp := reader.get_32()
+	var max_wp := reader.get_32()
 	var combat_enabled := reader.get_u8()
-	if epoch <= 0 or current_hp < 0 or max_hp <= 0 or current_hp > max_hp or current_mp < 0 or max_mp < 0 or current_mp > max_mp or combat_enabled > 1:
+	if epoch <= 0 or current_hp < 0 or max_hp <= 0 or current_hp > max_hp or current_mp < 0 or max_mp < 0 or current_mp > max_mp or current_wp < 0 or max_wp < 0 or current_wp > max_wp or combat_enabled > 1:
 		return {}
 	return {"map_epoch":epoch,"current_hp":current_hp,"max_hp":max_hp,
-		"current_mp":current_mp,"max_mp":max_mp,"combat_enabled":combat_enabled==1}
+		"current_mp":current_mp,"max_mp":max_mp,"current_wp":current_wp,
+		"max_wp":max_wp,"combat_enabled":combat_enabled==1}
 
 static func decode_player_profile_state(frame: PackedByteArray) -> Dictionary:
 	if not _valid_header(frame, OPCODE_PLAYER_PROFILE_STATE, PLAYER_PROFILE_STATE_FRAME_BYTES):

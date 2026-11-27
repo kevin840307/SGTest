@@ -38,7 +38,7 @@ public static partial class WireProtocol
     public const int PlayerAttackVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 1 + 4 + 8 + 1;
     public const int PlayerDamageVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 8 + 8 + 4 + 1 + 1 + 1;
     public const int PlayerRespawnVisualFrameBytes = HeaderBytes + 8 + 8 + 8 + 8 + 4 + 1;
-    public const int PlayerCombatStateFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4 + 1;
+    public const int PlayerCombatStateFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 4 + 4 + 4 + 1;
     public const int PlayerProfileStateFrameBytes = HeaderBytes + 8 + 4 + 4 + 4 + 8 + 4*9 + 1 + 1;
     public const int PlayerCreationProfileStateFrameBytes = HeaderBytes + 8 + 4*4;
     public const int PlayerAttributeAllocateFrameBytes = HeaderBytes + 4 + 1;
@@ -533,7 +533,9 @@ public static partial class WireProtocol
         value.MapEpoch > 0 && value.MaxHp > 0 &&
         value.CurrentHp >= 0 && value.CurrentHp <= value.MaxHp &&
         value.MaxMp >= 0 && value.CurrentMp >= 0 &&
-        value.CurrentMp <= value.MaxMp;
+        value.CurrentMp <= value.MaxMp &&
+        value.MaxWp >= 0 && value.CurrentWp >= 0 &&
+        value.CurrentWp <= value.MaxWp;
 
     private static bool ValidPlayerDamage(PlayerDamageWire value) =>
         value.MapEpoch > 0 && value.DamageSequence != 0 &&

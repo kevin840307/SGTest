@@ -102,6 +102,8 @@ CREATE TABLE IF NOT EXISTS character_combat_profiles (
     max_hp INTEGER NOT NULL CHECK(max_hp BETWEEN 1 AND 2000000000),
     current_mp INTEGER NOT NULL DEFAULT 0 CHECK(current_mp BETWEEN 0 AND 2000000000),
     max_mp INTEGER NOT NULL DEFAULT 0 CHECK(max_mp BETWEEN 0 AND 2000000000),
+    current_wp INTEGER NOT NULL DEFAULT 0 CHECK(current_wp BETWEEN 0 AND 2000000000),
+    max_wp INTEGER NOT NULL DEFAULT 0 CHECK(max_wp BETWEEN 0 AND 2000000000),
     attack INTEGER NOT NULL CHECK(attack BETWEEN 0 AND 100000000),
     defense INTEGER NOT NULL CHECK(defense BETWEEN 0 AND 100000000),
     hit INTEGER NOT NULL CHECK(hit BETWEEN 0 AND 100000000),
@@ -112,6 +114,7 @@ CREATE TABLE IF NOT EXISTS character_combat_profiles (
     updated_unix_ms INTEGER NOT NULL,
     CHECK(current_hp <= max_hp),
     CHECK(current_mp <= max_mp),
+    CHECK(current_wp <= max_wp),
     CHECK(
       (trust=3 AND attack_range=0 AND attack_cooldown_ticks=0)
       OR
@@ -1313,6 +1316,21 @@ END;",tx);
                 Execute(connection,@"ALTER TABLE character_combat_profiles
 ADD COLUMN available_attribute_points INTEGER NOT NULL DEFAULT 0
 CHECK(available_attribute_points BETWEEN 0 AND 1000000);",tx);
+            }
+
+            // Schema v47: original StatusLite's third resource is SGOPlayer
+            // Will/WillMAX (WP), independent of Wisdom. Run after every older
+            // combat-table rebuild so no legacy migration path can drop it.
+            if(schemaVersion<47)
+            {
+                if(!ColumnExists(connection,"character_combat_profiles","current_wp",tx))
+                    Execute(connection,@"ALTER TABLE character_combat_profiles
+ADD COLUMN current_wp INTEGER NOT NULL DEFAULT 0
+CHECK(current_wp BETWEEN 0 AND 2000000000);",tx);
+                if(!ColumnExists(connection,"character_combat_profiles","max_wp",tx))
+                    Execute(connection,@"ALTER TABLE character_combat_profiles
+ADD COLUMN max_wp INTEGER NOT NULL DEFAULT 0
+CHECK(max_wp BETWEEN 0 AND 2000000000);",tx);
             }
 
             // Schema v37: a player stall may contain multiple active ItemUid

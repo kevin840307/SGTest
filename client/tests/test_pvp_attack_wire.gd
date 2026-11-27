@@ -178,12 +178,14 @@ func _initialize() -> void:
 func _combat_state(epoch: int,current_hp: int,max_hp: int) -> PackedByteArray:
 	var writer:=StreamPeerBuffer.new()
 	writer.big_endian=false
-	writer.put_u32(33)
+	writer.put_u32(41)
 	writer.put_u16(1)
 	writer.put_u16(WireCodec.OPCODE_PLAYER_COMBAT_STATE)
 	writer.put_64(epoch)
 	writer.put_32(current_hp)
 	writer.put_32(max_hp)
+	writer.put_32(0)
+	writer.put_32(0)
 	writer.put_32(0)
 	writer.put_32(0)
 	writer.put_u8(1)

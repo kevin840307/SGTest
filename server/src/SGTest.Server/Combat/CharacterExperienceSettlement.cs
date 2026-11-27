@@ -471,7 +471,9 @@ public sealed class CharacterExperienceSettlement
                                             outcome.Profile.Data.CurrentHp,
                                             outcome.Profile.Data.MaxHp,
                                             outcome.Profile.Data.CurrentMp,
-                                            outcome.Profile.Data.MaxMp);
+                                            outcome.Profile.Data.MaxMp,
+                                            outcome.Profile.Data.CurrentWp,
+                                            outcome.Profile.Data.MaxWp);
                                         if(vitals==GatewaySendStatus.Backpressured)
                                             throw new CharacterExperienceSettlementException(
                                                 "Committed character level-up vitals queue full");

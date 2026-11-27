@@ -59,7 +59,21 @@ def main() -> int:
                         help="in native mode require an OS mouse-driven observer movement before continuing")
     parser.add_argument("--metrics-report", type=Path,
                         help="write opt-in headless Host/2-Godot CPU and RSS telemetry JSON")
+    parser.add_argument("--character-progression-rules", type=Path,
+                        help="verified progression manifest; when set the native HUD gate also requires EXP authority")
+    parser.add_argument("--character-appearance-rules", type=Path,
+                        help="verified character appearance allowlist used by player-created formal HUD gates")
     args = parser.parse_args()
+    if args.character_progression_rules:
+        args.character_progression_rules = args.character_progression_rules.resolve()
+        if not args.character_progression_rules.is_file():
+            parser.error("character progression manifest not found")
+    if args.character_appearance_rules:
+        args.character_appearance_rules = args.character_appearance_rules.resolve()
+        if not args.character_appearance_rules.is_file():
+            parser.error("character appearance manifest not found")
+    if bool(args.character_progression_rules) != bool(args.character_appearance_rules):
+        parser.error("formal HUD authority requires both progression and appearance manifests")
     if args.manual_input and not args.native:
         parser.error("--manual-input requires --native")
     if args.metrics_report and os.name == "nt" and args.godot.lower().endswith("_console.exe"):
@@ -133,20 +147,26 @@ def main() -> int:
                      "--username", username], repo, provision_env, args.timeout)
                 if "ACCOUNT_CREATED" not in out:
                     raise RuntimeError("account provisioning did not create " + username)
-                out = run_checked(
-                    ["dotnet", str(host_dll), "character-create", "--identity", str(database),
-                     "--username", username, "--content", str(content), "--name", character,
-                     "--slot", "0", "--map", "15", "--x", x, "--y", y],
-                    repo, provision_env, args.timeout)
-                if "CHARACTER_CREATED" not in out:
-                    raise RuntimeError("character provisioning did not create " + username)
+                if not args.character_progression_rules:
+                    out = run_checked(
+                        ["dotnet", str(host_dll), "character-create", "--identity", str(database),
+                         "--username", username, "--content", str(content), "--name", character,
+                         "--slot", "0", "--map", "15", "--x", x, "--y", y],
+                        repo, provision_env, args.timeout)
+                    if "CHARACTER_CREATED" not in out:
+                        raise RuntimeError("character provisioning did not create " + username)
 
             host_env = base_env.copy()
+            host_command = ["dotnet", str(host_dll), "serve", "--content", str(content),
+                            "--identity", str(database),
+                            "--bind", "127.0.0.1", "--port", "0", "--max-connections", "8",
+                            "--max-per-address", "4", "--seconds", str(45 if args.manual_input else 30)]
+            if args.character_progression_rules:
+                host_command += ["--character-progression-rules", str(args.character_progression_rules),
+                                 "--character-appearance-rules", str(args.character_appearance_rules),
+                                 "--character-spawn-map", "15", "--character-spawn-x", "840", "--character-spawn-y", "800"]
             host = subprocess.Popen(
-                ["dotnet", str(host_dll), "serve", "--content", str(content),
-                 "--identity", str(database),
-                 "--bind", "127.0.0.1", "--port", "0", "--max-connections", "8",
-                 "--max-per-address", "4", "--seconds", str(45 if args.manual_input else 30)],
+                host_command,
                 cwd=repo, env=host_env, text=True, encoding="utf-8", errors="replace",
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, bufsize=1)
@@ -169,6 +189,9 @@ def main() -> int:
                 env["SGTEST_E2E_USERNAME"] = username
                 env["SGTEST_E2E_PASSWORD"] = PASSWORD
                 env["SGTEST_E2E_WHISPER_TARGET_NAME"] = "GateObserver" if role == "actor" else "GateActor"
+                if args.character_progression_rules:
+                    env["SGTEST_E2E_REQUIRE_HUD_EXP"] = "1"
+                    env["SGTEST_E2E_PLAYER_CREATE_NAME"] = "GateActor" if role == "actor" else "GateObserver"
                 if args.manual_input and role == "observer":
                     env["SGTEST_E2E_REQUIRE_MANUAL_INPUT"] = "1"
                 command = [args.godot]
@@ -220,6 +243,7 @@ def main() -> int:
                 raise RuntimeError("formal Host did not stop cleanly")
 
             required_actor = [
+                "ONLINE_MAIN_GATE_HUD_AUTHORITY role=actor",
                 "ONLINE_MAIN_GATE_MONSTER role=actor",
                 "ONLINE_MAIN_GATE_OBSTACLE_ROUTE role=actor",
                 "ONLINE_MAIN_GATE_MOVE_CAMERA role=actor",
@@ -235,6 +259,7 @@ def main() -> int:
                 "ONLINE_MAIN_GATE_TRANSFER_STRESS_PASS role=actor cycles=10",
             ]
             required_observer = [
+                "ONLINE_MAIN_GATE_HUD_AUTHORITY role=observer",
                 "ONLINE_MAIN_GATE_MONSTER role=observer",
                 "ONLINE_MAIN_GATE_SPAWN role=observer",
                 "ONLINE_MAIN_GATE_DELTA role=observer",
@@ -257,7 +282,7 @@ def main() -> int:
                     print(line)
             print("ONLINE_MAIN_SCENE_FORMAL_HOST_GATE_PASS "
                   "formal_host=true main_scenes=2 aes_cbc=true provision_cli=true "
-                  "move=true aoi=true monster_state=true camera_follow=true chat_ui_authority=true whisper_ui_authority=true chat_bubble=true map15_map13_return=true transfer_cycles=10 "
+                  "move=true aoi=true monster_state=true camera_follow=true hud_authority=true chat_ui_authority=true whisper_ui_authority=true chat_bubble=true map15_map13_return=true transfer_cycles=10 "
                   "resource_release=true synthetic_content=true private_original_content=false "
                   f"native_visible={str(args.native).lower()} manual_input={str(args.manual_input).lower()}")
             successful = True

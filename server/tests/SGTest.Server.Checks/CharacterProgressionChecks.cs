@@ -38,6 +38,13 @@ internal static class CharacterProgressionChecks
                     AttackRange:0,AttackCooldownTicks:0,CurrentMp:121,MaxMp:121,
                     AvailableAttributePoints:0));
                 var initial=await store.GetCharacterCombatProfileAsync(character);
+                Checks.Require(
+                    rules.TryBackfillLegacyMissingWill(initial!.Data,out var wpBackfill)&&
+                    wpBackfill.CurrentWp==101&&wpBackfill.MaxWp==101&&
+                    wpBackfill.AvailableAttributePoints==initial.Data.AvailableAttributePoints,
+                    "legacy v46 0/0 WP did not source-backfill without shifting positional points");
+                await store.SetCharacterCombatProfileAsync(character,wpBackfill);
+                initial=await store.GetCharacterCombatProfileAsync(character);
                 var initialWire=CharacterProfileProgressionHandler.BuildState(
                     initial!.Data,character,0,rules);
                 Checks.Require(
@@ -69,7 +76,9 @@ internal static class CharacterProgressionChecks
                     level.CurrentExperience==0&&levelWire.ExperiencePercent==0&&
                     level.Profile.Data.AvailableAttributePoints==2&&
                     level.Profile!.Data.CurrentHp==level.Profile!.Data.MaxHp&&
-                    level.Profile!.Data.CurrentMp==level.Profile!.Data.MaxMp,
+                    level.Profile!.Data.CurrentMp==level.Profile!.Data.MaxMp&&
+                    level.Profile!.Data.CurrentWp==level.Profile!.Data.MaxWp&&
+                    level.Profile!.Data.MaxWp==101,
                     "level-up did not consume threshold refill vitals and award two points");
 
                 var replay=await store.ApplyCharacterProgressionExperienceAsync(
@@ -117,6 +126,7 @@ internal static class CharacterProgressionChecks
                     profile?.Data.Level==2&&profile.Data.Strength==3&&
                     profile.Data.Constitution==3&&profile.Data.Wisdom==2&&
                     profile.Data.AvailableAttributePoints==0&&
+                    profile.Data.CurrentWp==101&&profile.Data.MaxWp==101&&
                     experience is {Experience:2},
                     "level/attributes/points/experience did not survive restart");
             }

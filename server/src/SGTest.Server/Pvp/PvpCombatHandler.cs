@@ -327,8 +327,12 @@ internal sealed class PvpCombatHandler
                             "Reliable MP-rejected PvP skill result could not be queued: "+sent);
                     return;
                 }
+                var profile=await _identity.GetCharacterCombatProfileAsync(actor.ActorId)
+                    .ConfigureAwait(false)
+                    ?? throw new IOException("Committed PvP skill MP profile disappeared before HUD refresh");
                 var baseline=_router.QueuePlayerCombatState(
-                    binding,suspendedHp,maxHp,mp.CurrentMp,mp.MaxMp);
+                    binding,suspendedHp,maxHp,mp.CurrentMp,mp.MaxMp,
+                    profile.Data.CurrentWp,profile.Data.MaxWp);
                 if(baseline!=GatewaySendStatus.Enqueued)
                     throw new IOException(
                         "Committed PvP skill MP baseline could not be queued: "+baseline);

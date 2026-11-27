@@ -69,6 +69,9 @@ public sealed class CharacterInitialProfileRules
         // The current combat contract carries only the fields below.
         int maxHp = checked(101 + Constitution[race][con - 1]);
         int maxMp = checked(101 + WisdomMp[race][wis - 1]);
+        // Old SGOPlayer WORD data exposes Will + WillMAX separately. The ninth
+        // AttBase_Newbie value is the level base for WillMAX; level one is 101.
+        int maxWp = 101;
         int attack = checked(4 + Strength[race][str - 1]);
         int defense = 3; // base defense only; starter-equipment bonus remains NOT VERIFIED.
         int hit = checked(6 + dexEffect.Hit);
@@ -93,7 +96,9 @@ public sealed class CharacterInitialProfileRules
             AttackRange: 0,
             AttackCooldownTicks: 0,
             CurrentMp: maxMp,
-            MaxMp: maxMp);
+            MaxMp: maxMp,
+            CurrentWp: maxWp,
+            MaxWp: maxWp);
         return true;
     }
 }

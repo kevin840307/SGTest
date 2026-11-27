@@ -11,9 +11,9 @@ func _fail(message: String) -> void:
 	quit(1)
 
 func _initialize() -> void:
-	var baseline := _combat_state(1,100,100,3,5)
+	var baseline := _combat_state(1,100,100,3,5,true,7,9)
 	var parsed_baseline := WireCodec.decode_player_combat_state(baseline)
-	if baseline.size()!=33 or parsed_baseline.is_empty() or not bool(parsed_baseline.combat_enabled) or int(parsed_baseline.current_hp)!=100 or int(parsed_baseline.current_mp)!=3 or int(parsed_baseline.max_mp)!=5:
+	if baseline.size()!=41 or parsed_baseline.is_empty() or not bool(parsed_baseline.combat_enabled) or int(parsed_baseline.current_hp)!=100 or int(parsed_baseline.current_mp)!=3 or int(parsed_baseline.max_mp)!=5 or int(parsed_baseline.current_wp)!=7 or int(parsed_baseline.max_wp)!=9:
 		_fail("combat baseline codec")
 		return
 
@@ -248,7 +248,7 @@ func _initialize() -> void:
 	if mixed_gap.apply_frame(_damage(1,3,51,MONSTER_ID,2,12,60,100,false)) or int(mixed_gap.state)!=WorldState.STATE_FAILED:
 		_fail("monster gap after PvP hit did not fail closed")
 		return
-	print("PLAYER_DAMAGE_GODOT_PASS mixed_sources_single_hp_sequence=PASS PvP_source_transition=PASS baseline_bytes=33 profile_only_vitals_no_combat=true mp_baseline=true mid_session_mp_refresh_preserves_damage_sequence=true damage_bytes=57 damage_visual_bytes=67 respawn_request_bytes=20 respawn_result_bytes=29 respawn_visual_bytes=45 durable_event=true presentation_only=true no_observer_hp_authority=true duplicate_stale=true visual_replay_stale=true sequence_gap_fail_closed=true death_gates_intents=true respawn_reopens_intents=true damage_sequence_continuous=true combat_dead_statuses=true old_map_stale=true")
+	print("PLAYER_DAMAGE_GODOT_PASS mixed_sources_single_hp_sequence=PASS PvP_source_transition=PASS baseline_bytes=41 wp_baseline=true profile_only_vitals_no_combat=true mp_baseline=true mid_session_mp_refresh_preserves_damage_sequence=true damage_bytes=57 damage_visual_bytes=67 respawn_request_bytes=20 respawn_result_bytes=29 respawn_visual_bytes=45 durable_event=true presentation_only=true no_observer_hp_authority=true duplicate_stale=true visual_replay_stale=true sequence_gap_fail_closed=true death_gates_intents=true respawn_reopens_intents=true damage_sequence_continuous=true combat_dead_statuses=true old_map_stale=true")
 	quit(0)
 
 func _world(epoch: int) -> RefCounted:
@@ -259,10 +259,10 @@ func _world(epoch: int) -> RefCounted:
 	world.map_epoch=epoch
 	return world
 
-func _combat_state(epoch: int,current_hp: int,max_hp: int,current_mp: int = 0,max_mp: int = 0,combat_enabled: bool = true) -> PackedByteArray:
+func _combat_state(epoch: int,current_hp: int,max_hp: int,current_mp: int = 0,max_mp: int = 0,combat_enabled: bool = true,current_wp: int = 0,max_wp: int = 0) -> PackedByteArray:
 	var writer := StreamPeerBuffer.new()
 	writer.big_endian=false
-	writer.put_u32(33)
+	writer.put_u32(41)
 	writer.put_u16(1)
 	writer.put_u16(WireCodec.OPCODE_PLAYER_COMBAT_STATE)
 	writer.put_64(epoch)
@@ -270,6 +270,8 @@ func _combat_state(epoch: int,current_hp: int,max_hp: int,current_mp: int = 0,ma
 	writer.put_32(max_hp)
 	writer.put_32(current_mp)
 	writer.put_32(max_mp)
+	writer.put_32(current_wp)
+	writer.put_32(max_wp)
 	writer.put_u8(1 if combat_enabled else 0)
 	return writer.data_array
 

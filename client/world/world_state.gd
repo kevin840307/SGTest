@@ -84,6 +84,8 @@ var player_current_hp := 0
 var player_max_hp := 0
 var player_current_mp := 0
 var player_max_mp := 0
+var player_current_wp := 0
+var player_max_wp := 0
 var player_profile_ready := false
 var player_verified_stats_mask := 0
 var player_creation_profile_ready := false
@@ -1535,6 +1537,8 @@ func snapshot() -> Dictionary:
 		"player_max_hp": player_max_hp,
 		"player_current_mp": player_current_mp,
 		"player_max_mp": player_max_mp,
+		"player_current_wp": player_current_wp,
+		"player_max_wp": player_max_wp,
 		"player_profile_ready": player_profile_ready,
 		"player_verified_stats_mask": player_verified_stats_mask,
 		"player_creation_profile_ready": player_creation_profile_ready,
@@ -2074,6 +2078,8 @@ func _reset_character_actions_and_combat() -> void:
 	player_max_hp = 0
 	player_current_mp = 0
 	player_max_mp = 0
+	player_current_wp = 0
+	player_max_wp = 0
 	player_profile_ready = false
 	player_verified_stats_mask = 0
 	player_creation_profile_ready = false
@@ -2447,6 +2453,8 @@ func _apply_player_combat_state(frame: PackedByteArray) -> bool:
 	var next_max_hp := int(value.max_hp)
 	var next_mp := int(value.current_mp)
 	var next_max_mp := int(value.max_mp)
+	var next_wp := int(value.current_wp)
+	var next_max_wp := int(value.max_wp)
 	var next_combat_enabled := bool(value.get("combat_enabled",false))
 	if combat_available:
 		# Mid-session Server resource refresh (for example durable skill MP).
@@ -2458,6 +2466,8 @@ func _apply_player_combat_state(frame: PackedByteArray) -> bool:
 			return fail("player_combat_refresh_hp_changed")
 		player_current_mp = next_mp
 		player_max_mp = next_max_mp
+		player_current_wp = next_wp
+		player_max_wp = next_max_wp
 		return true
 
 	combat_available = next_combat_enabled
@@ -2465,6 +2475,8 @@ func _apply_player_combat_state(frame: PackedByteArray) -> bool:
 	player_max_hp = next_max_hp
 	player_current_mp = next_mp
 	player_max_mp = next_max_mp
+	player_current_wp = next_wp
+	player_max_wp = next_max_wp
 	player_dead = player_current_hp == 0
 	player_damage_sequence = 0
 	last_player_damage_tick = -1

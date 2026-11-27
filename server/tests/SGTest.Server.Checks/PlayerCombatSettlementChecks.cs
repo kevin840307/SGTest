@@ -34,9 +34,9 @@ internal static class PlayerCombatSettlementChecks
 
     private static void WireContract()
     {
-        var baseline = new PlayerCombatStateWire(3, 82, 100, 3, 5);
+        var baseline = new PlayerCombatStateWire(3, 82, 100, 3, 5, 7, 9);
         var baselineBytes = WireProtocol.EncodePlayerCombatState(baseline);
-        Checks.Require(baselineBytes.Length == 33 &&
+        Checks.Require(baselineBytes.Length == WireProtocol.PlayerCombatStateFrameBytes &&
                        WireProtocol.TryDecodePlayerCombatState(
                            baselineBytes, out var parsedBaseline) &&
                        parsedBaseline == baseline &&
@@ -44,7 +44,7 @@ internal static class PlayerCombatSettlementChecks
             "player combat baseline wire");
         var vitalsOnly = baseline with { CombatEnabled = false };
         var vitalsBytes = WireProtocol.EncodePlayerCombatState(vitalsOnly);
-        Checks.Require(vitalsBytes.Length == 33 &&
+        Checks.Require(vitalsBytes.Length == WireProtocol.PlayerCombatStateFrameBytes &&
                        WireProtocol.TryDecodePlayerCombatState(
                            vitalsBytes, out var parsedVitals) &&
                        parsedVitals == vitalsOnly &&

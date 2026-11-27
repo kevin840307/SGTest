@@ -100,6 +100,8 @@ func _run() -> void:
 					int(snapshot.get("player_max_hp",0))!=149 or \
 					int(snapshot.get("player_current_mp",0))!=122 or \
 					int(snapshot.get("player_max_mp",0))!=122 or \
+					int(snapshot.get("player_current_wp",0))!=101 or \
+					int(snapshot.get("player_max_wp",0))!=101 or \
 					int(snapshot.get("player_attack",0))!=10 or \
 					int(snapshot.get("player_defense",0))!=3 or \
 					int(snapshot.get("player_hit",0))!=8 or \
@@ -110,5 +112,5 @@ func _run() -> void:
 		if panel != null:
 			panel.queue_free()
 		await process_frame
-	print("CLIENT_CHARACTER_APPEARANCE_AES_PASS server_choices=true UI_picker_and_button=true exact_choice=true persisted_relogin=true wrong_password_retry=true choose_world=true source_profile=true hp_mp=true combat_locked=true menu_released=true")
+	print("CLIENT_CHARACTER_APPEARANCE_AES_PASS server_choices=true UI_picker_and_button=true exact_choice=true persisted_relogin=true wrong_password_retry=true choose_world=true source_profile=true hp_mp_wp=true wp=101/101 combat_locked=true menu_released=true")
 	quit(0)

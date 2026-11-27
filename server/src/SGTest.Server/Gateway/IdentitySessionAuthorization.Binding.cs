@@ -345,6 +345,14 @@ public sealed partial class IdentitySessionAuthorization
             combat = await _identity.GetCharacterCombatProfileAsync(
                 character.CharacterId, cancellationToken).ConfigureAwait(false);
         }
+        if(combat is not null && _progressionRules is not null &&
+            _progressionRules.TryBackfillLegacyMissingWill(combat.Data,out var wpBackfill))
+        {
+            await _identity.SetCharacterCombatProfileAsync(
+                character.CharacterId,wpBackfill,cancellationToken).ConfigureAwait(false);
+            combat=await _identity.GetCharacterCombatProfileAsync(
+                character.CharacterId,cancellationToken).ConfigureAwait(false);
+        }
         CharacterExperienceState? experience = await _identity.GetCharacterExperienceAsync(
             character.CharacterId, cancellationToken).ConfigureAwait(false);
 
@@ -459,6 +467,7 @@ public sealed partial class IdentitySessionAuthorization
                     snapshot.MapEpoch,
                     effectiveCombat.CurrentHp, effectiveCombat.MaxHp,
                     effectiveCombat.CurrentMp, effectiveCombat.MaxMp,
+                    effectiveCombat.CurrentWp, effectiveCombat.MaxWp,
                     combatEnabled)),
                     cancellationToken).ConfigureAwait(false);
             }

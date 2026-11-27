@@ -3,6 +3,7 @@ extends SceneTree
 const Main = preload("res://app/main.gd")
 const MainScene = preload("res://app/main.tscn")
 const UiSkinCatalog = preload("res://ui/ui_skin_catalog.gd")
+const WorldState = preload("res://world/world_state.gd")
 const TRANSFER_CYCLES := 10
 const CHAT_E2E_TEXT := "主介面聊天 E2E"
 const WHISPER_E2E_TEXT := "主介面私訊 E2E"
@@ -19,6 +20,7 @@ var _online_gate_finish_reason := ""
 var _online_gate_monster_seen := false
 var _character_proof_requested := false
 var _character_proof_ready := false
+var _player_create_requested := false
 var _walk_last_visual := Vector2.INF
 var _walk_last_sample_usec := 0
 var _walk_smooth_frames := 0
@@ -35,6 +37,7 @@ var _hold_large_corrections_before := 0
 var _transfer_cycle := 0
 var _chat_proof_seen := false
 var _whisper_proof_seen := false
+var _hud_proof_seen := false
 var _manual_input_required := false
 var _manual_click_seen := false
 var _manual_click_screen := Vector2.ZERO
@@ -112,6 +115,44 @@ func _online_gate_ready(map: int) -> bool:
 	return _app.world_view.camera.snapshot().focus.distance_to(expected) <= 0.5 and _world_surface_ready(map)
 
 
+func _live_hud_authority_ready() -> bool:
+	if _hud_proof_seen:
+		return true
+	var snap:Dictionary=_app._last_snapshot
+	if not bool(snap.get("player_profile_ready",false)):
+		return false
+	var level:=int(snap.get("player_level",0))
+	var hp:=int(snap.get("player_current_hp",-1));var hpmax:=int(snap.get("player_max_hp",0))
+	var mp:=int(snap.get("player_current_mp",-1));var mpmax:=int(snap.get("player_max_mp",0))
+	var wp:=int(snap.get("player_current_wp",-1));var wpmax:=int(snap.get("player_max_wp",0))
+	var money:=int(snap.get("player_money",-1))
+	var exp_percent:=int(snap.get("player_experience_percent",-1))
+	var require_exp:=OS.get_environment("SGTEST_E2E_REQUIRE_HUD_EXP")=="1"
+	if level<=0 or hp<0 or hpmax<=0 or mp<0 or mpmax<=0 or wp<0 or wpmax<=0 or money<0:
+		return false
+	if require_exp and exp_percent<0:
+		return false
+	var shell=_app.classic_world
+	if shell._level_label.text!=str(level) or shell._hp_label.text!="%d/%d"%[hp,hpmax] or \
+			shell._mp_label.text!="%d/%d"%[mp,mpmax] or shell._wp_label.text!="%d/%d"%[wp,wpmax] or \
+			shell._status_value_label.text!=str(money):
+		return false
+	if require_exp and shell._exp_percent_label.text!="%d%%"%exp_percent:
+		return false
+	if not is_equal_approx(shell._hud_hp_clip.size.x,92.0*float(hp)/float(hpmax)) or \
+			not is_equal_approx(shell._hud_mp_clip.size.x,92.0*float(mp)/float(mpmax)) or \
+			not is_equal_approx(shell._hud_wp_clip.size.x,92.0*float(wp)/float(wpmax)):
+		return false
+	if require_exp and not is_equal_approx(shell._hud_exp_clip.size.x,92.0*float(exp_percent)/100.0):
+		return false
+	_hud_proof_seen=true
+	print("ONLINE_MAIN_GATE_HUD_AUTHORITY role=",_online_gate_role,
+		" level=",level," hp=",hp,"/",hpmax," mp=",mp,"/",mpmax,
+		" wp=",wp,"/",wpmax," money=",money," exp_percent=",exp_percent,
+		" source_server=true ui_match=true")
+	return true
+
+
 func _online_gate_tick() -> void:
 	if _online_gate_phase < 0:
 		return
@@ -141,8 +182,30 @@ func _online_gate_tick() -> void:
 	if not _app.session_panel.active:
 		_online_gate_fail("session_inactive_"+_app.session_panel.status.text)
 		return
+	var player_create_name:=OS.get_environment("SGTEST_E2E_PLAYER_CREATE_NAME").strip_edges()
+	if int(_app.session_panel._latest.get("state",-1))==WorldState.STATE_SELECTING_CHARACTER and \
+			_app.session_panel.characters.item_count==0 and not player_create_name.is_empty():
+		if not _player_create_requested:
+			var panel=_app.session_panel
+			panel.character_name_input.text=player_create_name
+			panel.character_slot_input.value=0
+			panel.character_strength_input.value=2
+			panel.character_dexterity_input.value=2
+			panel.character_constitution_input.value=2
+			panel.character_wisdom_input.value=2
+			panel.character_password_input.text="2468"
+			panel.character_password_confirm_input.text="2468"
+			panel.create_character()
+			if panel.character_create_status.text!="建立角色中…":
+				_online_gate_fail("player_character_create_not_queued_"+panel.character_create_status.text)
+				return
+			_player_create_requested=true
+		return
 	if _app.session_panel.characters.visible and not _app.session_panel.choose_button.disabled and _app.session_panel.characters.item_count > 0:
 		_app.session_panel.characters.select(0)
+		if _player_create_requested and not _character_proof_ready:
+			_character_proof_ready=true
+			print("ONLINE_MAIN_GATE_PLAYER_CREATE role=",_online_gate_role," authority=PASS")
 		# CLI-provisioned synthetic characters intentionally bypass normal
 		# creation UI, so migrate their secondary proof through SessionPanel once
 		# before exercising the real choose-password field/button path.
@@ -175,6 +238,8 @@ func _online_gate_tick() -> void:
 func _online_gate_observer() -> void:
 	if _online_gate_phase == 0:
 		if _online_gate_ready(15):
+			if not _live_hud_authority_ready():
+				return
 			print("ONLINE_MAIN_GATE_WORLD_SURFACE role=observer map=15 own=PASS npc=PASS hk_ui=",UiSkinCatalog.valid(UiSkinCatalog.DEFAULT_SKIN))
 			print("ONLINE_MAIN_GATE_READY role=observer")
 			if _manual_input_required:
@@ -311,6 +376,8 @@ func _online_gate_watch_walk() -> void:
 func _online_gate_actor() -> void:
 	if _online_gate_phase == 0:
 		if _online_gate_ready(15):
+			if not _live_hud_authority_ready():
+				return
 			print("ONLINE_MAIN_GATE_WORLD_SURFACE role=actor map=15 own=PASS npc=PASS hk_ui=",UiSkinCatalog.valid(UiSkinCatalog.DEFAULT_SKIN))
 			print("ONLINE_MAIN_GATE_READY role=actor")
 			# Drive the same terrain-click path as gameplay: start prediction

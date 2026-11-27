@@ -4,7 +4,7 @@ using Microsoft.Data.Sqlite;
 
 namespace SGTest.Server.Identity;
 
-/// <summary>Persists verified character combat profiles and atomic HP/MP settlement.</summary>
+/// <summary>Persists verified character combat profiles and authoritative HP/MP/WP state.</summary>
 public sealed partial class SqliteIdentityStore
 {
     public async Task<CharacterCombatProfile?> GetCharacterCombatProfileAsync(
@@ -57,16 +57,17 @@ AND (s.strength<>$str OR s.dexterity<>$dex OR s.constitution<>$con OR s.wisdom<>
             command.CommandText = @"
 INSERT INTO character_combat_profiles(
     character_id,trust,source_ref,race,career,strength,dexterity,constitution,wisdom,
-    level,current_hp,max_hp,current_mp,max_mp,attack,defense,hit,dodge,attack_range,
+    level,current_hp,max_hp,current_mp,max_mp,current_wp,max_wp,attack,defense,hit,dodge,attack_range,
     attack_cooldown_ticks,available_attribute_points,updated_unix_ms)
 VALUES($id,$trust,$source,$race,$career,$str,$dex,$con,$wis,$level,$hp,$maxhp,
-       $mp,$maxmp,$attack,$defense,$hit,$dodge,$range,$cooldown,$points,$updated)
+       $mp,$maxmp,$wp,$maxwp,$attack,$defense,$hit,$dodge,$range,$cooldown,$points,$updated)
 ON CONFLICT(character_id) DO UPDATE SET
     trust=excluded.trust,source_ref=excluded.source_ref,race=excluded.race,
     career=excluded.career,strength=excluded.strength,dexterity=excluded.dexterity,
     constitution=excluded.constitution,wisdom=excluded.wisdom,level=excluded.level,
     current_hp=excluded.current_hp,max_hp=excluded.max_hp,
     current_mp=excluded.current_mp,max_mp=excluded.max_mp,
+    current_wp=excluded.current_wp,max_wp=excluded.max_wp,
     attack=excluded.attack,defense=excluded.defense,hit=excluded.hit,dodge=excluded.dodge,
     attack_range=excluded.attack_range,
     attack_cooldown_ticks=excluded.attack_cooldown_ticks,
@@ -254,6 +255,8 @@ UPDATE character_combat_profiles
             profile.CurrentHp > profile.MaxHp || profile.MaxHp > 2_000_000_000 ||
             profile.CurrentMp < 0 || profile.MaxMp < 0 ||
             profile.CurrentMp > profile.MaxMp || profile.MaxMp > 2_000_000_000 ||
+            profile.CurrentWp < 0 || profile.MaxWp < 0 ||
+            profile.CurrentWp > profile.MaxWp || profile.MaxWp > 2_000_000_000 ||
             profile.Attack is < 0 or > 100_000_000 ||
             profile.Defense is < 0 or > 100_000_000 ||
             profile.Hit is < 0 or > 100_000_000 ||
@@ -279,10 +282,10 @@ UPDATE character_combat_profiles
         command.Transaction = tx;
         command.CommandText = @"INSERT INTO character_combat_profiles(
     character_id,trust,source_ref,race,career,strength,dexterity,constitution,wisdom,
-    level,current_hp,max_hp,current_mp,max_mp,attack,defense,hit,dodge,attack_range,
+    level,current_hp,max_hp,current_mp,max_mp,current_wp,max_wp,attack,defense,hit,dodge,attack_range,
     attack_cooldown_ticks,available_attribute_points,updated_unix_ms)
 VALUES($id,$trust,$source,$race,$career,$str,$dex,$con,$wis,$level,$hp,$maxhp,
-       $mp,$maxmp,$attack,$defense,$hit,$dodge,$range,$cooldown,$points,$updated);";
+       $mp,$maxmp,$wp,$maxwp,$attack,$defense,$hit,$dodge,$range,$cooldown,$points,$updated);";
         BindCombatProfile(command, characterId, profile, updated);
         if (command.ExecuteNonQuery() != 1)
             throw new InvalidOperationException("Initial combat profile creation failed");
@@ -305,6 +308,8 @@ VALUES($id,$trust,$source,$race,$career,$str,$dex,$con,$wis,$level,$hp,$maxhp,
         command.Parameters.AddWithValue("$maxhp", profile.MaxHp);
         command.Parameters.AddWithValue("$mp", profile.CurrentMp);
         command.Parameters.AddWithValue("$maxmp", profile.MaxMp);
+        command.Parameters.AddWithValue("$wp", profile.CurrentWp);
+        command.Parameters.AddWithValue("$maxwp", profile.MaxWp);
         command.Parameters.AddWithValue("$attack", profile.Attack);
         command.Parameters.AddWithValue("$defense", profile.Defense);
         command.Parameters.AddWithValue("$hit", profile.Hit);
@@ -322,7 +327,7 @@ VALUES($id,$trust,$source,$race,$career,$str,$dex,$con,$wis,$level,$hp,$maxhp,
         command.Transaction = tx;
         command.CommandText = @"
 SELECT character_id,trust,source_ref,race,career,strength,dexterity,constitution,
-       wisdom,level,current_hp,max_hp,current_mp,max_mp,attack,defense,hit,dodge,attack_range,
+       wisdom,level,current_hp,max_hp,current_mp,max_mp,current_wp,max_wp,attack,defense,hit,dodge,attack_range,
        attack_cooldown_ticks,available_attribute_points,updated_unix_ms
   FROM character_combat_profiles
  WHERE character_id=$id
@@ -342,17 +347,19 @@ SELECT character_id,trust,source_ref,race,career,strength,dexterity,constitution
             reader.GetInt32(9),
             reader.GetInt32(10),
             reader.GetInt32(11),
-            reader.GetInt32(14),
-            reader.GetInt32(15),
             reader.GetInt32(16),
             reader.GetInt32(17),
-            reader.GetDouble(18),
+            reader.GetInt32(18),
             reader.GetInt32(19),
+            reader.GetDouble(20),
+            reader.GetInt32(21),
             reader.GetInt32(12),
             reader.GetInt32(13),
-            reader.GetInt32(20));
+            reader.GetInt32(22),
+            reader.GetInt32(14),
+            reader.GetInt32(15));
         return new CharacterCombatProfile(
-            reader.GetInt64(0), data, reader.GetInt64(21));
+            reader.GetInt64(0), data, reader.GetInt64(23));
     }
 
 }

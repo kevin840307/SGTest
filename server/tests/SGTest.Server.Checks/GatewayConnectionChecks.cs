@@ -187,7 +187,7 @@ internal static class GatewayConnectionChecks
                 MaxReliableBytes: WireProtocol.MaximumFrameBytes));
 
             Require(gateway.QueuePlayerCombatState(
-                    new ConnectionBinding(77,4,9),82,100,3,5) ==
+                    new ConnectionBinding(77,4,9),82,100,3,5,7,9) ==
                     GatewaySendStatus.Enqueued, "combat baseline");
             Require(gateway.QueueReceipt(new MoveReceipt(
                     77, 4, 9, 1, MoveReceiptStatus.Accepted, 42)) ==
@@ -209,7 +209,7 @@ internal static class GatewayConnectionChecks
             Require(gateway.TryDequeueReliable(out var baseline) &&
                     WireProtocol.TryDecodePlayerCombatState(
                         baseline,out var decodedBaseline) &&
-                    decodedBaseline==new PlayerCombatStateWire(9,82,100,3,5),
+                    decodedBaseline==new PlayerCombatStateWire(9,82,100,3,5,7,9),
                 "combat baseline FIFO/wire corrupt");
             Require(gateway.TryDequeueReliable(out var first) &&
                     WireProtocol.TryDecodeMoveReceipt(first, out var decoded) &&
@@ -218,7 +218,7 @@ internal static class GatewayConnectionChecks
                 "reliable queue order or wire receipt corrupt");
 
             Require(gateway.QueuePlayerCombatState(
-                    new ConnectionBinding(77,4,8),82,100,2,5) ==
+                    new ConnectionBinding(77,4,8),82,100,2,5,6,9) ==
                     GatewaySendStatus.GenerationMismatch,
                 "old-map combat baseline routed to current generation");
             Require(gateway.QueueReceipt(new MoveReceipt(

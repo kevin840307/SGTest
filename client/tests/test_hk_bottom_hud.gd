@@ -200,6 +200,13 @@ func _run()->void:
 	# blank instead of inventing a Client-side threshold.
 	shell.apply_snapshot({"chat_messages":[],"friends":{},"player_profile_ready":true,"player_level":3,"player_current_hp":154,"player_max_hp":154,"player_current_mp":125,"player_max_mp":125,"player_current_wp":101,"player_max_wp":101,"player_experience_percent":11,"player_money":12345})
 	await process_frame
+	_expect(shell._level_label.text=="3","authoritative level in original StatusLite")
+	_expect(shell._hp_label.text=="154/154","authoritative HP text")
+	_expect(shell._mp_label.text=="125/125","authoritative MP text")
+	_expect(shell._wp_label.text=="101/101","authoritative WP/Will text")
+	_expect(is_equal_approx(shell._hud_hp_clip.size.x,92.0),"authoritative HP bar width")
+	_expect(is_equal_approx(shell._hud_mp_clip.size.x,92.0),"authoritative MP bar width")
+	_expect(is_equal_approx(shell._hud_wp_clip.size.x,92.0),"authoritative WP bar width")
 	_expect(shell._status_value_label.text=="12345","authoritative wallet in source s04 row")
 	_rect(shell._status_value_label,Rect2(27,64,87,10))
 	_expect(shell._exp_percent_label.text=="11%","authority EXP percent text")

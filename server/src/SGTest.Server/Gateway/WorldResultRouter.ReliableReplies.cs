@@ -562,7 +562,7 @@ public sealed partial class WorldResultRouter
 
     public GatewaySendStatus QueuePlayerCombatState(
         ConnectionBinding generation,int currentHp,int maxHp,
-        int currentMp,int maxMp)
+        int currentMp,int maxMp,int currentWp,int maxWp)
     {
         lock(_gate)
         {
@@ -570,7 +570,7 @@ public sealed partial class WorldResultRouter
                 connection.IsClosed)
                 return GatewaySendStatus.Closed;
             return connection.QueuePlayerCombatState(
-                generation,currentHp,maxHp,currentMp,maxMp);
+                generation,currentHp,maxHp,currentMp,maxMp,currentWp,maxWp);
         }
     }
 

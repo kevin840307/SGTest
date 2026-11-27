@@ -996,7 +996,7 @@ public sealed partial class GatewayConnection
 
     public GatewaySendStatus QueuePlayerCombatState(
         ConnectionBinding generation,int currentHp,int maxHp,
-        int currentMp,int maxMp)
+        int currentMp,int maxMp,int currentWp,int maxWp)
     {
         lock(_bindingGate)
         {
@@ -1005,7 +1005,7 @@ public sealed partial class GatewayConnection
             if(generation!=bound)
                 return GatewaySendStatus.GenerationMismatch;
             var frame=WireProtocol.EncodePlayerCombatState(new(
-                bound.MapEpoch,currentHp,maxHp,currentMp,maxMp));
+                bound.MapEpoch,currentHp,maxHp,currentMp,maxMp,currentWp,maxWp));
             return _reliable.TryEnqueue(frame)
                 ? GatewaySendStatus.Enqueued : GatewaySendStatus.Backpressured;
         }

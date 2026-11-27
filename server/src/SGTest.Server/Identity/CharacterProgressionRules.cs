@@ -12,7 +12,8 @@ public enum CharacterAttributeKind : byte
 
 public sealed record CharacterProgressionLevelRule(
     int Level,long RequiredExperience,int AttributePointsAwarded,
-    int BaseHp,int BaseMp,int BaseAttack,int BaseDefense,int BaseHit,int BaseDodge);
+    int BaseHp,int BaseMp,int BaseAttack,int BaseDefense,int BaseHit,int BaseDodge,
+    int BaseWill);
 
 public sealed record CharacterRaceProgressionRule(
     IReadOnlyList<int> StrengthAttack,
@@ -105,7 +106,8 @@ public sealed class CharacterProgressionRules
                 ReadBounded(item,"base_attack",0,100_000_000),
                 ReadBounded(item,"base_defense",0,100_000_000),
                 ReadBounded(item,"base_hit",0,100_000_000),
-                ReadBounded(item,"base_dodge",0,100_000_000));
+                ReadBounded(item,"base_dodge",0,100_000_000),
+                ReadBounded(item,"base_will",0,2_000_000_000));
         }
 
         var raceRoot = Require(root,"races",JsonValueKind.Object);
@@ -177,6 +179,26 @@ public sealed class CharacterProgressionRules
         return total;
     }
 
+    public bool TryBackfillLegacyMissingWill(
+        CharacterCombatProfileData current,
+        out CharacterCombatProfileData updated)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+        updated=current;
+        if(current.Trust==CombatProfileTrust.SyntheticTest ||
+            current.CurrentWp!=0 || current.MaxWp!=0)
+            return false;
+        ValidateLevel(current.Level);
+        int maxWp=_levels[current.Level-1].BaseWill;
+        if(maxWp<=0)
+            return false;
+        // SGTest schema <=46 never exposed or consumed WP, so a migrated 0/0
+        // profile has no hidden depleted state to preserve. Populate only from
+        // the verified level table; all non-WP fields and trust stay untouched.
+        updated=current with {CurrentWp=maxWp,MaxWp=maxWp};
+        return true;
+    }
+
     public CharacterCombatProfileData BuildProfile(
         CharacterCombatProfileData current,
         int level,
@@ -199,11 +221,13 @@ public sealed class CharacterProgressionRules
         var race = _races[current.Race];
         int maxHp = checked(baseRule.BaseHp + race.ConstitutionHp[constitution - 1]);
         int maxMp = checked(baseRule.BaseMp + race.WisdomMp[wisdom - 1]);
+        int maxWp = baseRule.BaseWill;
         int attack = checked(baseRule.BaseAttack + race.StrengthAttack[strength - 1]);
         int hit = checked(baseRule.BaseHit + race.DexterityHit[dexterity - 1]);
         int dodge = checked(baseRule.BaseDodge + race.DexterityDodge[dexterity - 1]);
         int currentHp = refillVitals ? maxHp : Math.Min(current.CurrentHp,maxHp);
         int currentMp = refillVitals ? maxMp : Math.Min(current.CurrentMp,maxMp);
+        int currentWp = refillVitals ? maxWp : Math.Min(current.CurrentWp,maxWp);
         return current with
         {
             Trust = CombatProfileTrust.ProfileOnlyVerified,
@@ -217,6 +241,8 @@ public sealed class CharacterProgressionRules
             MaxHp = maxHp,
             CurrentMp = currentMp,
             MaxMp = maxMp,
+            CurrentWp = currentWp,
+            MaxWp = maxWp,
             Attack = attack,
             Defense = baseRule.BaseDefense,
             Hit = hit,

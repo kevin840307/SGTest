@@ -122,8 +122,12 @@ internal sealed class SkillCommandHandler
 
             if(cancel is null)
             {
+                var profile=await _identity.GetCharacterCombatProfileAsync(actor.ActorId)
+                    .ConfigureAwait(false)
+                    ?? throw new IOException("Committed skill MP profile disappeared before HUD refresh");
                 var baseline=_router.QueuePlayerCombatState(
-                    binding,hp,maxHp,mp.CurrentMp,mp.MaxMp);
+                    binding,hp,maxHp,mp.CurrentMp,mp.MaxMp,
+                    profile.Data.CurrentWp,profile.Data.MaxWp);
                 if(baseline!=GatewaySendStatus.Enqueued)
                     throw new IOException(
                         "Committed skill MP baseline could not be queued: "+baseline);

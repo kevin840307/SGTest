@@ -46,7 +46,8 @@ public sealed class CharacterProfileProgressionHandler
                 "Committed attribute allocation profile queue backpressured");
         var vitals=_router.QueuePlayerCombatState(
             expected,outcome.Profile.Data.CurrentHp,outcome.Profile.Data.MaxHp,
-            outcome.Profile.Data.CurrentMp,outcome.Profile.Data.MaxMp);
+            outcome.Profile.Data.CurrentMp,outcome.Profile.Data.MaxMp,
+            outcome.Profile.Data.CurrentWp,outcome.Profile.Data.MaxWp);
         if(vitals==GatewaySendStatus.Backpressured)
             throw new InvalidOperationException(
                 "Committed attribute allocation vitals queue backpressured");
