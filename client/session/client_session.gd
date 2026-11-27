@@ -574,7 +574,26 @@ func clan_create(name:String)->bool:
 
 func clan_join(clan_id:int)->bool:
 	var current:=snapshot()
-	return _queue_clan_intent(2,clan_id,"",current)
+	var invite:Dictionary=current.get("pending_clan_invite",{})
+	if invite.is_empty() or int(invite.get("clan_id",0))!=clan_id:
+		return false
+	return _queue_clan_intent(
+		2,clan_id,"",current,int(invite.get("inviter_actor_id",0)))
+
+
+func clan_invite(target_actor_id:int)->bool:
+	var current:=snapshot()
+	return _queue_clan_intent(8,0,"",current,target_actor_id)
+
+
+func clan_reject_invite()->bool:
+	var current:=snapshot()
+	var invite:Dictionary=current.get("pending_clan_invite",{})
+	if invite.is_empty():
+		return false
+	return _queue_clan_intent(
+		9,int(invite.get("clan_id",0)),"",current,
+		int(invite.get("inviter_actor_id",0)))
 
 
 func clan_leave()->bool:
@@ -858,7 +877,13 @@ func _queue_clan_intent(action:int,request_clan_id:int,name:String,current:Dicti
 			if current_clan!=0 or request_clan_id!=0 or target_actor_id!=0 or clean.length()<2 or clean.length()>24 or clean.to_utf8_buffer().size()>WireCodec.CLAN_MAX_NAME_BYTES:
 				return false
 		2:
-			if current_clan!=0 or request_clan_id<=0 or target_actor_id!=0 or not clean.is_empty():
+			var invite:Dictionary=current.get("pending_clan_invite",{})
+			if (
+				current_clan!=0 or request_clan_id<=0 or target_actor_id<=0 or
+				not clean.is_empty() or invite.is_empty() or
+				int(invite.get("clan_id",0))!=request_clan_id or
+				int(invite.get("inviter_actor_id",0))!=target_actor_id
+			):
 				return false
 		3:
 			if current_clan<=0 or request_clan_id!=0 or target_actor_id!=0 or not clean.is_empty():
@@ -871,6 +896,18 @@ func _queue_clan_intent(action:int,request_clan_id:int,name:String,current:Dicti
 				return false
 		6,7:
 			if current_clan<=0 or leader!=actor or request_clan_id!=0 or target_actor_id<=0 or target_actor_id==actor or not members.has(target_actor_id) or not clean.is_empty():
+				return false
+		8:
+			if current_clan<=0 or leader!=actor or request_clan_id!=0 or target_actor_id<=0 or target_actor_id==actor or not clean.is_empty():
+				return false
+		9:
+			var invite:Dictionary=current.get("pending_clan_invite",{})
+			if (
+				current_clan!=0 or request_clan_id<=0 or target_actor_id<=0 or
+				not clean.is_empty() or invite.is_empty() or
+				int(invite.get("clan_id",0))!=request_clan_id or
+				int(invite.get("inviter_actor_id",0))!=target_actor_id
+			):
 				return false
 		_:
 			return false

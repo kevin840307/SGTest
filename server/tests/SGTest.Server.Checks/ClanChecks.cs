@@ -40,15 +40,26 @@ internal static class ClanChecks
             "clan result roundtrip failed");
 
         var snapshot=new ClanSnapshotWire(7,44,3,1001,"星門先遣隊",[
-            new ClanMemberWire(1001,1,"團長"),
-            new ClanMemberWire(1002,0,"成員")
+            new ClanMemberWire(1001,1,true,"團長"),
+            new ClanMemberWire(1002,0,false,"成員")
         ],"今晚九點集合");
         Checks.Require(WireProtocol.TryDecodeClanSnapshot(
             WireProtocol.EncodeClanSnapshot(snapshot),out var decoded)&&decoded is not null&&
             decoded.ClanId==44&&decoded.Name=="星門先遣隊"&&
             decoded.Announcement=="今晚九點集合"&&decoded.Members.Count==2&&
-            decoded.Members.Single(x=>x.CharacterId==1001).Role==1,
+            decoded.Members.Single(x=>x.CharacterId==1001) is { Role:1,IsOnline:true }&&
+            decoded.Members.Single(x=>x.CharacterId==1002).IsOnline==false,
             "clan snapshot roundtrip failed");
+
+        var invite=new ClanInviteWire(7,44,3,1001,9001,"團長","星門先遣隊");
+        Checks.Require(WireProtocol.TryDecodeClanInvite(
+            WireProtocol.EncodeClanInvite(invite),out var decodedInvite)&&decodedInvite==invite,
+            "clan invite wire roundtrip failed");
+
+        var accept=new ClanCommandWire(7,5,ClanCommandAction.Join,44,string.Empty,1001);
+        Checks.Require(WireProtocol.TryDecodeClanCommand(
+            WireProtocol.EncodeClanCommand(accept),out parsed)&&parsed==accept,
+            "clan invite accept command roundtrip failed");
 
         var malformed=WireProtocol.EncodeClanCommand(create);
         malformed[20]=9;

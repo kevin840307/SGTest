@@ -340,7 +340,7 @@ func _run() -> void:
 		world.character.size != Vector2(263,397) or
 		world.skill_window.size != Vector2(223,288) or
 		world.party_window.size != Vector2(139,144) or
-		world.clan_window.size != Vector2(263,360) or
+		world.clan_window.size != Vector2(205,363) or
 		world.shop_window.size != Vector2(770,506) or
 		world.quest_window.size != Vector2(527,350) or
 		world.player_shop_window.size != Vector2(770,506) or
@@ -613,8 +613,8 @@ func _run() -> void:
 		},
 		"clan_id":501,"clan_revision":3,"clan_leader_actor_id":42,
 		"clan_name":"星門先遣隊","clan_announcement":"今晚九點集合","clan_members":{
-			42:{"actor_id":42,"role":1,"name":"TestA"},
-			44:{"actor_id":44,"role":0,"name":"社團隊友"},
+			42:{"actor_id":42,"role":1,"online":true,"name":"TestA"},
+			44:{"actor_id":44,"role":0,"online":false,"name":"社團隊友"},
 		},
 		"active_shop_npc":500,"shop_money":105500,
 		"shop_items":{
@@ -933,8 +933,23 @@ func _run() -> void:
 		await _capture(directory.path_join("classic_mecha.png"))
 	world._change_inventory_tab(0)
 	world.secondary_menu.get_node("GuildCommand").pressed.emit()
-	if not world.clan_window.visible or world._clan_rows.get_child_count() != 2:
-		_fail("classic BG_CLUB did not bind clan members")
+	var clan_info:=world.clan_window.get_node("ClanInfo") as TextureButton
+	if (
+		not world.clan_window.visible or world.clan_window.size!=Vector2(205,363) or
+		world._clan_name_value.text!="星門先遣隊" or world._clan_member_count_value.text!="2" or
+		clan_info.get_rect()!=Rect2(107,84,85,15) or
+		world._clan_member_name_labels[0].text!="TestA" or world._clan_member_state_labels[0].text!="上" or world._clan_member_role_labels[0].text!="會長" or
+		world._clan_member_name_labels[1].text!="社團隊友" or world._clan_member_state_labels[1].text!="離" or world._clan_member_role_labels[1].text!="會員"
+	):
+		_fail("057_CLUB_Menu did not bind source geometry and authoritative clan summary")
+		return
+	clan_info.pressed.emit()
+	if (
+		not world._clan_member_window.visible or world._clan_member_window.size!=Vector2(263,255) or
+		world._clan_member_window.get_node("MemberNameHeader").text!="會員名字" or
+		world._clan_member_window.get_node("MemberRoleHeader").text!="職位"
+	):
+		_fail("060_CLUB_MemList source page did not open with authoritative members")
 		return
 	# HK 061_CLUB_Name: a no-clan create action must collect real player input
 	# before the existing authoritative clan command is queued. The dialog stays
@@ -957,10 +972,10 @@ func _run() -> void:
 	world.apply_snapshot(no_clan)
 	app.session_panel._latest=no_clan.duplicate(true)
 	app.session_panel.session=clan_create_session
-	if not world._clan_create_button.visible or world._clan_create_button.disabled:
-		_fail("no-clan state did not expose the Classic create action")
+	world.secondary_menu.get_node("GuildCommand").pressed.emit()
+	if not world._clan_name_dialog.visible:
+		_fail("no-clan GuildCommand did not open 061_CLUB_Name")
 		return
-	world._clan_create_button.pressed.emit()
 	var clan_prompt=world._clan_name_dialog.get_node("ClanNamePrompt")
 	var clan_close=world._clan_name_dialog.get_node("ClanNameClose") as TextureButton
 	var clan_help=world._clan_name_dialog.get_node("ClanNameHelp") as TextureButton
@@ -981,7 +996,7 @@ func _run() -> void:
 	if world._clan_name_dialog.visible or clan_create_session.creates!=0:
 		_fail("061_CLUB_Name close submitted a clan instead of cancelling locally")
 		return
-	world._clan_create_button.pressed.emit()
+	world.secondary_menu.get_node("GuildCommand").pressed.emit()
 	world._clan_name_input.text="一"
 	world._update_clan_name_action()
 	if not clan_confirm.disabled:
@@ -1001,10 +1016,10 @@ func _run() -> void:
 	created_clan["clan_revision"]=1
 	created_clan["clan_leader_actor_id"]=42
 	created_clan["clan_name"]="皇家戰團"
-	created_clan["clan_members"]={42:{"actor_id":42,"role":1,"name":"TestA"}}
+	created_clan["clan_members"]={42:{"actor_id":42,"role":1,"online":true,"name":"TestA"}}
 	world.apply_snapshot(created_clan)
-	if world._clan_name_dialog.visible or world._clan_create_button.visible or world._clan_rows.get_child_count()!=1:
-		_fail("authoritative clan snapshot did not close 061_CLUB_Name and refresh Classic members")
+	if world._clan_name_dialog.visible or world._clan_member_name_labels[0].text!="TestA" or not world._clan_member_name_labels[1].text.is_empty():
+		_fail("authoritative clan snapshot did not close 061_CLUB_Name and refresh 060 member rows")
 		return
 	app.session_panel.session=real_clan_session
 	app.session_panel._latest=real_clan_latest

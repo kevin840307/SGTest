@@ -221,8 +221,25 @@ var _party_leave_question_text:=RichTextLabel.new()
 var _party_leave_previous_focus:Control
 var _request_menu:=Control.new()
 var _request_menu_actor:=0
-var _clan_rows:=VBoxContainer.new()
+var _clan_rows:=VBoxContainer.new() # retained for compatibility; 060 uses fixed source rows below
 var _clan_create_button:Button
+var _clan_name_value:RichTextLabel
+var _clan_member_count_value:RichTextLabel
+var _clan_member_window:Control
+var _clan_member_name_labels:Array[RichTextLabel]=[]
+var _clan_member_role_labels:Array[RichTextLabel]=[]
+var _clan_member_state_labels:Array[RichTextLabel]=[]
+var _clan_member_actor_ids:Array[int]=[]
+var _clan_member_offset:=0
+var _clan_selected_actor:=0
+var _clan_announcement_window:Control
+var _clan_current_announcement:TextEdit
+var _clan_announcement_input:TextEdit
+var _clan_announcement_remaining:RichTextLabel
+var _clan_announcement_confirm:TextureButton
+var _clan_question:=Control.new()
+var _clan_question_text:=RichTextLabel.new()
+var _clan_question_actor:=0
 var _clan_name_dialog:=Control.new()
 var _clan_name_input:=SourceLineEdit.new()
 var _clan_name_confirm:TextureButton
@@ -391,7 +408,7 @@ func _init()->void:
 	_build_trade()
 	_build_dialog()
 	_build_settings()
-	_windows=[inventory,_mecha_window,character,skill_window,party_window,clan_window,shop_window,quest_window,player_shop_window,storage_window,bank_window,repair_window,trade_window,dialog_window,settings_window]
+	_windows=[inventory,_mecha_window,character,skill_window,party_window,clan_window,_clan_member_window,_clan_announcement_window,shop_window,quest_window,player_shop_window,storage_window,bank_window,repair_window,trade_window,dialog_window,settings_window]
 	visible=false
 	set_process(false)
 
@@ -540,6 +557,10 @@ func _unhandled_key_input(event:InputEvent)->void:
 		return
 	if _party_question.visible:
 		_reject_party_invite()
+		get_viewport().set_input_as_handled()
+		return
+	if _clan_question.visible:
+		_reject_clan_invite()
 		get_viewport().set_input_as_handled()
 		return
 	if _request_menu.visible:
@@ -772,7 +793,7 @@ func _build_hud()->void:
 	_texture_button(secondary_menu,"ItemCommand","B_BASIC_ITEM",Vector2(3,32),Vector2(24,23),func():_toggle(inventory),"包包")
 	_texture_button(secondary_menu,"SkillCommand","B_BASIC_SKILL",Vector2(3,59),Vector2(24,23),func():_toggle(skill_window),"技能")
 	_texture_button(secondary_menu,"PartyCommand","B_COMMAND_TEAM",Vector2(2,86),Vector2(24,23),func():_toggle(party_window),"隊伍")
-	_texture_button(secondary_menu,"GuildCommand","B_BASIC_GUILD",Vector2(3,113),Vector2(24,23),func():_toggle(clan_window),"戰團")
+	_texture_button(secondary_menu,"GuildCommand","B_BASIC_GUILD",Vector2(3,113),Vector2(24,23),_open_clan_ui,"戰團")
 	_texture_button(secondary_menu,"PlayerShopCommand","B_BASIC_PSHOP",Vector2(4,142),Vector2(21,19),_open_player_shop_ui,"小商店")
 	_texture_button(secondary_menu,"QuestCommand","B_BASIC_QUEST",Vector2(2,169),Vector2(25,22),func():_toggle(quest_window),"任務")
 	_texture_button(secondary_menu,"GmCommand","B_BASIC_GM",Vector2(2,196),Vector2(25,22),func():pass,"GM")
@@ -2219,32 +2240,175 @@ func _build_party()->void:
 		["Team",42.0,"組隊"],["Friend",57.0,"好友"],["Clan",70.0,"社團"],["Extra",84.0,"更多"]]
 	for row in rows:
 		var action:=str(row[0])
-		var callback:=_request_team if action=="Team" else (_request_friend if action=="Friend" else Callable())
+		var callback:=_request_team if action=="Team" else (_request_friend if action=="Friend" else (_request_clan if action=="Clan" else Callable()))
 		_texture_button(_request_menu,"Request"+action,"B_RIGHTBOX_BUTTON",Vector2(-1,float(row[1])),Vector2(86,14),callback,str(row[2]))
 
 func _build_clan()->void:
-	clan_window=_window("ClanWindow","BG_CLUB",Vector2(263,360),Vector2(269,113))
-	var header:=_classic_label(clan_window,"ClanHeader",Rect2(9,36,245,77),10,false)
-	header.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
-	_clan_rows.name="ClanMemberRows"
-	_clan_rows.position=Vector2(5,138)
-	_clan_rows.size=Vector2(238,190)
-	_clan_rows.add_theme_constant_override("separation",0)
-	clan_window.add_child(_clan_rows)
-	_clan_create_button=_hit(clan_window,"ClanCreateButton",Rect2(7,330,75,24),_open_clan_name,"建立戰團")
-	_clan_create_button.modulate=Color(1,1,1,0.01)
-	var refresh:=_hit(clan_window,"ClanRefreshButton",Rect2(92,330,75,24),func():
-		if _panel!=null:_panel.submit_clan_refresh()
-	,"更新")
-	refresh.modulate=Color(1,1,1,0.01)
-	var leave:=_hit(clan_window,"ClanLeaveButton",Rect2(177,330,75,24),func():
-		if _panel!=null:_panel.submit_clan_leave()
-	,"離開戰團")
-	leave.modulate=Color(1,1,1,0.01)
+	# 057_CLUB_Menu.itf: 205x363 source-local geometry.
+	clan_window=_window("ClanWindow","BG_CLUB_MENU",Vector2(205,363),Vector2(269,113))
+	var clan_close:=clan_window.get_node("CloseWindow") as TextureButton
+	clan_close.position=Vector2(186,1)
+	clan_close.size=Vector2(16,16)
+	_texture_button(
+		clan_window,"ClanHelp","B_ONLINEHELP",Vector2(170,1),Vector2(16,16),
+		Callable(),"線上說明")
+	for raw in [
+		["ClanNameCaption",Rect2(11,38,48,12),"學會名稱"],
+		["ClanBankCaption",Rect2(11,53,48,12),"學會金庫"],
+		["ClanMaintenanceCaption",Rect2(10,69,48,12),"維持日計"],
+		["ClanCommandCaption",Rect2(79,115,48,12),"學會指令"],
+		["ClanMembersCaption",Rect2(10,85,48,12),"學會人數"]
+	]:
+		var spec:Array=raw
+		var caption:=_itf_text(clan_window,str(spec[0]),spec[1],9)
+		caption.text=str(spec[2])
+	_clan_name_value=_itf_text(clan_window,"ClanNameValue",Rect2(68,37,118,12),9)
+	_clan_member_count_value=_itf_text(clan_window,"ClanMemberCount",Rect2(67,86,30,12),9)
+	# Bank and maintenance are intentionally blank until their authoritative
+	# gameplay slices exist; do not synthesize values into original fields.
+	_itf_text(clan_window,"ClanBankValue",Rect2(80,53,106,12),9)
+	_itf_text(clan_window,"ClanMaintenanceValue",Rect2(68,69,118,12),9)
+
+	var command_specs=[
+		["ClanTransfer","B_CLUB_B01",Vector2(10,131),Vector2(91,15),"會長讓位",Rect2(31,133,48,12),_clan_transfer_selected],
+		["ClanDissolve","B_CLUB_B01",Vector2(104,131),Vector2(91,15),"解散學會",Rect2(125,133,48,12),Callable()],
+		["ClanDelegate","B_CLUB_B01",Vector2(10,148),Vector2(91,15),"委任",Rect2(43,150,24,12),Callable()],
+		["ClanAlliance","B_CLUB_B01",Vector2(104,148),Vector2(91,15),"成立星盟",Rect2(125,150,48,12),Callable()],
+		["ClanCancelDelegate","B_CLUB_B01",Vector2(10,165),Vector2(91,15),"撤銷委位",Rect2(31,167,48,12),Callable()],
+		["ClanKick","B_CLUB_B01",Vector2(10,212),Vector2(91,15),"解除會員",Rect2(31,214,48,12),_clan_kick_selected],
+		["ClanWithdraw","B_CLUB_B01",Vector2(104,212),Vector2(91,15),"提取資金",Rect2(125,214,48,12),Callable()],
+		["ClanInvest","B_CLUB_B01",Vector2(10,229),Vector2(91,15),"投資開發",Rect2(31,231,48,12),Callable()],
+		["ClanUnfriend","B_CLUB_B01",Vector2(104,229),Vector2(91,15),"友會解除",Rect2(125,231,48,12),Callable()],
+		["ClanResearch","B_CLUB_B01",Vector2(10,246),Vector2(91,15),"開發研究",Rect2(31,248,48,12),Callable()],
+		["ClanIntro","B_CLUB_B01",Vector2(104,246),Vector2(91,15),"學會簡介",Rect2(125,248,48,12),Callable()],
+		["ClanUpgrade","B_CLUB_B01",Vector2(10,263),Vector2(91,15),"研究升級",Rect2(31,265,48,12),Callable()],
+		["ClanNews","B_CLUB_B01",Vector2(104,263),Vector2(91,15),"學會通訊",Rect2(125,265,48,12),_open_clan_announcement],
+		["ClanResign","B_CLUB_B01",Vector2(10,280),Vector2(91,15),"請辭",Rect2(43,282,24,12),Callable()],
+		["ClanLeave","B_CLUB_B01",Vector2(10,326),Vector2(91,15),"脫離學會",Rect2(31,328,48,12),_clan_leave],
+		["ClanDonate","B_CLUB_B01",Vector2(104,326),Vector2(91,15),"捐款",Rect2(137,328,24,12),Callable()]
+	]
+	for raw in command_specs:
+		var spec:Array=raw
+		var callback:Callable=spec[6]
+		var button:=_texture_button(
+			clan_window,str(spec[0]),str(spec[1]),spec[2],spec[3],callback,str(spec[4]))
+		if not callback.is_valid():
+			button.disabled=true
+		var label:=_itf_text(clan_window,str(spec[0])+"Text",spec[5],9,true)
+		label.text=str(spec[4])
+	var info:=_texture_button(
+		clan_window,"ClanInfo","B_CLUB_B03",Vector2(107,84),Vector2(85,15),
+		_open_clan_member_window,"學會資訊")
+	var info_text:=_itf_text(clan_window,"ClanInfoText",Rect2(124,86,48,12),9,true)
+	info_text.text="學會資訊"
+
+	# 060_CLUB_MemList.itf: this is a source page, not a synthetic VBox.
+	_clan_member_window=Control.new()
+	_clan_member_window.name="ClanMemberWindow"
+	_clan_member_window.position=Vector2(269,113)
+	_clan_member_window.size=Vector2(263,255)
+	_clan_member_window.visible=false
+	stage.add_child(_clan_member_window)
+	_make_movable(_clan_member_window)
+	_deferred_background(_clan_member_window,"BG_CLUB_MEMLIST",_clan_member_window.size)
+	var member_header:=_itf_text(_clan_member_window,"MemberNameHeader",Rect2(72,24,48,12),9)
+	member_header.text="會員名字"
+	var role_header:=_itf_text(_clan_member_window,"MemberRoleHeader",Rect2(187,24,24,12),9)
+	role_header.text="職位"
+	for i in range(13):
+		var y:=40.0+16.0*i
+		_clan_member_state_labels.append(
+			_itf_text(_clan_member_window,"MemberState%d"%i,Rect2(9,y,18,12),9,true))
+		_clan_member_name_labels.append(
+			_itf_text(_clan_member_window,"MemberName%d"%i,Rect2(36,y,120,12),9))
+		_clan_member_role_labels.append(
+			_itf_text(_clan_member_window,"MemberRole%d"%i,Rect2(164,y,72,12),9))
+		_clan_member_actor_ids.append(0)
+		var row_hit:=_hit(
+			_clan_member_window,"MemberHit%d"%i,Rect2(8,y,228,12),
+			_select_clan_member.bind(i),"選擇會員")
+		row_hit.modulate=Color(1,1,1,0.01)
+	_texture_button(
+		_clan_member_window,"MemberScrollUp","SCROLLUP_BUTTON",Vector2(242,21),Vector2(17,36),
+		_scroll_clan_members.bind(-1),"向上")
+	_texture_button(
+		_clan_member_window,"MemberScrollDown","SCROLLDOWN_BUTTON",Vector2(242,210),Vector2(17,36),
+		_scroll_clan_members.bind(1),"向下")
+
+	# 070_CLUB_News_EDIT.itf: leader edits, members can read; Server remains
+	# authoritative and rejects non-leader mutations.
+	_clan_announcement_window=Control.new()
+	_clan_announcement_window.name="ClanAnnouncementWindow"
+	_clan_announcement_window.position=Vector2(269,110)
+	_clan_announcement_window.size=Vector2(263,345)
+	_clan_announcement_window.visible=false
+	stage.add_child(_clan_announcement_window)
+	_make_movable(_clan_announcement_window)
+	_deferred_background(_clan_announcement_window,"BG_CLUB_INTRO_EDIT",_clan_announcement_window.size)
+	var current_caption:=_itf_text(
+		_clan_announcement_window,"CurrentAnnouncementCaption",Rect2(13,25,72,12),9)
+	current_caption.text="學會現有通訊"
+	var new_caption:=_itf_text(
+		_clan_announcement_window,"NewAnnouncementCaption",Rect2(13,179,108,12),9)
+	new_caption.text="請輸入新的學會通訊"
+	var remain_caption:=_itf_text(
+		_clan_announcement_window,"AnnouncementRemainCaption",Rect2(142,179,72,12),9)
+	remain_caption.text="餘下可用字數"
+	_clan_announcement_remaining=_itf_text(
+		_clan_announcement_window,"AnnouncementRemain",Rect2(216,179,20,12),9,true)
+	_clan_current_announcement=TextEdit.new()
+	_clan_current_announcement.name="CurrentAnnouncement"
+	_clan_current_announcement.position=Vector2(8,46)
+	_clan_current_announcement.size=Vector2(228,108)
+	_clan_current_announcement.editable=false
+	_clan_current_announcement.wrap_mode=TextEdit.LINE_WRAPPING_BOUNDARY
+	if _character_raster_font!=null:
+		_clan_current_announcement.add_theme_font_override("font",_character_raster_font)
+	_clan_current_announcement.add_theme_font_size_override("font_size",9)
+	_clan_announcement_window.add_child(_clan_current_announcement)
+	_clan_announcement_input=TextEdit.new()
+	_clan_announcement_input.name="AnnouncementInput"
+	_clan_announcement_input.position=Vector2(8,200)
+	_clan_announcement_input.size=Vector2(228,108)
+	_clan_announcement_input.wrap_mode=TextEdit.LINE_WRAPPING_BOUNDARY
+	if _character_raster_font!=null:
+		_clan_announcement_input.add_theme_font_override("font",_character_raster_font)
+	_clan_announcement_input.add_theme_font_size_override("font_size",9)
+	_clan_announcement_input.text_changed.connect(_clan_announcement_changed)
+	_clan_announcement_window.add_child(_clan_announcement_input)
+	_clan_announcement_confirm=_texture_button(
+		_clan_announcement_window,"AnnouncementConfirm","B_CLUE_B05",Vector2(36,326),Vector2(85,15),
+		_submit_clan_announcement,"確定")
+	var announcement_confirm_text:=_itf_text(
+		_clan_announcement_window,"AnnouncementConfirmText",Rect2(67,328,24,12),9,true)
+	announcement_confirm_text.text="確定"
+	_texture_button(
+		_clan_announcement_window,"AnnouncementCancel","B_CLUE_B05",Vector2(142,326),Vector2(85,15),
+		_cancel_clan_announcement,"取消")
+	var announcement_cancel_text:=_itf_text(
+		_clan_announcement_window,"AnnouncementCancelText",Rect2(173,328,24,12),9,true)
+	announcement_cancel_text.text="取消"
+
+	# Original right-click handler OnFriendClubInvite feeds the same compact
+	# question-family surface used by other social invitations.
+	_clan_question.name="ClanInviteQuestion"
+	_clan_question.position=Vector2(166,290)
+	_clan_question.size=Vector2(469,19)
+	_clan_question.visible=false
+	_clan_question.mouse_filter=Control.MOUSE_FILTER_STOP
+	hud.add_child(_clan_question)
+	_background(_clan_question,"BG_QUESTION_BOX",_clan_question.size)
+	_clan_question_text=_itf_text(
+		_clan_question,"QuestionText",Rect2(9,3,382,12),12)
+	_texture_button(
+		_clan_question,"QuestionYes","B_OK_BUTTON",Vector2(424,1),Vector2(16,16),
+		_accept_clan_invite,"接受")
+	_texture_button(
+		_clan_question,"QuestionNo","CLOSESCREEN",Vector2(444,1),Vector2(16,16),
+		_reject_clan_invite,"拒絕")
 
 	# HK SGOClient sub_4AC1CD loads 061_CLUB_Name.itf before the create request,
-	# then caps its edit control at 10. Keep the exact ITF-local geometry and
-	# original sprites instead of sending the previous fixed "SGTest戰團" name.
+	# then caps its edit control at 10.
 	_clan_name_dialog.name="ClanNameDialog"
 	_clan_name_dialog.position=Vector2(272,250)
 	_clan_name_dialog.size=Vector2(256,100)
@@ -3409,8 +3573,166 @@ func _request_friend()->void:
 		_panel.session.friend_add_actor(target)
 
 
+func _request_clan()->void:
+	var target:=_request_menu_actor
+	close_player_request_menu()
+	if target>0 and _panel!=null:
+		_panel.submit_clan_invite(target)
+
+
+func _open_clan_ui()->void:
+	if int(_stats.get("clan_id",0))<=0:
+		if not (_stats.get("pending_clan_invite",{}) as Dictionary).is_empty():
+			_sync_clan_question()
+			return
+		_open_clan_name()
+		return
+	_hide_windows()
+	_ensure_window_art(clan_window)
+	clan_window.show()
+	if _panel!=null and int(_stats.get("pending_clan_sequence",0))==0:
+		_panel.submit_clan_refresh()
+
+
+func _open_clan_member_window()->void:
+	if int(_stats.get("clan_id",0))<=0:
+		return
+	_clan_member_offset=0
+	_clan_selected_actor=0
+	_refresh_clan_member_rows()
+	_hide_windows()
+	_ensure_window_art(_clan_member_window)
+	_clan_member_window.show()
+
+
+func _scroll_clan_members(delta:int)->void:
+	var members:Dictionary=_stats.get("clan_members",{})
+	var max_offset:=maxi(0,members.size()-13)
+	_clan_member_offset=clampi(_clan_member_offset+delta,0,max_offset)
+	_refresh_clan_member_rows()
+
+
+func _select_clan_member(row:int)->void:
+	if row<0 or row>=_clan_member_actor_ids.size():
+		return
+	var actor:=_clan_member_actor_ids[row]
+	if actor<=0:
+		return
+	_clan_selected_actor=actor
+	_refresh_clan_member_rows()
+
+
+func _clan_transfer_selected()->void:
+	if (
+		_panel==null or _clan_selected_actor<=0 or
+		_clan_selected_actor==int(_stats.get("actor_id",0))
+	):
+		return
+	_panel.submit_clan_transfer_leadership(_clan_selected_actor)
+
+
+func _clan_kick_selected()->void:
+	if (
+		_panel==null or _clan_selected_actor<=0 or
+		_clan_selected_actor==int(_stats.get("actor_id",0))
+	):
+		return
+	_panel.submit_clan_kick(_clan_selected_actor)
+
+
+func _clan_leave()->void:
+	if _panel!=null:
+		_panel.submit_clan_leave()
+
+
+func _open_clan_announcement()->void:
+	if int(_stats.get("clan_id",0))<=0:
+		return
+	var current:=str(_stats.get("clan_announcement",""))
+	_clan_current_announcement.text=current
+	_clan_announcement_input.text=current
+	var leader:=int(_stats.get("clan_leader_actor_id",0))==int(_stats.get("actor_id",0))
+	_clan_announcement_input.editable=leader
+	_clan_announcement_confirm.visible=leader
+	_clan_announcement_changed()
+	_hide_windows()
+	_ensure_window_art(_clan_announcement_window)
+	_clan_announcement_window.show()
+	if leader:
+		_clan_announcement_input.grab_focus()
+
+
+func _cancel_clan_announcement()->void:
+	_clan_announcement_window.hide()
+	_open_clan_ui()
+
+
+func _clan_announcement_changed()->void:
+	if _clan_announcement_remaining==null or _clan_announcement_confirm==null:
+		return
+	var value:=_clan_announcement_input.text
+	var byte_count:=value.to_utf8_buffer().size()
+	_clan_announcement_remaining.text=str(maxi(0,WireCodec.CLAN_MAX_ANNOUNCEMENT_BYTES-byte_count))
+	var leader:=int(_stats.get("clan_leader_actor_id",0))==int(_stats.get("actor_id",0))
+	_clan_announcement_confirm.disabled=(
+		not leader or int(_stats.get("pending_clan_sequence",0))!=0 or
+		byte_count>WireCodec.CLAN_MAX_ANNOUNCEMENT_BYTES or value!=value.strip_edges()
+	)
+
+
+func _submit_clan_announcement()->void:
+	if _panel==null:
+		return
+	var value:=_clan_announcement_input.text
+	if (
+		value!=value.strip_edges() or
+		value.to_utf8_buffer().size()>WireCodec.CLAN_MAX_ANNOUNCEMENT_BYTES
+	):
+		return
+	if _panel.submit_clan_set_announcement(value):
+		_clan_announcement_confirm.disabled=true
+
+
+func _sync_clan_question()->void:
+	var invite:Dictionary=_stats.get("pending_clan_invite",{})
+	if (
+		invite.is_empty() or int(_stats.get("clan_id",0))!=0 or
+		int(_stats.get("pending_clan_sequence",0))!=0
+	):
+		_clan_question_actor=0
+		_clan_question.hide()
+		return
+	var inviter:=int(invite.get("inviter_actor_id",0))
+	if inviter<=0:
+		_clan_question.hide()
+		return
+	_clan_question_actor=inviter
+	_clan_question_text.text="加入戰團邀請　%s　%s"%[
+		str(invite.get("inviter_name","")),str(invite.get("clan_name",""))]
+	_party_question.hide()
+	_friend_question.hide()
+	_clan_question.show()
+	_clan_question.move_to_front()
+
+
+func _accept_clan_invite()->void:
+	var invite:Dictionary=_stats.get("pending_clan_invite",{})
+	if _panel==null or invite.is_empty():
+		return
+	if _panel.submit_clan_join(int(invite.get("clan_id",0))):
+		_clan_question.hide()
+
+
+func _reject_clan_invite()->void:
+	if _panel!=null and _panel.submit_clan_reject_invite():
+		_clan_question.hide()
+
+
 func _open_clan_name()->void:
-	if int(_stats.get("clan_id",0))!=0 or int(_stats.get("pending_clan_sequence",0))!=0:
+	if (
+		int(_stats.get("clan_id",0))!=0 or int(_stats.get("pending_clan_sequence",0))!=0 or
+		not (_stats.get("pending_clan_invite",{}) as Dictionary).is_empty()
+	):
 		return
 	_clan_name_input.text=""
 	_clan_name_input.caret_column=0
@@ -3453,27 +3775,92 @@ func _submit_clan_name()->void:
 
 func _refresh_clan()->void:
 	var clan_id:=int(_stats.get("clan_id",0))
-	if _clan_create_button!=null:
-		_clan_create_button.visible=clan_id==0
-		_clan_create_button.disabled=clan_id!=0 or int(_stats.get("pending_clan_sequence",0))!=0
+	var pending:=int(_stats.get("pending_clan_sequence",0))
 	if clan_id>0 and _clan_name_dialog.visible:
 		_close_clan_name()
+		_hide_windows()
+		_ensure_window_art(clan_window)
+		clan_window.show()
 	elif _clan_name_dialog.visible:
 		_update_clan_name_action()
-	var header=clan_window.get_node_or_null("ClanHeader")
-	if header is Label:
-		(header as Label).text=("%s\nID %d　團長 %d\n公告：%s"%[
-			str(_stats.get("clan_name","")),clan_id,
-			int(_stats.get("clan_leader_actor_id",0)),
-			str(_stats.get("clan_announcement","")) if not str(_stats.get("clan_announcement","")).is_empty() else "（無）"
-		]) if clan_id>0 else "尚未加入戰團"
-	_clear_rows(_clan_rows)
+	if _clan_name_value!=null:
+		_clan_name_value.text=str(_stats.get("clan_name","")) if clan_id>0 else ""
 	var members:Dictionary=_stats.get("clan_members",{})
-	var ids:Array=members.keys();ids.sort()
-	for i in mini(9,ids.size()):
-		var id:=int(ids[i]);var member:Dictionary=members[ids[i]]
-		_classic_row(_clan_rows,"%s　%s"%["團長" if id==int(_stats.get("clan_leader_actor_id",0)) else "成員",str(member.get("name","玩家"))],20.5)
-	if ids.is_empty():_classic_row(_clan_rows,"尚無成員資料",20.5)
+	if _clan_member_count_value!=null:
+		_clan_member_count_value.text=str(members.size()) if clan_id>0 else ""
+	var actor:=int(_stats.get("actor_id",0))
+	var leader:=int(_stats.get("clan_leader_actor_id",0))
+	var is_leader:=clan_id>0 and actor>0 and leader==actor
+	var selected_valid:=(
+		_clan_selected_actor>0 and _clan_selected_actor!=actor and
+		members.has(_clan_selected_actor)
+	)
+	var transfer:=clan_window.get_node_or_null("ClanTransfer") as TextureButton
+	var kick:=clan_window.get_node_or_null("ClanKick") as TextureButton
+	var news:=clan_window.get_node_or_null("ClanNews") as TextureButton
+	var leave:=clan_window.get_node_or_null("ClanLeave") as TextureButton
+	var info:=clan_window.get_node_or_null("ClanInfo") as TextureButton
+	if transfer!=null:transfer.disabled=not is_leader or not selected_valid or pending!=0
+	if kick!=null:kick.disabled=not is_leader or not selected_valid or pending!=0
+	if news!=null:news.disabled=clan_id<=0 or pending!=0
+	if leave!=null:leave.disabled=clan_id<=0 or pending!=0
+	if info!=null:info.disabled=clan_id<=0
+	if clan_id<=0:
+		_clan_selected_actor=0
+		if clan_window.visible:clan_window.hide()
+		if _clan_member_window!=null:_clan_member_window.hide()
+		if _clan_announcement_window!=null:_clan_announcement_window.hide()
+	_refresh_clan_member_rows()
+	if _clan_current_announcement!=null:
+		_clan_current_announcement.text=str(_stats.get("clan_announcement",""))
+	if _clan_announcement_window!=null and _clan_announcement_window.visible:
+		_clan_announcement_changed()
+	_sync_clan_question()
+
+
+func _refresh_clan_member_rows()->void:
+	if _clan_member_name_labels.is_empty():
+		return
+	var members:Dictionary=_stats.get("clan_members",{})
+	var ids:Array=members.keys()
+	ids.sort()
+	if _clan_selected_actor>0 and not members.has(_clan_selected_actor):
+		_clan_selected_actor=0
+	var max_offset:=maxi(0,ids.size()-13)
+	_clan_member_offset=clampi(_clan_member_offset,0,max_offset)
+	for i in range(13):
+		var idx:=_clan_member_offset+i
+		var state_label:=_clan_member_state_labels[i]
+		var name_label:=_clan_member_name_labels[i]
+		var role_label:=_clan_member_role_labels[i]
+		if idx>=ids.size():
+			_clan_member_actor_ids[i]=0
+			state_label.text=""
+			name_label.text=""
+			role_label.text=""
+			name_label.modulate=Color.WHITE
+			role_label.modulate=Color.WHITE
+			continue
+		var raw_id=ids[idx]
+		var member:Dictionary=members[raw_id]
+		var member_id:=int(raw_id)
+		var online:=bool(member.get("online",false))
+		_clan_member_actor_ids[i]=member_id
+		state_label.text="上" if online else "離"
+		name_label.text=str(member.get("name","玩家"))
+		role_label.text="會長" if int(member.get("role",0))==1 else "會員"
+		var row_alpha:=1.0 if online else 0.55
+		name_label.modulate=Color(1.0,1.0,1.0,row_alpha)
+		role_label.modulate=Color(1.0,1.0,1.0,row_alpha)
+		state_label.modulate=Color(1.0,1.0,1.0,row_alpha)
+		if member_id==_clan_selected_actor:
+			name_label.add_theme_color_override("default_color",Color("#ffe073"))
+		else:
+			name_label.add_theme_color_override("default_color",Color("#f9f2d6"))
+	var up:=_clan_member_window.get_node_or_null("MemberScrollUp") as TextureButton
+	var down:=_clan_member_window.get_node_or_null("MemberScrollDown") as TextureButton
+	if up!=null:up.disabled=_clan_member_offset<=0
+	if down!=null:down.disabled=_clan_member_offset>=max_offset
 
 func _refresh_shop()->void:
 	_clear_rows(_shop_buy_rows);_clear_rows(_shop_sell_rows)
@@ -4187,7 +4574,7 @@ func _secondary_menu_action(index:int)->void:
 
 func _menu_action(index:int)->void:
 	match index:
-		0:_toggle(clan_window)
+		0:_open_clan_ui()
 		1:_toggle(character)
 		2:_toggle(inventory)
 		3:_open_player_shop_ui()

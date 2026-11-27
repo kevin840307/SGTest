@@ -613,6 +613,19 @@ public sealed partial class GatewayConnection
         }
     }
 
+    public GatewaySendStatus QueueClanInvite(
+        ConnectionBinding expected,ClanInviteWire invite)
+    {
+        lock(_bindingGate)
+        {
+            if(_closed)return GatewaySendStatus.Closed;
+            if(_binding!=expected||invite.ReceiverMapEpoch!=expected.MapEpoch)
+                return GatewaySendStatus.GenerationMismatch;
+            return _reliable.TryEnqueue(WireProtocol.EncodeClanInvite(invite))
+                ?GatewaySendStatus.Enqueued:GatewaySendStatus.Backpressured;
+        }
+    }
+
     public GatewaySendStatus QueueFriendResult(
         TrustedFriendCommand request,FriendResultWire result)
     {

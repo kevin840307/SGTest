@@ -59,12 +59,8 @@ func _initialize()->void:
 	# separately NOT VERIFIED), so drive the real TextureButton pressed path while
 	# still sending actual key events through the focused 061 LineEdit.
 	(guild_command as BaseButton).pressed.emit()
-	if not shell.clan_window.visible:
-		_fail("GuildCommand did not open clan window",panel)
-		return
-	shell._clan_create_button.pressed.emit()
-	if not shell._clan_name_dialog.visible:
-		_fail("create did not open 061_CLUB_Name",panel)
+	if not shell._clan_name_dialog.visible or shell.clan_window.visible:
+		_fail("GuildCommand did not open source 061_CLUB_Name for no-clan player",panel)
 		return
 	shell._clan_name_input.focus_editor()
 	await process_frame
@@ -92,11 +88,16 @@ func _initialize()->void:
 		_fail("authoritative create result "+str(panel._latest),panel)
 		return
 	await process_frame
-	if shell._clan_name_dialog.visible or shell._clan_create_button.visible:
-		_fail("authoritative snapshot did not close create UI",panel)
+	if shell._clan_name_dialog.visible or not shell.clan_window.visible:
+		_fail("authoritative snapshot did not replace create UI with 057_CLUB_Menu",panel)
 		return
-	if shell._clan_rows.get_child_count()!=1:
-		_fail("Classic clan member list did not render authoritative leader",panel)
+	if shell._clan_name_value.text!=CLAN_NAME or shell._clan_member_count_value.text!="1":
+		_fail("057_CLUB_Menu did not render authoritative clan name/member count",panel)
+		return
+	shell._open_clan_member_window()
+	await process_frame
+	if not shell._clan_member_window.visible or shell._clan_member_actor_ids[0]!=int(created.get("actor_id",0)):
+		_fail("060_CLUB_MemList did not render authoritative leader",panel)
 		return
 	var clan_id:=int(created.get("clan_id",0))
 
@@ -128,8 +129,10 @@ func _initialize()->void:
 	shell.set_world_active(true)
 	shell.apply_snapshot(relog)
 	await process_frame
-	if shell._clan_create_button.visible or shell._clan_rows.get_child_count()!=1:
-		_fail("relog Classic clan UI did not restore authoritative state",panel)
+	(guild_command as BaseButton).pressed.emit()
+	await process_frame
+	if not shell.clan_window.visible or shell._clan_name_value.text!=CLAN_NAME or shell._clan_member_count_value.text!="1":
+		_fail("relog 057_CLUB_Menu did not restore authoritative state",panel)
 		return
 
 	panel.disconnect_session()

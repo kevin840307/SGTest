@@ -153,7 +153,8 @@ public enum WireOpcode : ushort
     HotkeyCommand = 140,
     HotkeySnapshot = 141,
     PlayerEquipmentPresentation = 142,
-    PlayerShopPresentation = 143
+    PlayerShopPresentation = 143,
+    ClanInvite = 144
 }
 
 public enum ChatChannel : byte { Nearby = 0, World = 1, Warband = 2, Party = 3, Whisper = 4, Emotion = 5, FriendMessage = 6 }
@@ -166,13 +167,15 @@ public enum WhisperResultStatus : byte
 }
 public enum ClanCommandAction : byte
 {
-    Create=1,Join=2,Leave=3,Refresh=4,SetAnnouncement=5,Kick=6,TransferLeadership=7
+    Create=1,Join=2,Leave=3,Refresh=4,SetAnnouncement=5,Kick=6,TransferLeadership=7,
+    Invite=8,RejectInvite=9
 }
 public enum ClanResultStatus : byte
 {
     Success=0,AlreadyInClan=1,NotInClan=2,ClanNotFound=3,
     NameTaken=4,InvalidName=5,ClanFull=6,Conflict=7,
-    NotLeader=8,TargetNotMember=9,CannotTargetSelf=10,InvalidAnnouncement=11
+    NotLeader=8,TargetNotMember=9,CannotTargetSelf=10,InvalidAnnouncement=11,
+    TargetUnavailable=12,InviteMissing=13,InviteStale=14,TargetHasPendingInvite=15
 }
 public enum FriendCommandAction : byte { Add=1, Remove=2, Refresh=3, Accept=4, Reject=5, Ignore=6, Restore=7, Rename=8 }
 public enum FriendResultStatus : byte
@@ -755,10 +758,13 @@ public readonly record struct ClanCommandWire(
     long TargetActorId=0);
 public readonly record struct ClanResultWire(
     long MapEpoch,uint ClanSequence,ClanCommandAction Action,ClanResultStatus Status,long ClanId);
-public readonly record struct ClanMemberWire(long CharacterId,byte Role,string Name);
+public readonly record struct ClanMemberWire(long CharacterId,byte Role,bool IsOnline,string Name);
 public sealed record ClanSnapshotWire(
     long ReceiverMapEpoch,long ClanId,uint Revision,long LeaderCharacterId,string Name,
     IReadOnlyList<ClanMemberWire> Members,string Announcement="");
+public readonly record struct ClanInviteWire(
+    long ReceiverMapEpoch,long ClanId,uint Revision,long InviterActorId,
+    long InviterConnectionEpoch,string InviterName,string ClanName);
 
 public readonly record struct FriendCommandWire(
     long MapEpoch,uint FriendSequence,FriendCommandAction Action,

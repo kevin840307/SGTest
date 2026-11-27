@@ -313,6 +313,7 @@ var clan_leader_actor_id := 0
 var clan_name := ""
 var clan_announcement := ""
 var clan_members := {}
+var pending_clan_invite := {}
 var last_clan_result_sequence := 0
 var last_clan_result_status := -1
 var last_clan_result := {}
@@ -1010,7 +1011,7 @@ func mark_clan_sent(sequence:int,action:int,request_clan_id:int,name:String="",t
 		state!=STATE_IN_WORLD or not world_ready or resync_pending or
 		waiting_for_new_map or pending_world_ready_ack_epoch!=0 or
 		last_world_ready_ack_epoch!=map_epoch or pending_clan_sequence!=0 or
-		sequence<=clan_sequence or sequence>0xffffffff or action<1 or action>7 or
+		sequence<=clan_sequence or sequence>0xffffffff or action<1 or action>9 or
 		request_clan_id<0 or target_actor_id<0
 	):
 		return false
@@ -1022,7 +1023,12 @@ func mark_clan_sent(sequence:int,action:int,request_clan_id:int,name:String="",t
 			if clan_id!=0 or request_clan_id!=0 or target_actor_id!=0 or clean.length()<2 or clean.length()>24 or clean.to_utf8_buffer().size()>WireCodec.CLAN_MAX_NAME_BYTES:
 				return false
 		2:
-			if clan_id!=0 or request_clan_id<=0 or target_actor_id!=0 or not clean.is_empty():
+			if (
+				clan_id!=0 or request_clan_id<=0 or target_actor_id<=0 or not clean.is_empty() or
+				pending_clan_invite.is_empty() or
+				int(pending_clan_invite.get("clan_id",0))!=request_clan_id or
+				int(pending_clan_invite.get("inviter_actor_id",0))!=target_actor_id
+			):
 				return false
 		3:
 			if clan_id<=0 or request_clan_id!=0 or target_actor_id!=0 or not clean.is_empty():
@@ -1035,6 +1041,17 @@ func mark_clan_sent(sequence:int,action:int,request_clan_id:int,name:String="",t
 				return false
 		6,7:
 			if clan_id<=0 or clan_leader_actor_id!=actor_id or request_clan_id!=0 or target_actor_id<=0 or target_actor_id==actor_id or not clan_members.has(target_actor_id) or not clean.is_empty():
+				return false
+		8:
+			if clan_id<=0 or clan_leader_actor_id!=actor_id or request_clan_id!=0 or target_actor_id<=0 or target_actor_id==actor_id or not clean.is_empty():
+				return false
+		9:
+			if (
+				clan_id!=0 or request_clan_id<=0 or target_actor_id<=0 or not clean.is_empty() or
+				pending_clan_invite.is_empty() or
+				int(pending_clan_invite.get("clan_id",0))!=request_clan_id or
+				int(pending_clan_invite.get("inviter_actor_id",0))!=target_actor_id
+			):
 				return false
 		_:
 			return false
@@ -1439,6 +1456,8 @@ func apply_frame(frame: PackedByteArray) -> bool:
 			return _apply_clan_result(frame)
 		WireCodec.OPCODE_CLAN_SNAPSHOT:
 			return _apply_clan_snapshot(frame)
+		WireCodec.OPCODE_CLAN_INVITE:
+			return _apply_clan_invite(frame)
 		WireCodec.OPCODE_FRIEND_RESULT:
 			return _apply_friend_result(frame)
 		WireCodec.OPCODE_FRIEND_SNAPSHOT:
@@ -1797,6 +1816,7 @@ func snapshot() -> Dictionary:
 		"clan_name": clan_name,
 		"clan_announcement": clan_announcement,
 		"clan_members": clan_members.duplicate(true),
+		"pending_clan_invite": pending_clan_invite.duplicate(true),
 		"last_clan_result_sequence": last_clan_result_sequence,
 		"last_clan_result_status": last_clan_result_status,
 		"last_clan_result": last_clan_result.duplicate(true),
@@ -5024,8 +5044,9 @@ func _apply_clan_result(frame:PackedByteArray)->bool:
 	):
 		return fail("clan_result_without_matching_request")
 	var status:=int(value.status)
-	if status<0 or status>11:
+	if status<0 or status>15:
 		return fail("clan_result_unknown_status")
+	var completed_action:=pending_clan_action
 	last_clan_result_sequence=sequence
 	last_clan_result_status=status
 	last_clan_result=value.duplicate(true)
@@ -5034,6 +5055,38 @@ func _apply_clan_result(frame:PackedByteArray)->bool:
 	if pending_clan_target_actor_id>0:
 		last_clan_result["target_actor_id"]=pending_clan_target_actor_id
 	_clear_pending_clan()
+	if completed_action in [2,9]:
+		pending_clan_invite.clear()
+	return true
+
+
+func _apply_clan_invite(frame:PackedByteArray)->bool:
+	if state!=STATE_IN_WORLD:
+		return fail("clan_invite_out_of_state")
+	var value:=WireCodec.decode_clan_invite(frame)
+	if value.is_empty():
+		return fail("invalid_clan_invite")
+	var epoch:=int(value.receiver_map_epoch)
+	if epoch<map_epoch:
+		stale_clan_frames+=1
+		return true
+	if epoch>map_epoch:
+		return fail("future_clan_invite")
+	if clan_id!=0:
+		stale_clan_frames+=1
+		return true
+	if int(value.inviter_actor_id)==actor_id:
+		return fail("clan_invite_from_self")
+	if not pending_clan_invite.is_empty():
+		if (
+			int(pending_clan_invite.get("clan_id",0))==int(value.clan_id) and
+			int(pending_clan_invite.get("revision",0))>=int(value.revision) and
+			int(pending_clan_invite.get("inviter_actor_id",0))==int(value.inviter_actor_id)
+		):
+			stale_clan_frames+=1
+			return true
+		return fail("multiple_pending_clan_invites")
+	pending_clan_invite=value.duplicate(true)
 	return true
 
 
@@ -5059,7 +5112,11 @@ func _apply_clan_snapshot(frame:PackedByteArray)->bool:
 		clan_announcement=""
 		clan_members.clear()
 		return true
-	if clan_id==incoming and revision<=clan_revision:
+	# Durable clan fields share the SQLite revision, but member online/offline
+	# presence is session-scoped and intentionally does not mutate that revision.
+	# Reliable delivery preserves order, so an equal-revision snapshot is valid
+	# and may carry a newer presence view; only an older durable revision is stale.
+	if clan_id==incoming and revision<clan_revision:
 		stale_clan_frames+=1
 		return true
 	if clan_id!=0 and clan_id!=incoming:
@@ -5079,6 +5136,11 @@ func _apply_clan_snapshot(frame:PackedByteArray)->bool:
 	clan_name=str(value.name)
 	clan_announcement=str(value.get("announcement",""))
 	clan_members=next_members
+	if (
+		not pending_clan_invite.is_empty() and
+		int(pending_clan_invite.get("clan_id",0))==incoming
+	):
+		pending_clan_invite.clear()
 	return true
 
 

@@ -6,7 +6,8 @@ const CREATE_HEX := "3600000001006b000700000000000000010000000100000000000000000
 const ANNOUNCEMENT_HEX := "3900000001006b0007000000000000000200000005000000000000000000000000000000001200e4bb8ae6999ae4b99de9bb9ee99b86e59088"
 const KICK_HEX := "2700000001006b00070000000000000003000000060000000000000000ea030000000000000000"
 const RESULT_HEX := "1e00000001006c0007000000000000000100000001002c00000000000000"
-const SNAPSHOT_HEX := "6c00000001006d0007000000000000002c0000000000000003000000e9030000000000000f00120002e6989fe99680e58588e981a3e99a8ae4bb8ae6999ae4b99de9bb9ee99b86e59088e903000000000000010600e59c98e995b7ea03000000000000000600e68890e593a1"
+const SNAPSHOT_HEX := "6e00000001006d0007000000000000002c0000000000000003000000e9030000000000000f00120002e6989fe99680e58588e981a3e99a8ae4bb8ae6999ae4b99de9bb9ee99b86e59088e90300000000000001010600e59c98e995b7ea0300000000000000000600e68890e593a1"
+const PRESENCE_HEX := "6e00000001006d0007000000000000002c0000000000000003000000e9030000000000000f00120002e6989fe99680e58588e981a3e99a8ae4bb8ae6999ae4b99de9bb9ee99b86e59088e90300000000000001000600e59c98e995b7ea0300000000000000010600e68890e593a1"
 
 func _initialize() -> void:
 	var create := Codec.encode_clan_command(7,1,1,0,"星門先遣隊")
@@ -29,7 +30,11 @@ func _initialize() -> void:
 		_fail("clan result golden rejected")
 		return
 	var snapshot := Codec.decode_clan_snapshot(SNAPSHOT_HEX.hex_decode())
-	if snapshot.is_empty() or snapshot.clan_id != 44 or snapshot.name != "星門先遣隊" or snapshot.announcement != "今晚九點集合" or snapshot.members.size() != 2:
+	if (
+		snapshot.is_empty() or snapshot.clan_id != 44 or snapshot.name != "星門先遣隊" or
+		snapshot.announcement != "今晚九點集合" or snapshot.members.size() != 2 or
+		not bool(snapshot.members[0].online) or bool(snapshot.members[1].online)
+	):
 		_fail("clan snapshot golden rejected")
 		return
 	var state := State.new()
@@ -50,6 +55,13 @@ func _initialize() -> void:
 	var view := state.snapshot()
 	if view.clan_id != 44 or view.clan_leader_actor_id != 1001 or view.clan_announcement != "今晚九點集合" or view.clan_members.size() != 2 or view.pending_clan_sequence != 0:
 		_fail("clan reducer state mismatch")
+		return
+	if not state.apply_frame(PRESENCE_HEX.hex_decode()):
+		_fail("equal-revision clan presence snapshot rejected")
+		return
+	view = state.snapshot()
+	if bool(view.clan_members[1001].online) or not bool(view.clan_members[1002].online) or view.clan_revision != 3:
+		_fail("equal-revision clan presence did not update online state")
 		return
 	if not state.mark_clan_sent(2,5,0,"新公告"):
 		_fail("leader announcement request rejected")

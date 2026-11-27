@@ -234,6 +234,8 @@ public sealed partial class IdentitySessionAuthorization
             // route so the peer can receive one authoritative terminal event.
             _trades?.Disconnect(binding,router);
             _parties?.Disconnect(binding,router);
+            if(_clans is not null)
+                await _clans.DetachAsync(binding,router).ConfigureAwait(false);
             if(_friends is not null)
                 await _friends.DetachAsync(binding,router).ConfigureAwait(false);
             // Presentation cleanup is best-effort during shutdown/backpressure;
@@ -381,6 +383,8 @@ public sealed partial class IdentitySessionAuthorization
                         .ConfigureAwait(false);
                 _trades?.Disconnect(binding,router);
                 _parties?.Disconnect(binding,router);
+                if(_clans is not null)
+                    await _clans.DetachAsync(binding,router).ConfigureAwait(false);
                 if(_friends is not null)
                     await _friends.DetachAsync(binding,router).ConfigureAwait(false);
                 router.TryDetach(abandoned);

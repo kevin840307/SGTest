@@ -59,9 +59,11 @@ public static partial class WireProtocol
     public const int ClanCommandMaximumFrameBytes = ClanCommandHeaderBytes + ClanMaxAnnouncementBytes;
     public const int ClanResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 1 + 8;
     public const int ClanSnapshotHeaderBytes = HeaderBytes + 8 + 8 + 4 + 8 + 2 + 2 + 1;
-    public const int ClanMemberHeaderBytes = 8 + 1 + 2;
+    public const int ClanMemberHeaderBytes = 8 + 1 + 1 + 2;
     public const int ClanMaximumMembers = 100;
     public const int ClanSnapshotMaximumFrameBytes = ClanSnapshotHeaderBytes + ClanMaxNameBytes + ClanMaxAnnouncementBytes + ClanMaximumMembers * (ClanMemberHeaderBytes + PlayerIdentityMaxNameBytes);
+    public const int ClanInviteHeaderBytes = HeaderBytes + 8 + 8 + 4 + 8 + 8 + 2 + 2;
+    public const int ClanInviteMaximumFrameBytes = ClanInviteHeaderBytes + PlayerIdentityMaxNameBytes + ClanMaxNameBytes;
     public const int FriendCommandHeaderBytes = HeaderBytes + 8 + 4 + 1 + 8 + 2;
     public const int FriendCommandMaximumFrameBytes = FriendCommandHeaderBytes + PlayerIdentityMaxNameBytes;
     public const int FriendResultFrameBytes = HeaderBytes + 8 + 4 + 1 + 1 + 8;
@@ -730,6 +732,7 @@ public static partial class WireProtocol
             140 => WireOpcode.HotkeyCommand,
             141 => WireOpcode.HotkeySnapshot,
             142 => WireOpcode.PlayerEquipmentPresentation,
+            144 => WireOpcode.ClanInvite,
             _ => 0
         };
         if (opcode == 0) return false;
@@ -761,6 +764,7 @@ public static partial class WireProtocol
             WireOpcode.ClanCommand => advertised >= ClanCommandHeaderBytes && advertised <= ClanCommandMaximumFrameBytes,
             WireOpcode.ClanResult => advertised == ClanResultFrameBytes,
             WireOpcode.ClanSnapshot => advertised >= ClanSnapshotHeaderBytes && advertised <= ClanSnapshotMaximumFrameBytes,
+            WireOpcode.ClanInvite => advertised >= ClanInviteHeaderBytes+2 && advertised <= ClanInviteMaximumFrameBytes,
             WireOpcode.FriendCommand => advertised >= FriendCommandHeaderBytes && advertised <= FriendCommandMaximumFrameBytes,
             WireOpcode.FriendResult => advertised == FriendResultFrameBytes,
             WireOpcode.FriendSnapshot => advertised >= FriendSnapshotHeaderBytes && advertised <= MaximumFrameBytes,

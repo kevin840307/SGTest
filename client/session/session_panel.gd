@@ -712,9 +712,38 @@ func submit_clan_create(name:String)->bool:
 
 
 func submit_clan_join(clan_id:int)->bool:
-	if not active or clan_id<=0 or int(_latest.get("state",-1))!=State.STATE_IN_WORLD or not bool(_latest.get("world_ready",false)) or int(_latest.get("clan_id",0))!=0 or int(_latest.get("pending_clan_sequence",0))!=0:
+	var invite:Dictionary=_latest.get("pending_clan_invite",{})
+	if (
+		not active or clan_id<=0 or int(_latest.get("state",-1))!=State.STATE_IN_WORLD or
+		not bool(_latest.get("world_ready",false)) or int(_latest.get("clan_id",0))!=0 or
+		int(_latest.get("pending_clan_sequence",0))!=0 or invite.is_empty() or
+		int(invite.get("clan_id",0))!=clan_id
+	):
 		return false
 	return session.clan_join(clan_id)
+
+
+func submit_clan_invite(target_actor_id:int)->bool:
+	if (
+		not active or target_actor_id<=0 or int(_latest.get("state",-1))!=State.STATE_IN_WORLD or
+		not bool(_latest.get("world_ready",false)) or int(_latest.get("clan_id",0))<=0 or
+		int(_latest.get("clan_leader_actor_id",0))!=int(_latest.get("actor_id",0)) or
+		target_actor_id==int(_latest.get("actor_id",0)) or
+		int(_latest.get("pending_clan_sequence",0))!=0
+	):
+		return false
+	return session.clan_invite(target_actor_id)
+
+
+func submit_clan_reject_invite()->bool:
+	if (
+		not active or int(_latest.get("state",-1))!=State.STATE_IN_WORLD or
+		not bool(_latest.get("world_ready",false)) or int(_latest.get("clan_id",0))!=0 or
+		int(_latest.get("pending_clan_sequence",0))!=0 or
+		(_latest.get("pending_clan_invite",{}) as Dictionary).is_empty()
+	):
+		return false
+	return session.clan_reject_invite()
 
 
 func submit_clan_leave()->bool:
